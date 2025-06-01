@@ -18,6 +18,10 @@ class Visualizer:
         self.model_node = None
         self.viewer = None
 
+        # Nodos adicionales para manos (preparado para futuro)
+        self.left_hand_node = None
+        self.right_hand_node = None
+
         self._setup_scene()
 
     def _setup_scene(self):
@@ -43,7 +47,7 @@ class Visualizer:
         # Añadir plano receptor de sombras
         self._setup_ground_plane()
 
-        # Añadir modelo principal
+        # Añadir modelo principal (controlado por cabeza)
         model_pose = tra.compose_matrix(
             scale=[0.15, 0.15, 0.15],
             translate=[0, 0.6, 0]
@@ -96,7 +100,8 @@ class Visualizer:
 
         Args:
             pose_data: Diccionario con datos de pose en formato:
-                      {'head': {'x': float, 'y': float}, 'hands': ...}
+                      {'head': {'x': float, 'y': float},
+                       'hands': {'left': {...}, 'right': {...}}}
         """
         head_data = pose_data.get('head', {'x': 0.0, 'y': 0.0})
 
@@ -114,10 +119,9 @@ class Visualizer:
         final_pose = T @ Rx @ Ry @ S
         self.scene.set_pose(self.model_node, pose=final_pose)
 
-        # TODO: Futuro procesamiento de datos de manos
-        # hands_data = pose_data.get('hands')
-        # if hands_data:
-        #     self._update_hands_visualization(hands_data)
+        # TODO: Implementar visualización de manos en el futuro
+        # hands_data = pose_data.get('hands', {})
+        # self._update_hands_visualization(hands_data)
 
     def start_viewer(self):
         """Inicia el visualizador."""
@@ -141,10 +145,9 @@ def main():
     # Configuración
     OBJ_PATH = "teapot.obj"
     YAW_DEG, PITCH_DEG = 30, 40
-    VERBOSE = 0.5
 
     # Inicializar componentes
-    detector = PoseDetector(verbose=VERBOSE)
+    detector = PoseDetector(verbose=0.5)
     visualizer = Visualizer(
         obj_path=OBJ_PATH,
         yaw_degrees=YAW_DEG,

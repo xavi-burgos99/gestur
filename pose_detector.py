@@ -20,43 +20,77 @@ from collections import deque
 
 
 class SmoothedValue:
-    def __init__(self, window_ms=500, emit_interval_ms=10):
+    """Clase para suavizar valores en una ventana temporal deslizante."""
+
+    def __init__(self, window_ms=500):
         self.window_ms = window_ms
-        self.emit_interval_ms = emit_interval_ms
-        self.values = deque()  # stores tuples (timestamp, value)
-        self.last_emit_time = 0
+        self.values = deque()  # almacena tuplas (timestamp, value)
 
     def add_value(self, value):
-        now = time.time() * 1000  # ms
+        """Añade un nuevo valor con timestamp actual."""
+        now = time.time() * 1000  # tiempo actual en ms
         self.values.append((now, value))
-        # Remove old values outside the window
-        while self.values and self.values[0][0] < now - self.window_ms:
+        self._remove_old(now)
+
+    def _remove_old(self, now):
+        """Elimina valores más antiguos que la ventana."""
+        while self.values and (now - self.values[0][0]) > self.window_ms:
             self.values.popleft()
 
-    def get_smoothed_value(self):
-        now = time.time() * 1000
-        if now - self.last_emit_time < self.emit_interval_ms:
-            return None  # Not time to emit yet
-        self.last_emit_time = now
-
+    def get_smoothed(self):
+        """Devuelve el promedio de todos los valores en la ventana."""
         if not self.values:
             return None
-
-        # Average all values in the window
+        # Promediar todos los valores en la ventana
         vals = np.array([v for _, v in self.values])
-        if vals.ndim == 1:
-            return np.mean(vals)
+        return np.mean(vals, axis=0)
+
+
+class DataRetentionWithSmoothing:
+    """Clase para mantener datos durante un tiempo de retención Y continuar suavizando."""
+
+    def __init__(self, retention_ms=3000):
+        self.retention_ms = retention_ms
+        self.last_detected_data = None
+        self.last_detection_time = 0
+        self.currently_detected = False
+
+    def update(self, detected_data):
+        """
+        Actualiza con nuevos datos detectados y determina qué datos usar para suavizado.
+
+        Returns:
+            (data_for_smoothing, is_within_retention)
+        """
+        now = time.time() * 1000
+
+        if detected_data is not None:
+            # Nueva detección: actualizar datos y tiempo
+            self.last_detected_data = detected_data
+            self.last_detection_time = now
+            self.currently_detected = True
+            return detected_data, True
         else:
-            return np.mean(vals, axis=0)
+            # No hay detección: verificar si estamos dentro del período de retención
+            time_since_last = now - self.last_detection_time
+
+            if time_since_last <= self.retention_ms and self.last_detected_data is not None:
+                # Dentro del período de retención: usar últimos datos para suavizado
+                self.currently_detected = False
+                return self.last_detected_data, True
+            else:
+                # Fuera del período de retención
+                self.currently_detected = False
+                return None, False
 
 
 class PoseDetector:
-    def __init__(self, verbose: float = 0, smoothing_window_ms: int = 500,
-                 emit_interval_ms: int = 10, hold_time_sec: float = 3.0):
+    def __init__(self, verbose: float = 0.5, smoothing_window_ms: int = 500,
+                 emit_interval_ms: int = 50, retention_ms: int = 3000):
         self.verbose = verbose
         self.smoothing_window_ms = smoothing_window_ms
         self.emit_interval_ms = emit_interval_ms
-        self.hold_time_sec = hold_time_sec
+        self.retention_ms = retention_ms
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -68,26 +102,22 @@ class PoseDetector:
         self.camera = None
         self.camera_lock = threading.Lock()
 
-        # Smoothers para cada tipo de dato
-        self.head_smoother = SmoothedValue(window_ms=smoothing_window_ms, emit_interval_ms=emit_interval_ms)
-        self.left_hand_smoother = SmoothedValue(window_ms=smoothing_window_ms, emit_interval_ms=emit_interval_ms)
-        self.right_hand_smoother = SmoothedValue(window_ms=smoothing_window_ms, emit_interval_ms=emit_interval_ms)
+        # Sistema de suavizado
+        self.smoothed_head = SmoothedValue(window_ms=smoothing_window_ms)
+        self.smoothed_hands = SmoothedValue(window_ms=smoothing_window_ms)
 
-        # Sistema de hold para mantener últimos valores
-        self.last_head_detection_time = 0
-        self.last_left_hand_detection_time = 0
-        self.last_right_hand_detection_time = 0
-        self.last_head_data = None
-        self.last_left_hand_data = None
-        self.last_right_hand_data = None
+        # Sistema de retención de datos con suavizado continuo
+        self.retention_head = DataRetentionWithSmoothing(retention_ms=retention_ms)
+        self.retention_hands = DataRetentionWithSmoothing(retention_ms=retention_ms)
 
-        # Datos compartidos y locks
+        # Control de emisión y datos
         self.data_lock = threading.Lock()
-        self.pose_data = {
+        self.last_emit_time = 0
+        self.current_smoothed_data = {
             'head': {'x': 0.0, 'y': 0.0},
             'hands': {
-                'left': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0},
-                'right': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
+                'left': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0},
+                'right': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0}
             }
         }
 
@@ -95,17 +125,29 @@ class PoseDetector:
         self.running = False
         self.detection_thread = None
 
-        # Índices de keypoints de manos para cálculo de orientación
+        # Índices de keypoints de manos (formato MMPose de 21 puntos)
         self.hand_keypoint_indices = {
             'wrist': 0,
-            'thumb_tip': 4,
-            'index_tip': 8,
-            'middle_tip': 12,
-            'ring_tip': 16,
-            'pinky_tip': 20,
-            'middle_mcp': 9,
-            'index_mcp': 5,
+            # Pulgar
+            'thumb_mcp': 1, 'thumb_pip': 2, 'thumb_dip': 3, 'thumb_tip': 4,
+            # Índice
+            'index_mcp': 5, 'index_pip': 6, 'index_dip': 7, 'index_tip': 8,
+            # Medio
+            'middle_mcp': 9, 'middle_pip': 10, 'middle_dip': 11, 'middle_tip': 12,
+            # Anular
+            'ring_mcp': 13, 'ring_pip': 14, 'ring_dip': 15, 'ring_tip': 16,
+            # Meñique
+            'pinky_mcp': 17, 'pinky_pip': 18, 'pinky_dip': 19, 'pinky_tip': 20
         }
+
+        # Configuración para cálculo de apertura
+        self.finger_configs = [
+            ('thumb', 'thumb_mcp', 'thumb_tip'),
+            ('index', 'index_mcp', 'index_tip'),
+            ('middle', 'middle_mcp', 'middle_tip'),
+            ('ring', 'ring_mcp', 'ring_tip'),
+            ('pinky', 'pinky_mcp', 'pinky_tip')
+        ]
 
     def _get_face_keypoint_ids(self, meta) -> List[int]:
         """Obtiene los IDs de los keypoints faciales relevantes."""
@@ -119,8 +161,64 @@ class PoseDetector:
         ]
         return face_ids if face_ids else [0, 1, 2]
 
+    def _calculate_hand_openness(self, keypoints: np.ndarray) -> float:
+        """
+        Calcula la apertura de la mano basada en la extensión de los dedos.
+
+        Args:
+            keypoints: Array de keypoints de forma (21, 2) o (21, 3)
+
+        Returns:
+            Float entre 0.0 (cerrado) y 1.0 (abierto)
+        """
+        try:
+            wrist = keypoints[self.hand_keypoint_indices['wrist']][:2]
+            finger_extensions = []
+
+            for finger_name, mcp_key, tip_key in self.finger_configs:
+                mcp = keypoints[self.hand_keypoint_indices[mcp_key]][:2]
+                tip = keypoints[self.hand_keypoint_indices[tip_key]][:2]
+
+                # Distancia de la muñeca al metacarpo (base del dedo)
+                base_distance = np.linalg.norm(mcp - wrist)
+
+                # Distancia de la muñeca a la punta del dedo
+                tip_distance = np.linalg.norm(tip - wrist)
+
+                # Si la base está muy cerca de la muñeca, saltar este dedo
+                if base_distance < 1e-3:
+                    continue
+
+                # Ratio de extensión: cuánto se extiende el dedo respecto a su base
+                extension_ratio = tip_distance / base_distance
+
+                # Normalizar: típicamente un dedo cerrado tiene ratio ~1.0, abierto ~1.5-2.0
+                if finger_name == 'thumb':
+                    # El pulgar tiene geometría diferente
+                    normalized_extension = np.clip((extension_ratio - 0.8) / 0.7, 0, 1)
+                else:
+                    # Dedos normales
+                    normalized_extension = np.clip((extension_ratio - 1.0) / 0.8, 0, 1)
+
+                finger_extensions.append(normalized_extension)
+
+            if not finger_extensions:
+                return 0.0
+
+            # Promedio de extensión de todos los dedos
+            average_extension = np.mean(finger_extensions)
+
+            # Aplicar curva suave para hacer más natural la transición
+            openness = 1 / (1 + np.exp(-6 * (average_extension - 0.5)))
+
+            return float(np.clip(openness, 0.0, 1.0))
+
+        except Exception as e:
+            print(f"Error calculando apertura de mano: {e}")
+            return 0.0
+
     def _calculate_hand_rotation(self, keypoints: np.ndarray) -> Dict[str, float]:
-        """Calcula los ángulos de rotación de la mano (yaw, pitch, roll)."""
+        """Calcula los ángulos de rotación de la mano (yaw, pitch, roll) basado en keypoints."""
         try:
             # Obtener puntos clave
             wrist = keypoints[self.hand_keypoint_indices['wrist']][:2]
@@ -218,11 +316,11 @@ class PoseDetector:
         return None
 
     def _process_hand_detection(self, frame) -> Optional[Dict]:
-        """Procesa la detección de manos y calcula orientaciones."""
+        """Procesa la detección de manos y calcula orientaciones y apertura."""
         try:
             hands_data = {
-                'left': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0},
-                'right': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
+                'left': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0},
+                'right': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0}
             }
 
             for output in self.hand_inferencer(frame):
@@ -233,7 +331,7 @@ class PoseDetector:
                 for i, pred in enumerate(predictions):
                     keypoints = np.asarray(pred['keypoints'])
 
-                    # Verificar que tenemos 21 keypoints
+                    # Verificar que tenemos 21 keypoints (formato estándar de mano)
                     if keypoints.shape[0] != 21:
                         continue
 
@@ -243,23 +341,25 @@ class PoseDetector:
                         if confidence < 0.3:
                             continue
 
-                    # Calcular rotaciones
+                    # Calcular rotaciones y apertura
                     rotations = self._calculate_hand_rotation(keypoints)
+                    openness = self._calculate_hand_openness(keypoints)
 
                     # Determinar si es mano izquierda o derecha
-                    wrist_x = keypoints[0, 0]
+                    wrist_x = keypoints[0, 0]  # X de la muñeca
                     frame_center_x = frame.shape[1] / 2
 
                     if wrist_x < frame_center_x:
-                        hand_type = 'right'
+                        hand_type = 'right'  # Mano en lado izquierdo de la imagen
                     else:
-                        hand_type = 'left'
+                        hand_type = 'left'  # Mano en lado derecho de la imagen
 
                     hands_data[hand_type] = {
                         'detected': True,
                         'yaw': rotations['yaw'],
                         'pitch': rotations['pitch'],
-                        'roll': rotations['roll']
+                        'roll': rotations['roll'],
+                        'openness': openness
                     }
 
             return hands_data
@@ -268,80 +368,91 @@ class PoseDetector:
             print(f"Error en detección de manos: {e}")
             return None
 
-    def _update_smoothed_data(self, head_result, hand_result):
-        """Actualiza los datos suavizados y aplica el sistema de hold."""
-        now = time.time()
+    def _update_smoothing(self, head_data, hands_data):
+        """
+        Actualiza los valores suavizados con las nuevas detecciones.
+        IMPORTANTE: Ahora mantiene suavizando con últimos valores durante retención.
+        """
+        # Procesar cabeza con retención y suavizado continuo
+        head_for_smoothing, head_in_retention = self.retention_head.update(head_data)
+        if head_for_smoothing is not None and head_in_retention:
+            head_array = np.array([head_for_smoothing['x'], head_for_smoothing['y']])
+            self.smoothed_head.add_value(head_array)
 
-        # Procesar datos de cabeza
-        if head_result:
-            self.last_head_detection_time = now
-            self.last_head_data = head_result
-            self.head_smoother.add_value(np.array([head_result['x'], head_result['y']]))
+        # Procesar manos con retención y suavizado continuo
+        hands_for_smoothing, hands_in_retention = self.retention_hands.update(hands_data)
+        if hands_for_smoothing is not None and hands_in_retention:
+            # Convertir datos de manos a array plano para suavizado
+            left = hands_for_smoothing.get('left', {'detected': False, 'yaw': 0, 'pitch': 0, 'roll': 0, 'openness': 0})
+            right = hands_for_smoothing.get('right',
+                                            {'detected': False, 'yaw': 0, 'pitch': 0, 'roll': 0, 'openness': 0})
 
-        # Procesar datos de manos
-        if hand_result:
-            left_hand = hand_result.get('left', {})
-            right_hand = hand_result.get('right', {})
+            # Marcar como detectadas si estamos usando datos retenidos de detecciones recientes
+            left_detected = 1.0 if left['detected'] else 0.0
+            right_detected = 1.0 if right['detected'] else 0.0
 
-            if left_hand.get('detected', False):
-                self.last_left_hand_detection_time = now
-                self.last_left_hand_data = left_hand
-                self.left_hand_smoother.add_value(np.array([
-                    left_hand['yaw'], left_hand['pitch'], left_hand['roll']
-                ]))
+            hands_array = np.array([
+                left_detected, left['yaw'], left['pitch'], left['roll'], left['openness'],
+                right_detected, right['yaw'], right['pitch'], right['roll'], right['openness']
+            ])
+            self.smoothed_hands.add_value(hands_array)
 
-            if right_hand.get('detected', False):
-                self.last_right_hand_detection_time = now
-                self.last_right_hand_data = right_hand
-                self.right_hand_smoother.add_value(np.array([
-                    right_hand['yaw'], right_hand['pitch'], right_hand['roll']
-                ]))
+    def _get_smoothed_data(self):
+        """Obtiene datos suavizados con control de emisión."""
+        now = time.time() * 1000
+
+        # Control de intervalos de emisión (50ms por defecto)
+        if now - self.last_emit_time < self.emit_interval_ms:
+            return None  # Aún no es momento de emitir
+
+        self.last_emit_time = now
 
         # Obtener valores suavizados
-        smoothed_head = self.head_smoother.get_smoothed_value()
-        smoothed_left_hand = self.left_hand_smoother.get_smoothed_value()
-        smoothed_right_hand = self.right_hand_smoother.get_smoothed_value()
+        smoothed_head_array = self.smoothed_head.get_smoothed()
+        smoothed_hands_array = self.smoothed_hands.get_smoothed()
 
-        # Aplicar sistema de hold y componer salida
-        output = {
-            'head': {'x': 0.0, 'y': 0.0},
-            'hands': {
-                'left': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0},
-                'right': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
+        # Construir resultado final
+        result = {}
+
+        # Procesar cabeza
+        if smoothed_head_array is not None:
+            result['head'] = {
+                'x': float(smoothed_head_array[0]),
+                'y': float(smoothed_head_array[1])
             }
-        }
+        else:
+            result['head'] = {'x': 0.0, 'y': 0.0}
 
-        # Cabeza con hold
-        if smoothed_head is not None:
-            output['head'] = {'x': float(smoothed_head[0]), 'y': float(smoothed_head[1])}
-        elif self.last_head_data and (now - self.last_head_detection_time) < self.hold_time_sec:
-            output['head'] = self.last_head_data.copy()
+        # Procesar manos
+        if smoothed_hands_array is not None:
+            # Determinar si las manos están siendo detectadas actualmente o retenidas
+            left_currently_detected = self.retention_hands.currently_detected if hasattr(self.retention_hands,
+                                                                                         'currently_detected') else False
+            right_currently_detected = left_currently_detected  # Para simplificar, usar el mismo estado
 
-        # Mano izquierda con hold
-        if smoothed_left_hand is not None:
-            output['hands']['left'] = {
-                'detected': True,
-                'yaw': float(smoothed_left_hand[0]),
-                'pitch': float(smoothed_left_hand[1]),
-                'roll': float(smoothed_left_hand[2])
+            result['hands'] = {
+                'left': {
+                    'detected': bool(round(smoothed_hands_array[0])) and left_currently_detected,
+                    'yaw': float(smoothed_hands_array[1]),
+                    'pitch': float(smoothed_hands_array[2]),
+                    'roll': float(smoothed_hands_array[3]),
+                    'openness': float(np.clip(smoothed_hands_array[4], 0.0, 1.0))
+                },
+                'right': {
+                    'detected': bool(round(smoothed_hands_array[5])) and right_currently_detected,
+                    'yaw': float(smoothed_hands_array[6]),
+                    'pitch': float(smoothed_hands_array[7]),
+                    'roll': float(smoothed_hands_array[8]),
+                    'openness': float(np.clip(smoothed_hands_array[9], 0.0, 1.0))
+                }
             }
-        elif self.last_left_hand_data and (now - self.last_left_hand_detection_time) < self.hold_time_sec:
-            output['hands']['left'] = self.last_left_hand_data.copy()
-
-        # Mano derecha con hold
-        if smoothed_right_hand is not None:
-            output['hands']['right'] = {
-                'detected': True,
-                'yaw': float(smoothed_right_hand[0]),
-                'pitch': float(smoothed_right_hand[1]),
-                'roll': float(smoothed_right_hand[2])
+        else:
+            result['hands'] = {
+                'left': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0},
+                'right': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0}
             }
-        elif self.last_right_hand_data and (now - self.last_right_hand_detection_time) < self.hold_time_sec:
-            output['hands']['right'] = self.last_right_hand_data.copy()
 
-        # Actualizar datos compartidos
-        with self.data_lock:
-            self.pose_data = output
+        return result
 
     def _detection_loop(self):
         """Loop principal de detección en hilo separado."""
@@ -357,12 +468,20 @@ class PoseDetector:
                 if not ret:
                     continue
 
-            # Procesar detecciones
+            # Procesar detecciones RAW (sin suavizado aún)
             head_result = self._process_head_detection(frame)
             hand_result = self._process_hand_detection(frame)
 
-            # Actualizar datos suavizados
-            self._update_smoothed_data(head_result, hand_result)
+            # Actualizar sistema de suavizado (ahora incluye retención activa)
+            self._update_smoothing(head_result, hand_result)
+
+            # Obtener datos suavizados
+            smoothed_data = self._get_smoothed_data()
+
+            # Actualizar datos compartidos solo si hay datos válidos
+            if smoothed_data is not None:
+                with self.data_lock:
+                    self.current_smoothed_data = smoothed_data
 
             # Verbose output mejorado
             if self.verbose and time.time() - last_verbose_time >= self.verbose:
@@ -374,42 +493,64 @@ class PoseDetector:
                 self.stop()
                 break
 
+    def _get_openness_indicator(self, openness: float) -> str:
+        """Devuelve un indicador visual para el nivel de apertura."""
+        if openness < 0.2:
+            return "✊"  # Puño cerrado
+        elif openness < 0.4:
+            return "👋"  # Parcialmente abierto
+        elif openness < 0.7:
+            return "🖐"  # Mayormente abierto
+        else:
+            return "✋"  # Completamente abierto
+
+    def _get_detection_status_indicator(self, hand_type: str) -> str:
+        """Devuelve indicador de estado de detección (detectando vs reteniendo)."""
+        retention_obj = self.retention_hands
+
+        if hasattr(retention_obj, 'currently_detected'):
+            if retention_obj.currently_detected:
+                return "🟢"  # Detectando activamente
+            elif retention_obj.last_detected_data is not None:
+                return "🟡"  # Reteniendo (usando últimos datos)
+            else:
+                return "🔴"  # Sin datos
+        else:
+            return "❓"  # Estado desconocido
+
     def _print_verbose_data(self):
-        """Imprime todos los datos de pose detectados con indicadores de estado."""
+        """Imprime todos los datos de pose detectados (suavizados) incluyendo estado de retención."""
         with self.data_lock:
-            head = self.pose_data['head']
-            hands = self.pose_data['hands']
+            head = self.current_smoothed_data['head']
+            hands = self.current_smoothed_data['hands']
 
-            now = time.time()
+            print(f"\n{'=' * 90}")
+            print(f"📊 POSE DATA (SMOOTHED + RETENTION) - {time.strftime('%H:%M:%S')}")
+            print(f"{'=' * 90}")
 
-            print(f"\n{'=' * 70}")
-            print(f"POSE DATA (SMOOTHED) - {time.strftime('%H:%M:%S')}")
-            print(f"{'=' * 70}")
+            # Datos de cabeza
+            head_status = self._get_detection_status_indicator('head')
+            print(f"🎯 HEAD     {head_status} | X: {head['x']:+6.2f} | Y: {head['y']:+6.2f}")
 
-            # Estado de cabeza
-            head_age = now - self.last_head_detection_time if self.last_head_detection_time > 0 else float('inf')
-            head_status = "🟢 LIVE" if head_age < 0.1 else "🟡 HOLD" if head_age < self.hold_time_sec else "🔴 LOST"
-            print(f"HEAD     | {head_status} | X: {head['x']:+6.2f} | Y: {head['y']:+6.2f}")
-
-            # Estado de manos
+            # Datos de manos con apertura y estado de retención
             for hand_type in ['left', 'right']:
                 hand_data = hands[hand_type]
-                detection_time = getattr(self, f'last_{hand_type}_hand_detection_time')
-                hand_age = now - detection_time if detection_time > 0 else float('inf')
+                status = "✓" if hand_data['detected'] else "✗"
+                icon = "🤚" if hand_type == "left" else "✋"
+                openness_icon = self._get_openness_indicator(hand_data['openness'])
+                detection_status = self._get_detection_status_indicator(hand_type)
 
-                if hand_data['detected']:
-                    hand_status = "🟢 LIVE" if hand_age < 0.1 else "🟡 HOLD" if hand_age < self.hold_time_sec else "🔴 LOST"
-                else:
-                    hand_status = "⚫ NONE"
-
-                print(f"HAND {hand_type.upper():>4} | {hand_status} | " +
+                print(f"{icon} HAND {hand_type.upper():>4} {detection_status} | {status} | " +
                       f"Yaw: {hand_data['yaw']:+6.1f}° | " +
                       f"Pitch: {hand_data['pitch']:+6.1f}° | " +
-                      f"Roll: {hand_data['roll']:+6.1f}°")
+                      f"Roll: {hand_data['roll']:+6.1f}° | " +
+                      f"Open: {hand_data['openness']:5.2f} {openness_icon}")
 
-            print(f"{'=' * 70}")
-            print(
-                f"📊 Window: {self.smoothing_window_ms}ms | Emit: {self.emit_interval_ms}ms | Hold: {self.hold_time_sec}s")
+            print(f"{'=' * 90}")
+            print(f"⚙️  Smoothing: {self.smoothing_window_ms}ms | " +
+                  f"Emit: {self.emit_interval_ms}ms | " +
+                  f"Retention: {self.retention_ms}ms")
+            print(f"🟢 = Detectando | 🟡 = Reteniendo | 🔴 = Sin datos")
 
     def start(self, camera_id: int = 0):
         """Inicia la detección."""
@@ -427,10 +568,11 @@ class PoseDetector:
         self.detection_thread = threading.Thread(target=self._detection_loop, daemon=True)
         self.detection_thread.start()
 
-        print("🚀 Detector con suavizado iniciado - Presiona 'Q' para salir")
+        print("🚀 Detector iniciado con suavizado continuo - Presiona 'Q' para salir")
+        print(f"📹 Detectando cabeza, manos y apertura con retención suavizada...")
         print(
-            f"📊 Configuración: Ventana {self.smoothing_window_ms}ms | Emisión {self.emit_interval_ms}ms | Hold {self.hold_time_sec}s")
-        print("📹 Detectando cabeza y manos...")
+            f"⚙️  Suavizado: {self.smoothing_window_ms}ms | Emisión: {self.emit_interval_ms}ms | Retención: {self.retention_ms}ms")
+        print(f"🔄 El suavizado CONTINÚA durante la retención para reconexión suave")
 
     def stop(self):
         """Detiene la detección."""
@@ -447,9 +589,9 @@ class PoseDetector:
         print("\n🛑 Detector detenido")
 
     def get_pose_data(self) -> Dict:
-        """Devuelve los datos de pose actuales suavizados."""
+        """Devuelve los datos de pose suavizados actuales en formato JSON."""
         with self.data_lock:
-            return self.pose_data.copy()
+            return self.current_smoothed_data.copy()
 
     def __del__(self):
         self.stop()

@@ -557,9 +557,8 @@ class PoseDetector:
         if self.running:
             return
 
-        # Inicializar cámara
         with self.camera_lock:
-            self.camera = cv2.VideoCapture(camera_id, cv2.CAP_DSHOW)
+            self.camera = cv2.VideoCapture(camera_id)
             if not self.camera.isOpened():
                 raise RuntimeError('No se pudo abrir la cámara')
 

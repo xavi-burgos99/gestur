@@ -578,8 +578,10 @@ class PoseDetector:
         """Detiene la detección."""
         self.running = False
 
-        if self.detection_thread:
-            self.detection_thread.join(timeout=1.0)
+        detection_thread = getattr(self, 'detection_thread', None)
+        if isinstance(detection_thread, threading.Thread):
+            detection_thread.join(timeout=1.0)
+            self.detection_thread = None
 
         with self.camera_lock:
             if self.camera:
@@ -594,4 +596,7 @@ class PoseDetector:
             return self.current_smoothed_data.copy()
 
     def __del__(self):
-        self.stop()
+        try:
+            self.stop()
+        except Exception:
+            pass

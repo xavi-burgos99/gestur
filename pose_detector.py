@@ -514,9 +514,9 @@ class PoseDetector:
             elif retention_obj.last_detected_data is not None:
                 return "🟡"  # Reteniendo (usando últimos datos)
             else:
-                return "🔴"  # Sin datos
+                return "/"  # Sin datos
         else:
-            return "❓"  # Estado desconocido
+            return "?"  # Estado desconocido
 
     def _print_verbose_data(self):
         """Imprime todos los datos de pose detectados (suavizados) incluyendo estado de retención."""
@@ -525,12 +525,12 @@ class PoseDetector:
             hands = self.current_smoothed_data['hands']
 
             print(f"\n{'=' * 90}")
-            print(f"📊 POSE DATA (SMOOTHED + RETENTION) - {time.strftime('%H:%M:%S')}")
+            print(f"POSE DATA (SMOOTHED + RETENTION) - {time.strftime('%H:%M:%S')}")
             print(f"{'=' * 90}")
 
             # Datos de cabeza
             head_status = self._get_detection_status_indicator('head')
-            print(f"🎯 HEAD     {head_status} | X: {head['x']:+6.2f} | Y: {head['y']:+6.2f}")
+            print(f"HEAD     {head_status} | X: {head['x']:+6.2f} | Y: {head['y']:+6.2f}")
 
             # Datos de manos con apertura y estado de retención
             for hand_type in ['left', 'right']:
@@ -540,17 +540,17 @@ class PoseDetector:
                 openness_icon = self._get_openness_indicator(hand_data['openness'])
                 detection_status = self._get_detection_status_indicator(hand_type)
 
-                print(f"{icon} HAND {hand_type.upper():>4} {detection_status} | {status} | " +
+                print(f"HAND {hand_type.upper():>4} {detection_status} | {status} | " +
                       f"Yaw: {hand_data['yaw']:+6.1f}° | " +
                       f"Pitch: {hand_data['pitch']:+6.1f}° | " +
                       f"Roll: {hand_data['roll']:+6.1f}° | " +
-                      f"Open: {hand_data['openness']:5.2f} {openness_icon}")
+                      f"Open: {hand_data['openness']:5.2f}")
 
             print(f"{'=' * 90}")
-            print(f"⚙️  Smoothing: {self.smoothing_window_ms}ms | " +
+            print(f"Smoothing: {self.smoothing_window_ms}ms | " +
                   f"Emit: {self.emit_interval_ms}ms | " +
                   f"Retention: {self.retention_ms}ms")
-            print(f"🟢 = Detectando | 🟡 = Reteniendo | 🔴 = Sin datos")
+            print(f"🟢 = Detectando | 🟡 = Reteniendo | / = Sin datos")
 
     def start(self, camera_id: int = 0):
         """Inicia la detección."""
@@ -568,11 +568,11 @@ class PoseDetector:
         self.detection_thread = threading.Thread(target=self._detection_loop, daemon=True)
         self.detection_thread.start()
 
-        print("🚀 Detector iniciado con suavizado continuo - Presiona 'Q' para salir")
-        print(f"📹 Detectando cabeza, manos y apertura con retención suavizada...")
+        print("Detector iniciado con suavizado continuo - Presiona 'Q' para salir")
+        print(f"Detectando cabeza, manos y apertura con retención suavizada...")
         print(
-            f"⚙️  Suavizado: {self.smoothing_window_ms}ms | Emisión: {self.emit_interval_ms}ms | Retención: {self.retention_ms}ms")
-        print(f"🔄 El suavizado CONTINÚA durante la retención para reconexión suave")
+            f"Suavizado: {self.smoothing_window_ms}ms | Emisión: {self.emit_interval_ms}ms | Retención: {self.retention_ms}ms")
+        print(f"El suavizado CONTINÚA durante la retención para reconexión suave")
 
     def stop(self):
         """Detiene la detección."""
@@ -586,7 +586,7 @@ class PoseDetector:
                 self.camera.release()
                 self.camera = None
 
-        print("\n🛑 Detector detenido")
+        print("\nDetector detenido")
 
     def get_pose_data(self) -> Dict:
         """Devuelve los datos de pose suavizados actuales en formato JSON."""

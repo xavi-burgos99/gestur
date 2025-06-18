@@ -136,7 +136,6 @@ class Visualizer:
         if self.viewer:
             self.viewer.close_external()
 
-
 # Función principal de demostración
 def main():
     """Función principal que combina detector y visualizador."""

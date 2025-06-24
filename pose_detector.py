@@ -1,814 +1,500 @@
-import warnings
-import logging
-
-# Configurar logging para silenciar warnings conocidos
-logging.getLogger('mmengine').setLevel(logging.ERROR)
-warnings.filterwarnings("ignore", message=".*Failed to search registry.*")
-warnings.filterwarnings("ignore", message=".*TorchScript.*")
-warnings.filterwarnings("ignore", message=".*torch.cuda.amp.autocast.*")
-warnings.filterwarnings("ignore", message=".*torch.meshgrid.*")
-
+import cv2
+import mediapipe as mp
+import math
 import time
 import threading
-import cv2
-import numpy as np
-import torch
-import math
-from typing import List, Dict, Optional, Tuple
-from mmpose.apis import MMPoseInferencer
-from collections import deque
 
 
-class SmoothedValue:
-    """Clase para suavizar valores en una ventana temporal deslizante."""
+class PoseHandTracker:
+    def __init__(self, response_time_ms=50, smoothing_time_ms=500,
+                 use_pose=True, use_hands=True,
+                 mirror=False, invert_hands=False, verbose=False):
+        """Inicializa el tracker de pose y manos en tiempo real."""
+        # Configuración de parámetros
+        self.use_pose = use_pose
+        self.use_hands = use_hands
+        # Opciones extra
+        self.mirror = mirror            # espejo horizontal del frame
+        self.invert_hands = invert_hands  # intercambiar izquierda/derecha
+        self.response_time = response_time_ms / 1000.0  # en segundos
+        self.smoothing_time = smoothing_time_ms / 1000.0  # en segundos
+        # Factor de suavizado (exponencial): α = dt / smoothing_time
+        # Si smoothing_time es 0 (sin suavizado), ponemos α=1
+        self.alpha = 1.0 if self.smoothing_time <= 0 else min(1.0, self.response_time / self.smoothing_time)
 
-    def __init__(self, window_ms=500):
-        self.window_ms = window_ms
-        self.values = deque()  # almacena tuplas (timestamp, value)
+        # Inicializar MediaPipe Pose y Hands si corresponden
+        mp_pose = mp.solutions.pose
+        mp_hands = mp.solutions.hands
+        self.pose_model = None
+        self.hands_model = None
+        if self.use_pose:
+            # Modelo pose: usar modelo ligero (model_complexity=0) para rendimiento
+            self.pose_model = mp_pose.Pose(static_image_mode=False, model_complexity=1,
+                                           enable_segmentation=False,
+                                           min_detection_confidence=0.5, min_tracking_confidence=0.5)
+        if self.use_hands:
+            # Modelo hands: max 2 manos, modelo complejo=1 (se podría bajar a 0 si fuera necesario)
+            self.hands_model = mp_hands.Hands(static_image_mode=False, max_num_hands=2, model_complexity=1,
+                                              min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-    def add_value(self, value):
-        """Añade un nuevo valor con timestamp actual."""
-        now = time.time() * 1000  # tiempo actual en ms
-        self.values.append((now, value))
-        self._remove_old(now)
+        # Estructura para datos actuales (filtrados)
+        self.current_data = {
+            "head":  {"detected": False, "x": None, "y": None,
+                      "pitch": None, "yaw": None, "roll": None},
+            "torso": {"detected": False, "x": None, "y": None,
+                      "pitch": None, "yaw": None, "roll": None},
+            "left_hand":  {"detected": False, "x": None, "y": None,
+                           "pitch": None, "yaw": None, "roll": None},
+            "right_hand": {"detected": False, "x": None, "y": None,
+                           "pitch": None, "yaw": None, "roll": None}
+        }
 
-    def _remove_old(self, now):
-        """Elimina valores más antiguos que la ventana."""
-        while self.values and (now - self.values[0][0]) > self.window_ms:
-            self.values.popleft()
+        # Lista de listeners para callback
+        self.listeners = []
 
-    def get_smoothed(self):
-        """Devuelve el promedio de todos los valores en la ventana."""
-        if not self.values:
-            return None
-        vals = np.array([v for _, v in self.values])
-        return np.mean(vals, axis=0)
-
-
-class DataRetentionWithSmoothing:
-    """Clase para mantener datos durante un tiempo de retención Y continuar suavizando."""
-
-    def __init__(self, retention_ms=3000):
-        self.retention_ms = retention_ms
-        self.last_detected_data = None
-        self.last_detection_time = 0
-        self.currently_detected = False
-
-    def update(self, detected_data):
-        """
-        Actualiza con nuevos datos detectados y determina qué datos usar para suavizado.
-        Returns:
-            (data_for_smoothing, is_within_retention)
-        """
-        now = time.time() * 1000
-
-        if detected_data is not None:
-            # Nueva detección: actualizar datos y tiempo
-            self.last_detected_data = detected_data
-            self.last_detection_time = now
-            self.currently_detected = True
-            return detected_data, True
-        else:
-            # No hay detección: verificar si estamos dentro del período de retención
-            time_since_last = now - self.last_detection_time
-            if time_since_last <= self.retention_ms and self.last_detected_data is not None:
-                # Dentro del período de retención: usar últimos datos para suavizado
-                self.currently_detected = False
-                return self.last_detected_data, True
-            else:
-                # Fuera del período de retención
-                self.currently_detected = False
-                return None, False
-
-
-class PoseDetector:
-    def __init__(self, verbose: float = 0.5, smoothing_window_ms: int = 500,
-                 emit_interval_ms: int = 50, retention_ms: int = 3000):
+        # Verbose option
         self.verbose = verbose
-        self.smoothing_window_ms = smoothing_window_ms
-        self.emit_interval_ms = emit_interval_ms
-        self.retention_ms = retention_ms
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if self.verbose:
+            print(f"[PoseHandTracker] Init | pose={self.use_pose} hands={self.use_hands} "
+                  f"| mirror={self.mirror} invert_hands={self.invert_hands} "
+                  f"| dt={self.response_time*1000:.0f} ms smooth={self.smoothing_time*1000:.0f} ms")
 
-        # Inicializar inferenciadores
-        self.head_inferencer = MMPoseInferencer(pose2d='body', device=self.device)
-        self.hand_inferencer = MMPoseInferencer(pose2d='hand', device=self.device)
-        # Nuevo: inferenciador para pose 3D del cuerpo
-        self.body3d_inferencer = MMPoseInferencer(pose3d='human3d', device=self.device)
+        # Configurar cámara (webcam 0)
+        self.cap = cv2.VideoCapture(0)
+        if not self.cap.isOpened():
+            raise RuntimeError("No se pudo acceder a la cámara.")
+        # Opcional: reducir resolución para mejorar rendimiento
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-        # Cámara compartida
-        self.camera = None
-        self.camera_lock = threading.Lock()
-
-        # Sistema de suavizado (ahora incluye cuerpo 3D)
-        self.smoothed_head = SmoothedValue(window_ms=smoothing_window_ms)
-        self.smoothed_hands = SmoothedValue(window_ms=smoothing_window_ms)
-        self.smoothed_body = SmoothedValue(window_ms=smoothing_window_ms)
-
-        # Sistema de retención de datos con suavizado continuo
-        self.retention_head = DataRetentionWithSmoothing(retention_ms=retention_ms)
-        self.retention_hands = DataRetentionWithSmoothing(retention_ms=retention_ms)
-        self.retention_body = DataRetentionWithSmoothing(retention_ms=retention_ms)
-
-        # Control de emisión y datos
-        self.data_lock = threading.Lock()
-        self.last_emit_time = 0
-        self.current_smoothed_data = {
-            'head': {'x': 0.0, 'y': 0.0, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0},
-            'body': {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0},
-            'hands': {
-                'left': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0},
-                'right': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0}
-            }
-        }
-
-        # Control de hilos
+        # Control diferido: el seguimiento se inicia con run()
         self.running = False
-        self.detection_thread = None
-
-        # Índices de keypoints de manos (formato MMPose de 21 puntos)
-        self.hand_keypoint_indices = {
-            'wrist': 0,
-            # Pulgar
-            'thumb_mcp': 1, 'thumb_pip': 2, 'thumb_dip': 3, 'thumb_tip': 4,
-            # Índice
-            'index_mcp': 5, 'index_pip': 6, 'index_dip': 7, 'index_tip': 8,
-            # Medio
-            'middle_mcp': 9, 'middle_pip': 10, 'middle_dip': 11, 'middle_tip': 12,
-            # Anular
-            'ring_mcp': 13, 'ring_pip': 14, 'ring_dip': 15, 'ring_tip': 16,
-            # Meñique
-            'pinky_mcp': 17, 'pinky_pip': 18, 'pinky_dip': 19, 'pinky_tip': 20
-        }
-
-        # Configuración para cálculo de apertura
-        self.finger_configs = [
-            ('thumb', 'thumb_mcp', 'thumb_tip'),
-            ('index', 'index_mcp', 'index_tip'),
-            ('middle', 'middle_mcp', 'middle_tip'),
-            ('ring', 'ring_mcp', 'ring_tip'),
-            ('pinky', 'pinky_mcp', 'pinky_tip')
-        ]
-
-        # Índices de keypoints del cuerpo (COCO format)
-        self.body_keypoint_indices = {
-            'nose': 0, 'left_eye': 1, 'right_eye': 2, 'left_ear': 3, 'right_ear': 4,
-            'left_shoulder': 5, 'right_shoulder': 6, 'left_elbow': 7, 'right_elbow': 8,
-            'left_wrist': 9, 'right_wrist': 10, 'left_hip': 11, 'right_hip': 12,
-            'left_knee': 13, 'right_knee': 14, 'left_ankle': 15, 'right_ankle': 16
-        }
-
-    def _get_face_keypoint_ids(self, meta) -> List[int]:
-        """Obtiene los IDs de los keypoints faciales relevantes."""
-        if not meta or 'keypoint_labels' not in meta:
-            return [0, 1, 2]
-
-        target_keypoints = {'nose', 'left_eye', 'right_eye'}
-        face_ids = [
-            i for i, label in enumerate(meta['keypoint_labels'])
-            if label in target_keypoints
-        ]
-        return face_ids if face_ids else [0, 1, 2]
-
-    def _calculate_head_rotation_3d(self, keypoints: np.ndarray) -> Dict[str, float]:
-        """Calcula los ángulos de rotación de la cabeza en 3D (yaw, pitch, roll)."""
-        try:
-            # Obtener puntos clave de la cara
-            nose = keypoints[self.body_keypoint_indices['nose']]
-            left_eye = keypoints[self.body_keypoint_indices['left_eye']]
-            right_eye = keypoints[self.body_keypoint_indices['right_eye']]
-            left_ear = keypoints[self.body_keypoint_indices['left_ear']]
-            right_ear = keypoints[self.body_keypoint_indices['right_ear']]
-
-            # Calcular centro de los ojos
-            eye_center = (left_eye + right_eye) / 2
-
-            # Vector de los ojos (para roll)
-            eye_vector = right_eye - left_eye
-
-            # Vector de la cara (nariz a centro de ojos, para pitch)
-            face_vector = nose - eye_center
-
-            # Calcular ROLL (rotación de la cabeza alrededor del eje z)
-            roll = math.degrees(math.atan2(eye_vector[1], eye_vector[0]))
-
-            # Calcular YAW (rotación horizontal de la cabeza)
-            # Usar la diferencia entre las orejas como indicador
-            if np.linalg.norm(left_ear) > 0 and np.linalg.norm(right_ear) > 0:
-                ear_vector = right_ear - left_ear
-                yaw = math.degrees(math.atan2(ear_vector[1], ear_vector[0])) - 90
-            else:
-                # Fallback usando la inclinación de los ojos
-                yaw = roll
-
-            # Calcular PITCH (inclinación hacia arriba/abajo)
-            if np.linalg.norm(face_vector) > 0:
-                pitch = math.degrees(math.atan2(-face_vector[1], np.linalg.norm(face_vector[:2])))
-            else:
-                pitch = 0.0
-
-            # Normalizar ángulos a rango [-180, 180]
-            yaw = ((yaw + 180) % 360) - 180
-            pitch = np.clip(pitch, -90, 90)
-            roll = ((roll + 180) % 360) - 180
-
-            return {
-                'yaw': float(yaw),
-                'pitch': float(pitch),
-                'roll': float(roll)
-            }
-
-        except Exception as e:
-            print(f"Error calculando rotación de cabeza 3D: {e}")
-            return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
-
-    def _calculate_body_rotation_3d(self, keypoints: np.ndarray) -> Dict[str, float]:
-        """Calcula los ángulos de rotación del cuerpo en 3D (yaw, pitch, roll)."""
-        try:
-            # Obtener puntos clave del torso
-            left_shoulder = keypoints[self.body_keypoint_indices['left_shoulder']]
-            right_shoulder = keypoints[self.body_keypoint_indices['right_shoulder']]
-            left_hip = keypoints[self.body_keypoint_indices['left_hip']]
-            right_hip = keypoints[self.body_keypoint_indices['right_hip']]
-
-            # Vector de los hombros
-            shoulder_vector = right_shoulder - left_shoulder
-
-            # Vector de las caderas
-            hip_vector = right_hip - left_hip
-
-            # Vector del torso (de caderas a hombros)
-            torso_vector = ((left_shoulder + right_shoulder) / 2) - ((left_hip + right_hip) / 2)
-
-            # Calcular ROLL (inclinación lateral del cuerpo)
-            roll = math.degrees(math.atan2(shoulder_vector[1], shoulder_vector[0]))
-
-            # Calcular YAW (rotación horizontal del cuerpo)
-            # Comparar orientación de hombros vs caderas
-            shoulder_angle = math.degrees(math.atan2(shoulder_vector[1], shoulder_vector[0]))
-            hip_angle = math.degrees(math.atan2(hip_vector[1], hip_vector[0]))
-            yaw = shoulder_angle - hip_angle
-
-            # Calcular PITCH (inclinación hacia adelante/atrás del torso)
-            if np.linalg.norm(torso_vector) > 0:
-                pitch = math.degrees(math.atan2(-torso_vector[1], np.linalg.norm(torso_vector[:2])))
-            else:
-                pitch = 0.0
-
-            # Normalizar ángulos a rango [-180, 180]
-            yaw = ((yaw + 180) % 360) - 180
-            pitch = np.clip(pitch, -90, 90)
-            roll = ((roll + 180) % 360) - 180
-
-            return {
-                'yaw': float(yaw),
-                'pitch': float(pitch),
-                'roll': float(roll)
-            }
-
-        except Exception as e:
-            print(f"Error calculando rotación de cuerpo 3D: {e}")
-            return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
-
-    def _calculate_hand_openness(self, keypoints: np.ndarray) -> float:
-        """
-        Calcula la apertura de la mano basada en la extensión de los dedos.
-        Args:
-            keypoints: Array de keypoints de forma (21, 2) o (21, 3)
-        Returns:
-            Float entre 0.0 (cerrado) y 1.0 (abierto)
-        """
-        try:
-            wrist = keypoints[self.hand_keypoint_indices['wrist']][:2]
-            finger_extensions = []
-
-            for finger_name, mcp_key, tip_key in self.finger_configs:
-                mcp = keypoints[self.hand_keypoint_indices[mcp_key]][:2]
-                tip = keypoints[self.hand_keypoint_indices[tip_key]][:2]
-
-                # Distancia de la muñeca al metacarpo (base del dedo)
-                base_distance = np.linalg.norm(mcp - wrist)
-
-                # Distancia de la muñeca a la punta del dedo
-                tip_distance = np.linalg.norm(tip - wrist)
-
-                # Si la base está muy cerca de la muñeca, saltar este dedo
-                if base_distance < 1e-3:
-                    continue
-
-                # Ratio de extensión: cuánto se extiende el dedo respecto a su base
-                extension_ratio = tip_distance / base_distance
-
-                # Normalizar: típicamente un dedo cerrado tiene ratio ~1.0, abierto ~1.5-2.0
-                if finger_name == 'thumb':
-                    # El pulgar tiene geometría diferente
-                    normalized_extension = np.clip((extension_ratio - 0.8) / 0.7, 0, 1)
-                else:
-                    # Dedos normales
-                    normalized_extension = np.clip((extension_ratio - 1.0) / 0.8, 0, 1)
-
-                finger_extensions.append(normalized_extension)
-
-            if not finger_extensions:
-                return 0.0
-
-            # Promedio de extensión de todos los dedos
-            average_extension = np.mean(finger_extensions)
-
-            # Aplicar curva suave para hacer más natural la transición
-            openness = 1 / (1 + np.exp(-6 * (average_extension - 0.5)))
-
-            return float(np.clip(openness, 0.0, 1.0))
-
-        except Exception as e:
-            print(f"Error calculando apertura de mano: {e}")
-            return 0.0
-
-    def _calculate_hand_rotation(self, keypoints: np.ndarray) -> Dict[str, float]:
-        """Calcula los ángulos de rotación de la mano (yaw, pitch, roll) basado en keypoints."""
-        try:
-            # Obtener puntos clave
-            wrist = keypoints[self.hand_keypoint_indices['wrist']][:2]
-            middle_mcp = keypoints[self.hand_keypoint_indices['middle_mcp']][:2]
-            middle_tip = keypoints[self.hand_keypoint_indices['middle_tip']][:2]
-            index_mcp = keypoints[self.hand_keypoint_indices['index_mcp']][:2]
-
-            # Vector principal: de muñeca a base del dedo medio
-            main_vector = middle_mcp - wrist
-
-            # Vector del dedo medio: de base a punta
-            finger_vector = middle_tip - middle_mcp
-
-            # Vector lateral: de base del medio a base del índice
-            lateral_vector = index_mcp - middle_mcp
-
-            # Calcular YAW (rotación en plano horizontal)
-            yaw = math.degrees(math.atan2(main_vector[1], main_vector[0]))
-
-            # Calcular PITCH (inclinación hacia arriba/abajo del dedo)
-            finger_length = np.linalg.norm(finger_vector)
-            if finger_length > 0:
-                horizontal_component = np.sqrt(finger_vector[0] ** 2 + finger_vector[1] ** 2)
-                if horizontal_component > 0:
-                    pitch = math.degrees(math.atan2(-finger_vector[1], horizontal_component))
-                else:
-                    pitch = 0.0
-            else:
-                pitch = 0.0
-
-            # Calcular ROLL (rotación de la mano alrededor del eje del brazo)
-            lateral_length = np.linalg.norm(lateral_vector)
-            if lateral_length > 0:
-                roll = math.degrees(
-                    math.atan2(lateral_vector[1], lateral_vector[0]) -
-                    math.atan2(main_vector[1], main_vector[0])
-                )
-            else:
-                roll = 0.0
-
-            # Normalizar ángulos a rango [-180, 180]
-            yaw = ((yaw + 180) % 360) - 180
-            pitch = np.clip(pitch, -90, 90)
-            roll = ((roll + 180) % 360) - 180
-
-            return {
-                'yaw': float(yaw),
-                'pitch': float(pitch),
-                'roll': float(roll)
-            }
-
-        except Exception as e:
-            print(f"Error calculando rotación de mano: {e}")
-            return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
-
-    def _process_head_detection(self, frame) -> Optional[Dict[str, float]]:
-        """Procesa la detección de cabeza y devuelve coordenadas normalizadas + rotaciones 3D."""
-        if not self.camera:
-            return None
-
-        W = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
-        H = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        cx, cy = W / 2, H / 2
-
-        for output in self.head_inferencer(frame):
-            predictions = output['predictions'][0]
-            if not predictions:
-                continue
-
-            keypoints = np.asarray(predictions[0]['keypoints'])
-
-            # Verificar confianza si está disponible
-            if keypoints.shape[1] == 3 and keypoints[:, 2].mean() < 0.25:
-                continue
-
-            # Obtener keypoints faciales
-            face_ids = self._get_face_keypoint_ids(output.get('dataset_meta', {}))
-            face_keypoints = keypoints[face_ids]
-
-            # Verificar confianza de keypoints faciales
-            if face_keypoints.shape[1] == 3 and face_keypoints[:, 2].mean() < 0.25:
-                continue
-
-            # Calcular centro de la cara (para x, y)
-            x_mean = face_keypoints[:, 0].mean()
-            y_mean = face_keypoints[:, 1].mean()
-
-            # Normalizar coordenadas (-1 a 1)
-            head_x = (x_mean - cx) / cx
-            head_y = (y_mean - cy) / cy
-
-            # Calcular rotaciones 3D de la cabeza
-            head_rotations = self._calculate_head_rotation_3d(keypoints)
-
-            return {
-                'x': float(np.clip(head_x, -1, 1)),
-                'y': float(np.clip(head_y, -1, 1)),
-                'yaw': head_rotations['yaw'],
-                'pitch': head_rotations['pitch'],
-                'roll': head_rotations['roll']
-            }
-
-        return None
-
-    def _process_body_detection(self, frame) -> Optional[Dict[str, float]]:
-        """Procesa la detección de cuerpo 3D y calcula rotaciones."""
-        try:
-            for output in self.body3d_inferencer(frame):
-                predictions = output['predictions'][0]
-                if not predictions:
-                    continue
-
-                keypoints_3d = np.asarray(predictions[0]['keypoints'])
-
-                # Verificar confianza mínima
-                if keypoints_3d.shape[1] >= 3:
-                    if keypoints_3d.shape[1] == 4:  # Con confianza
-                        confidence = keypoints_3d[:, 3].mean()
-                        if confidence < 0.3:
-                            continue
-
-                # Calcular rotaciones 3D del cuerpo
-                body_rotations = self._calculate_body_rotation_3d(keypoints_3d)
-
-                return {
-                    'yaw': body_rotations['yaw'],
-                    'pitch': body_rotations['pitch'],
-                    'roll': body_rotations['roll']
-                }
-
-            return None
-
-        except Exception as e:
-            print(f"Error en detección de cuerpo 3D: {e}")
-            return None
-
-    def _process_hand_detection(self, frame) -> Optional[Dict]:
-        """Procesa la detección de manos y calcula orientaciones y apertura."""
-        try:
-            hands_data = {
-                'left': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0},
-                'right': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0}
-            }
-
-            for output in self.hand_inferencer(frame):
-                predictions = output['predictions'][0]
-                if not predictions:
-                    continue
-
-                for i, pred in enumerate(predictions):
-                    keypoints = np.asarray(pred['keypoints'])
-
-                    # Verificar que tenemos 21 keypoints (formato estándar de mano)
-                    if keypoints.shape[0] != 21:
-                        continue
-
-                    # Verificar confianza mínima
-                    if keypoints.shape[1] == 3:
-                        confidence = keypoints[:, 2].mean()
-                        if confidence < 0.3:
-                            continue
-
-                    # Calcular rotaciones y apertura
-                    rotations = self._calculate_hand_rotation(keypoints)
-                    openness = self._calculate_hand_openness(keypoints)
-
-                    # Determinar si es mano izquierda o derecha
-                    wrist_x = keypoints[0, 0]  # X de la muñeca
-                    frame_center_x = frame.shape[1] / 2
-
-                    if wrist_x < frame_center_x:
-                        hand_type = 'right'  # Mano en lado izquierdo de la imagen
-                    else:
-                        hand_type = 'left'  # Mano en lado derecho de la imagen
-
-                    hands_data[hand_type] = {
-                        'detected': True,
-                        'yaw': rotations['yaw'],
-                        'pitch': rotations['pitch'],
-                        'roll': rotations['roll'],
-                        'openness': openness
-                    }
-
-            return hands_data
-
-        except Exception as e:
-            print(f"Error en detección de manos: {e}")
-            return None
-
-    def _update_smoothing(self, head_data, hands_data, body_data):
-        """
-        Actualiza los valores suavizados con las nuevas detecciones.
-        IMPORTANTE: Ahora mantiene suavizando con últimos valores durante retención.
-        """
-        # Procesar cabeza con retención y suavizado continuo
-        head_for_smoothing, head_in_retention = self.retention_head.update(head_data)
-        if head_for_smoothing is not None and head_in_retention:
-            head_array = np.array([
-                head_for_smoothing['x'], head_for_smoothing['y'],
-                head_for_smoothing['yaw'], head_for_smoothing['pitch'], head_for_smoothing['roll']
-            ])
-            self.smoothed_head.add_value(head_array)
-
-        # Procesar cuerpo con retención y suavizado continuo
-        body_for_smoothing, body_in_retention = self.retention_body.update(body_data)
-        if body_for_smoothing is not None and body_in_retention:
-            body_array = np.array([
-                body_for_smoothing['yaw'], body_for_smoothing['pitch'], body_for_smoothing['roll']
-            ])
-            self.smoothed_body.add_value(body_array)
-
-        # Procesar manos con retención y suavizado continuo
-        hands_for_smoothing, hands_in_retention = self.retention_hands.update(hands_data)
-        if hands_for_smoothing is not None and hands_in_retention:
-            # Convertir datos de manos a array plano para suavizado
-            left = hands_for_smoothing.get('left', {'detected': False, 'yaw': 0, 'pitch': 0, 'roll': 0, 'openness': 0})
-            right = hands_for_smoothing.get('right',
-                                            {'detected': False, 'yaw': 0, 'pitch': 0, 'roll': 0, 'openness': 0})
-
-            # Marcar como detectadas si estamos usando datos retenidos de detecciones recientes
-            left_detected = 1.0 if left['detected'] else 0.0
-            right_detected = 1.0 if right['detected'] else 0.0
-
-            hands_array = np.array([
-                left_detected, left['yaw'], left['pitch'], left['roll'], left['openness'],
-                right_detected, right['yaw'], right['pitch'], right['roll'], right['openness']
-            ])
-            self.smoothed_hands.add_value(hands_array)
-
-    def _get_smoothed_data(self):
-        """Obtiene datos suavizados con control de emisión."""
-        now = time.time() * 1000
-
-        # Control de intervalos de emisión (50ms por defecto)
-        if now - self.last_emit_time < self.emit_interval_ms:
-            return None  # Aún no es momento de emitir
-
-        self.last_emit_time = now
-
-        # Obtener valores suavizados
-        smoothed_head_array = self.smoothed_head.get_smoothed()
-        smoothed_body_array = self.smoothed_body.get_smoothed()
-        smoothed_hands_array = self.smoothed_hands.get_smoothed()
-
-        # Construir resultado final
-        result = {}
-
-        # Procesar cabeza (ahora con rotaciones 3D)
-        if smoothed_head_array is not None:
-            result['head'] = {
-                'x': float(smoothed_head_array[0]),
-                'y': float(smoothed_head_array[1]),
-                'yaw': float(smoothed_head_array[2]),
-                'pitch': float(smoothed_head_array[3]),
-                'roll': float(smoothed_head_array[4])
-            }
-        else:
-            result['head'] = {'x': 0.0, 'y': 0.0, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
-
-        # Procesar cuerpo 3D
-        if smoothed_body_array is not None:
-            result['body'] = {
-                'yaw': float(smoothed_body_array[0]),
-                'pitch': float(smoothed_body_array[1]),
-                'roll': float(smoothed_body_array[2])
-            }
-        else:
-            result['body'] = {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
-
-        # Procesar manos
-        if smoothed_hands_array is not None:
-            # Determinar si las manos están siendo detectadas actualmente o retenidas
-            left_currently_detected = self.retention_hands.currently_detected if hasattr(self.retention_hands,
-                                                                                         'currently_detected') else False
-            right_currently_detected = left_currently_detected  # Para simplificar, usar el mismo estado
-
-            result['hands'] = {
-                'left': {
-                    'detected': bool(round(smoothed_hands_array[0])) and left_currently_detected,
-                    'yaw': float(smoothed_hands_array[1]),
-                    'pitch': float(smoothed_hands_array[2]),
-                    'roll': float(smoothed_hands_array[3]),
-                    'openness': float(np.clip(smoothed_hands_array[4], 0.0, 1.0))
-                },
-                'right': {
-                    'detected': bool(round(smoothed_hands_array[5])) and right_currently_detected,
-                    'yaw': float(smoothed_hands_array[6]),
-                    'pitch': float(smoothed_hands_array[7]),
-                    'roll': float(smoothed_hands_array[8]),
-                    'openness': float(np.clip(smoothed_hands_array[9], 0.0, 1.0))
-                }
-            }
-        else:
-            result['hands'] = {
-                'left': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0},
-                'right': {'detected': False, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0, 'openness': 0.0}
-            }
-
-        return result
-
-    def _detection_loop(self):
-        """Loop principal de detección en hilo separado."""
-        last_verbose_time = 0.0
-
+        self.thread = None
+        # Timestamp de la última detección por mano (se reinicia en run)
+        self.last_left_time = 0.0
+        self.last_right_time = 0.0
+
+    def run(self):
+        """Arranca el hilo de captura/procesamiento si aún no está en marcha."""
+        if self.running:
+            if self.verbose:
+                print("[PoseHandTracker] run() ya fue llamado; ignorando.")
+            return
+        # Reiniciar marcas de tiempo
+        now = time.time()
+        self.last_left_time = now
+        self.last_right_time = now
+        # Iniciar hilo
+        self.running = True
+        self.thread = threading.Thread(target=self._process_loop, daemon=True)
+        self.thread.start()
+        if self.verbose:
+            print("[PoseHandTracker] Tracking iniciado.")
+
+    def _process_loop(self):
+        """Bucle interno que captura frames y actualiza datos a la frecuencia deseada."""
+        prev_time = time.time()
         while self.running:
-            with self.camera_lock:
-                if not self.camera or not self.camera.isOpened():
-                    time.sleep(0.01)
-                    continue
+            success, frame = self.cap.read()
+            # Aplicar espejo si se solicita
+            if self.mirror and success:
+                frame = cv2.flip(frame, 1)  # 1 == flip horizontal
+            if not success:
+                continue  # si falla lectura, intentar siguiente
 
-                ret, frame = self.camera.read()
-                if not ret:
-                    continue
+            # Convertir a RGB (MediaPipe espera color RGB)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_height, frame_width = frame.shape[0], frame.shape[1]
 
-            # Procesar detecciones RAW (sin suavizado aún)
-            head_result = self._process_head_detection(frame)
-            body_result = self._process_body_detection(frame)
-            hand_result = self._process_hand_detection(frame)
+            # Resultados de MediaPipe
+            pose_res = None
+            hand_res = None
+            if self.use_pose and self.pose_model:
+                pose_res = self.pose_model.process(frame_rgb)
+            if self.use_hands and self.hands_model:
+                hand_res = self.hands_model.process(frame_rgb)
 
-            # Actualizar sistema de suavizado (ahora incluye retención activa)
-            self._update_smoothing(head_result, hand_result, body_result)
+            # Variables locales para nuevos valores calculados (sin filtrar)
+            head_pitch = head_yaw = head_roll = 0.0
+            torso_pitch = torso_yaw = torso_roll = 0.0
+            head_x = head_y = None
+            torso_x = torso_y = None
+            left_x = left_y = None
+            right_x = right_y = None
+            left_pitch = left_yaw = left_roll = 0.0
+            right_pitch = right_yaw = right_roll = 0.0
 
-            # Obtener datos suavizados
-            smoothed_data = self._get_smoothed_data()
+            # Reset detection flags for this frame
+            left_detected = False
+            right_detected = False
+            head_detected = False
+            torso_detected = False
 
-            # Actualizar datos compartidos solo si hay datos válidos
-            if smoothed_data is not None:
-                with self.data_lock:
-                    self.current_smoothed_data = smoothed_data
+            # Cálculo de datos de pose (cabeza y torso) si disponible
+            if pose_res and pose_res.pose_world_landmarks:
+                head_detected = True
+                torso_detected = True
+                # Extraer landmarks necesarios
+                # Nota: accederemos a pose_world_landmarks (3D) para cálculos de ángulos,
+                # y pose_landmarks (2D) para posiciones en pixeles si hiciera falta.
+                lm = pose_res.pose_world_landmarks.landmark  # lista de 33 landmarks 3D
+                lm2d = pose_res.pose_landmarks.landmark if pose_res.pose_landmarks else None  # lista 2D normalizados
 
-            # Verbose output mejorado
-            if self.verbose and time.time() - last_verbose_time >= self.verbose:
-                last_verbose_time = time.time()
+                # Puntos de interés
+                nose = lm[0]
+                left_ear = lm[7]
+                right_ear = lm[8]
+                left_shoulder = lm[11]
+                right_shoulder = lm[12]
+                left_hip = lm[23]
+                right_hip = lm[24]
+
+                # Calcular orientación de la cabeza (usando nariz y orejas)
+                # Vector de dirección de la cabeza: desde centro de orejas hacia la nariz
+                ear_mid_x = (left_ear.x + right_ear.x) / 2.0
+                ear_mid_y = (left_ear.y + right_ear.y) / 2.0
+                ear_mid_z = (left_ear.z + right_ear.z) / 2.0
+                dir_head = (
+                    nose.x - ear_mid_x,
+                    nose.y - ear_mid_y,
+                    nose.z - ear_mid_z
+                )
+                # Yaw de la cabeza: ángulo de dir_head proyectado en plano X-Z
+                # Tomamos eje Z hacia adelante de la cámara. Suponiendo que el eje Z de landmarks
+                # apunta hacia la cámara (negativo hacia adelante).
+                dir_x, dir_y, dir_z = dir_head
+                # Proyección en plano horizontal (x-z)
+                proj_xz = math.sqrt(dir_x ** 2 + dir_z ** 2)
+                if proj_xz > 1e-6:
+                    head_yaw = math.degrees(math.atan2(dir_x, -dir_z))
+                else:
+                    head_yaw = 0.0
+                # Pitch de la cabeza: ángulo entre vector y su proyección horizontal (y vs xz)
+                head_pitch = math.degrees(math.atan2(dir_y, proj_xz))
+                # Roll de la cabeza: ángulo de inclinación de la línea de orejas
+                # Vector oreja->oreja
+                ear_vec = (
+                    right_ear.x - left_ear.x,
+                    right_ear.y - left_ear.y,
+                    right_ear.z - left_ear.z
+                )
+                # Roll calculado con atan2(diferencia_y, diferencia_z) respecto al plano horizontal,
+                # pero dado que la cámara puede no estar perfectamente alineada, simplificaremos
+                # usando solo la componente Y vs X (en imagen 2D esto sería la pendiente).
+                # Usamos landmarks 2D para mayor precisión en imagen:
+                if lm2d:
+                    left_ear_2d = lm2d[7];
+                    right_ear_2d = lm2d[8]
+                    dy = right_ear_2d.y - left_ear_2d.y
+                    dx = right_ear_2d.x - left_ear_2d.x
+                else:
+                    dy = ear_vec[1];
+                    dx = ear_vec[0]
+                head_roll = math.degrees(math.atan2(dy, dx))
+
+                # Posición 2D normalizada de la cabeza (nariz) y del torso (punto medio caderas)
+                if pose_res.pose_landmarks:
+                    nose2d = pose_res.pose_landmarks.landmark[0]  # nariz índice 0
+                    head_x, head_y = nose2d.x, nose2d.y
+                    hip_mid2d_x = (pose_res.pose_landmarks.landmark[23].x +
+                                    pose_res.pose_landmarks.landmark[24].x) / 2.0
+                    hip_mid2d_y = (pose_res.pose_landmarks.landmark[23].y +
+                                    pose_res.pose_landmarks.landmark[24].y) / 2.0
+                    torso_x, torso_y = hip_mid2d_x, hip_mid2d_y
+
+                # Calcular orientación del torso (usando hombros y caderas)
+                # Vectores base del torso
+                shoulder_mid = (
+                    (left_shoulder.x + right_shoulder.x) / 2.0,
+                    (left_shoulder.y + right_shoulder.y) / 2.0,
+                    (left_shoulder.z + right_shoulder.z) / 2.0
+                )
+                hip_mid = (
+                    (left_hip.x + right_hip.x) / 2.0,
+                    (left_hip.y + right_hip.y) / 2.0,
+                    (left_hip.z + right_hip.z) / 2.0
+                )
+                vertical_axis = (
+                    shoulder_mid[0] - hip_mid[0],
+                    shoulder_mid[1] - hip_mid[1],
+                    shoulder_mid[2] - hip_mid[2]
+                )
+                lateral_axis = (
+                    right_shoulder.x - left_shoulder.x,
+                    right_shoulder.y - left_shoulder.y,
+                    right_shoulder.z - left_shoulder.z
+                )
+                # Vector frontal mediante producto cruz: vertical x lateral
+                forward_axis = (
+                    vertical_axis[1] * lateral_axis[2] - vertical_axis[2] * lateral_axis[1],
+                    vertical_axis[2] * lateral_axis[0] - vertical_axis[0] * lateral_axis[2],
+                    vertical_axis[0] * lateral_axis[1] - vertical_axis[1] * lateral_axis[0]
+                )
+                # Yaw del torso: ángulo del forward_axis en plano X-Z
+                fwd_x, fwd_y, fwd_z = forward_axis
+                proj_xz_torso = math.sqrt(fwd_x ** 2 + fwd_z ** 2)
+                if proj_xz_torso > 1e-6:
+                    torso_yaw = math.degrees(math.atan2(fwd_x, -fwd_z))
+                else:
+                    torso_yaw = 0.0
+                # Pitch del torso: ángulo de forward_axis vs horizontal
+                torso_pitch = math.degrees(math.atan2(fwd_y, proj_xz_torso)) if proj_xz_torso > 1e-6 else 0.0
+                # Roll del torso: inclinación de la línea de hombros
+                # Usamos diferencia de alturas entre hombros
+                shoulder_dy = right_shoulder.y - left_shoulder.y
+                shoulder_dx = right_shoulder.x - left_shoulder.x
+                torso_roll = math.degrees(math.atan2(shoulder_dy, shoulder_dx))
+            # Cálculo de datos de manos si disponible
+            if hand_res and hand_res.multi_hand_landmarks:
+                # Recorremos cada mano detectada
+                for hand_landmarks, hand_handedness in zip(hand_res.multi_hand_landmarks, hand_res.multi_handedness):
+                    # Determinar si es mano izquierda o derecha según el modelo
+                    label = hand_handedness.classification[0].label  # "Left" o "Right"
+                    # Si se pidió invertir manos, intercambiar la etiqueta
+                    if self.invert_hands:
+                        label = "Left" if label == "Right" else "Right"
+                    # Actualizar flags de detección
+                    if label == "Left":
+                        left_detected = True
+                    else:
+                        right_detected = True
+                    # Obtener coordenadas normalizadas de la muñeca (landmark 0)
+                    wrist = hand_landmarks.landmark[mp.solutions.hands.HandLandmark.WRIST]
+                    # Guardar coordenadas normalizadas (0‑1) como porcentaje
+                    wrist_x_pct = wrist.x  # 0‑1
+                    wrist_y_pct = wrist.y  # 0‑1
+                    # Calcular orientaciones de la mano (pitch, yaw, roll)
+                    # Usaremos varios puntos de la mano para estimar el plano de la palma.
+                    # Puntos base: muñeca (0), base dedo índice (5), base dedo meñique (17)
+                    index_mcp = hand_landmarks.landmark[mp.solutions.hands.HandLandmark.INDEX_FINGER_MCP]
+                    pinky_mcp = hand_landmarks.landmark[mp.solutions.hands.HandLandmark.PINKY_MCP]
+                    # Vector muñeca -> centro de la palma (promedio entre índice y meñique)
+                    palm_center = (
+                        (index_mcp.x + pinky_mcp.x) / 2.0,
+                        (index_mcp.y + pinky_mcp.y) / 2.0,
+                        (index_mcp.z + pinky_mcp.z) / 2.0
+                    )
+                    vec_palm = (
+                        palm_center[0] - wrist.x,
+                        palm_center[1] - wrist.y,
+                        palm_center[2] - wrist.z
+                    )
+                    # Pitch de la mano: ángulo de vec_palm vs plano horizontal (eje Y vs X-Z)
+                    vec_x, vec_y, vec_z = vec_palm
+                    proj_xz_hand = math.sqrt(vec_x ** 2 + vec_z ** 2)
+                    hand_pitch_val = math.degrees(math.atan2(-vec_y, proj_xz_hand)) if proj_xz_hand > 1e-6 else 0.0
+                    # (Usamos -vec_y porque si la palma se inclina hacia abajo, y aumenta, pero queremos pitch positivo)
+                    # Yaw de la mano: ángulo de vec_palm en plano horizontal (X-Z)
+                    hand_yaw_val = math.degrees(math.atan2(vec_x, vec_z)) if proj_xz_hand > 1e-6 else 0.0
+                    # Roll de la mano: rotación de la palma alrededor de vec_palm.
+                    # Calculamos el normal de la palma usando cross product (wrist->index) x (wrist->pinky)
+                    v_wrist_index = (
+                        index_mcp.x - wrist.x,
+                        index_mcp.y - wrist.y,
+                        index_mcp.z - wrist.z
+                    )
+                    v_wrist_pinky = (
+                        pinky_mcp.x - wrist.x,
+                        pinky_mcp.y - wrist.y,
+                        pinky_mcp.z - wrist.z
+                    )
+                    normal_palm = (
+                        v_wrist_index[1] * v_wrist_pinky[2] - v_wrist_index[2] * v_wrist_pinky[1],
+                        v_wrist_index[2] * v_wrist_pinky[0] - v_wrist_index[0] * v_wrist_pinky[2],
+                        v_wrist_index[0] * v_wrist_pinky[1] - v_wrist_index[1] * v_wrist_pinky[0]
+                    )
+                    # Para calcular roll, medimos el ángulo del normal respecto a la vertical (eje Y).
+                    # Proyectar normal en plano Y-Z (plano vertical mirando de lado)
+                    norm_yz = math.sqrt(normal_palm[1] ** 2 + normal_palm[2] ** 2)
+                    hand_roll_val = math.degrees(math.atan2(normal_palm[0], norm_yz)) if norm_yz > 1e-6 else 0.0
+                    # Asignar a la mano correspondiente
+                    if label == "Left":
+                        left_x, left_y = wrist_x_pct, wrist_y_pct
+                        left_pitch, left_yaw, left_roll = hand_pitch_val, hand_yaw_val, hand_roll_val
+                    else:  # "Right"
+                        right_x, right_y = wrist_x_pct, wrist_y_pct
+                        right_pitch, right_yaw, right_roll = hand_pitch_val, hand_yaw_val, hand_roll_val
+
+            # Guardar posiciones (sin suavizado)
+            self.current_data["head"]["x"] = head_x
+            self.current_data["head"]["y"] = head_y
+            self.current_data["torso"]["x"] = torso_x
+            self.current_data["torso"]["y"] = torso_y
+            # Si no se detectó cabeza/torso en este frame, vaciar valores
+            if not head_detected:
+                head_pitch = head_yaw = head_roll = None
+            if not torso_detected:
+                torso_pitch = torso_yaw = torso_roll = None
+
+            # Aplicar suavizado (exponential smoothing) a cada valor antes de actualizar current_data
+            # Cabeza
+            if head_detected:
+                self.current_data["head"]["pitch"] = (1 - self.alpha) * (self.current_data["head"]["pitch"] or 0) + self.alpha * head_pitch
+                self.current_data["head"]["yaw"]   = (1 - self.alpha) * (self.current_data["head"]["yaw"] or 0)   + self.alpha * head_yaw
+                self.current_data["head"]["roll"]  = (1 - self.alpha) * (self.current_data["head"]["roll"] or 0)  + self.alpha * head_roll
+            elif not self.current_data["head"]["detected"]:
+                self.current_data["head"]["pitch"] = self.current_data["head"]["yaw"] = self.current_data["head"]["roll"] = None
+            # Torso
+            if torso_detected:
+                self.current_data["torso"]["pitch"] = (1 - self.alpha) * (self.current_data["torso"]["pitch"] or 0) + self.alpha * torso_pitch
+                self.current_data["torso"]["yaw"]   = (1 - self.alpha) * (self.current_data["torso"]["yaw"] or 0)   + self.alpha * torso_yaw
+                self.current_data["torso"]["roll"]  = (1 - self.alpha) * (self.current_data["torso"]["roll"] or 0)  + self.alpha * torso_roll
+            elif not self.current_data["torso"]["detected"]:
+                self.current_data["torso"]["pitch"] = self.current_data["torso"]["yaw"] = self.current_data["torso"]["roll"] = None
+            # Manos
+            # Para manos, si no se detectó mano en este frame, mantenemos la posición previa (no la actualizamos para no poner None a mitad de suavizado).
+            if left_x is not None and left_y is not None:
+                self.current_data["left_hand"]["x"] = left_x
+                self.current_data["left_hand"]["y"] = left_y
+            if right_x is not None and right_y is not None:
+                self.current_data["right_hand"]["x"] = right_x
+                self.current_data["right_hand"]["y"] = right_y
+            # Remember last detection time stamps
+            now = time.time()
+            if left_detected:
+                self.last_left_time = now
+            if right_detected:
+                self.last_right_time = now
+
+            # Determine if hand is still considered "present"
+            left_present = (now - self.last_left_time) < self.smoothing_time
+            right_present = (now - self.last_right_time) < self.smoothing_time
+
+            # Suavizar orientaciones solo si la mano está presente (dentro del periodo de smoothing)
+            if left_present:
+                prev_lp = self.current_data["left_hand"]["pitch"] or 0.0
+                prev_ly = self.current_data["left_hand"]["yaw"]   or 0.0
+                prev_lr = self.current_data["left_hand"]["roll"]  or 0.0
+                self.current_data["left_hand"]["pitch"] = (1 - self.alpha) * prev_lp + self.alpha * left_pitch
+                self.current_data["left_hand"]["yaw"]   = (1 - self.alpha) * prev_ly + self.alpha * left_yaw
+                self.current_data["left_hand"]["roll"]  = (1 - self.alpha) * prev_lr + self.alpha * left_roll
+            if right_present:
+                prev_rp = self.current_data["right_hand"]["pitch"] or 0.0
+                prev_ry = self.current_data["right_hand"]["yaw"]   or 0.0
+                prev_rr = self.current_data["right_hand"]["roll"]  or 0.0
+                self.current_data["right_hand"]["pitch"] = (1 - self.alpha) * prev_rp + self.alpha * right_pitch
+                self.current_data["right_hand"]["yaw"]   = (1 - self.alpha) * prev_ry + self.alpha * right_yaw
+                self.current_data["right_hand"]["roll"]  = (1 - self.alpha) * prev_rr + self.alpha * right_roll
+
+            # Update detection flags exposed to the exterior
+            self.current_data["left_hand"]["detected"] = left_present
+            self.current_data["right_hand"]["detected"] = right_present
+            self.current_data["head"]["detected"]  = head_detected
+            self.current_data["torso"]["detected"] = torso_detected
+
+            # Clear coordinates and rotations when the hand is no longer present
+            if not left_present:
+                self.current_data["left_hand"]["x"] = None
+                self.current_data["left_hand"]["y"] = None
+                self.current_data["left_hand"]["pitch"] = None
+                self.current_data["left_hand"]["yaw"] = None
+                self.current_data["left_hand"]["roll"] = None
+            if not right_present:
+                self.current_data["right_hand"]["x"] = None
+                self.current_data["right_hand"]["y"] = None
+                self.current_data["right_hand"]["pitch"] = None
+                self.current_data["right_hand"]["yaw"] = None
+                self.current_data["right_hand"]["roll"] = None
+
+            # Notificar a los listeners con los nuevos datos
+            for callback in self.listeners:
+                try:
+                    callback(self.current_data)
+                except Exception as e:
+                    print(f"Error en callback de listener: {e}")
+
+            # Verbose pretty print
+            if self.verbose:
                 self._print_verbose_data()
 
-            # Control de salida
-            if cv2.waitKey(1) & 0xFF in (ord('q'), ord('Q')):
-                self.stop()
-                break
-
-    def _get_openness_indicator(self, openness: float) -> str:
-        """Devuelve un indicador visual para el nivel de apertura."""
-        if openness < 0.2:
-            return "✊"  # Puño cerrado
-        elif openness < 0.4:
-            return "👋"  # Parcialmente abierto
-        elif openness < 0.7:
-            return "🖐"  # Mayormente abierto
-        else:
-            return "✋"  # Completamente abierto
-
-    def _get_detection_status_indicator(self, component: str) -> str:
-        """Devuelve indicador de estado de detección (detectando vs reteniendo)."""
-        if component == 'head':
-            retention_obj = self.retention_head
-        elif component == 'body':
-            retention_obj = self.retention_body
-        else:  # hands
-            retention_obj = self.retention_hands
-
-        if hasattr(retention_obj, 'currently_detected'):
-            if retention_obj.currently_detected:
-                return "🟢"  # Detectando activamente
-            elif retention_obj.last_detected_data is not None:
-                return "🟡"  # Reteniendo (usando últimos datos)
-            else:
-                return "🔴"  # Sin datos
-        else:
-            return "?"  # Estado desconocido
+            # Controlar la tasa de refresco para aproximarla a response_time_ms
+            current_time = time.time()
+            elapsed = current_time - prev_time
+            # Si el procesamiento fue más rápido que el intervalo deseado, dormir el resto
+            sleep_time = self.response_time - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            prev_time = time.time()
+        # Fin del while
+        # Al salir del loop, liberar la cámara y modelos
+        self.cap.release()
+        if self.pose_model:
+            self.pose_model.close()
+        if self.hands_model:
+            self.hands_model.close()
 
     def _print_verbose_data(self):
-        """Imprime todos los datos de pose detectados (suavizados) incluyendo estado de retención."""
-        with self.data_lock:
-            head = self.current_smoothed_data['head']
-            body = self.current_smoothed_data['body']
-            hands = self.current_smoothed_data['hands']
+        """Imprime datos actuales: posición (%) y rotación, en formato tabulado."""
+        d = self.current_data
+        # Helper for row logging
+        def log_row(hand):
+            # Choose flag symbol
+            if hand["detected"]:
+                det_flag = "✔"
+            elif hand["x"] is not None:
+                det_flag = "·"   # smoothing grace period
+            else:
+                det_flag = "✖"
+            # x/y
+            if hand["x"] is not None:
+                x_disp = f"{hand['x']*100:5.1f}%"
+                y_disp = f"{hand['y']*100:5.1f}%"
+            else:
+                x_disp = "-"
+                y_disp = "-"
+            # rotation
+            def f(val):
+                return f"{val:7.2f}°" if val is not None else "   -   "
+            return (f"{det_flag}  x={x_disp:>6}  y={y_disp:>6} | "
+                    f"pitch={f(hand['pitch'])}  yaw={f(hand['yaw'])}  "
+                    f"roll={f(hand['roll'])}")
 
-        print(f"\n{'=' * 110}")
-        print(f"POSE DATA 3D (SMOOTHED + RETENTION) - {time.strftime('%H:%M:%S')}")
-        print(f"{'=' * 110}")
+        print("\n[PoseHandTracker]")
+        print(f"  HEAD   : {log_row(d['head'])}")
+        print(f"  TORSO  : {log_row(d['torso'])}")
+        print(f"  LEFT H : {log_row(d['left_hand'])}")
+        print(f"  RIGHT H: {log_row(d['right_hand'])}")
+        print("-"*64)
 
-        # Datos de cabeza (ahora con rotaciones 3D)
-        head_status = self._get_detection_status_indicator('head')
-        print(f"HEAD {head_status} | X: {head['x']:+6.2f} | Y: {head['y']:+6.2f} | " +
-              f"Yaw: {head['yaw']:+6.1f}° | Pitch: {head['pitch']:+6.1f}° | Roll: {head['roll']:+6.1f}°")
+    def get_current_data(self):
+        """Devuelve el diccionario JSON actual con los datos de rotación/posición."""
+        return self.current_data
 
-        # Datos del cuerpo 3D
-        body_status = self._get_detection_status_indicator('body')
-        print(
-            f"BODY {body_status} | Yaw: {body['yaw']:+6.1f}° | Pitch: {body['pitch']:+6.1f}° | Roll: {body['roll']:+6.1f}°")
+    def subscribe(self, listener_fn):
+        """Registra una función de callback para escuchar datos nuevos."""
+        if callable(listener_fn):
+            self.listeners.append(listener_fn)
 
-        # Datos de manos con apertura y estado de retención
-        for hand_type in ['left', 'right']:
-            hand_data = hands[hand_type]
-            status = "✓" if hand_data['detected'] else "✗"
-            detection_status = self._get_detection_status_indicator('hands')
-
-            print(f"HAND {hand_type.upper():>4} {detection_status} | {status} | " +
-                  f"Yaw: {hand_data['yaw']:+6.1f}° | " +
-                  f"Pitch: {hand_data['pitch']:+6.1f}° | " +
-                  f"Roll: {hand_data['roll']:+6.1f}° | " +
-                  f"Open: {hand_data['openness']:5.2f}")
-
-        print(f"{'=' * 110}")
-        print(f"Smoothing: {self.smoothing_window_ms}ms | " +
-              f"Emit: {self.emit_interval_ms}ms | " +
-              f"Retention: {self.retention_ms}ms")
-        print(f"🟢 = Detectando | 🟡 = Reteniendo | 🔴 = Sin datos")
-
-    def start(self, camera_id: int = 0):
-        """Inicia la detección."""
-        if self.running:
-            return
-
-        with self.camera_lock:
-            self.camera = cv2.VideoCapture(camera_id)
-            if not self.camera.isOpened():
-                raise RuntimeError('No se pudo abrir la cámara')
-
-        # Iniciar hilo de detección
-        self.running = True
-        self.detection_thread = threading.Thread(target=self._detection_loop, daemon=True)
-        self.detection_thread.start()
-
-        print("Detector 3D iniciado con suavizado continuo - Presiona 'Q' para salir")
-        print(f"Detectando cabeza (6DOF), cuerpo (3DOF), manos (4DOF + apertura) con retención suavizada...")
-        print(
-            f"Suavizado: {self.smoothing_window_ms}ms | Emisión: {self.emit_interval_ms}ms | Retención: {self.retention_ms}ms")
-        print(f"El suavizado CONTINÚA durante la retención para reconexión suave")
+    def unsubscribe(self, listener_fn):
+        """Elimina una función de callback de la lista de suscriptores."""
+        if listener_fn in self.listeners:
+            self.listeners.remove(listener_fn)
 
     def stop(self):
-        """Detiene la detección."""
+        """Detiene el bucle de procesamiento y libera recursos."""
+        if not self.running:
+            return
         self.running = False
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=2.0)
 
-        detection_thread = getattr(self, 'detection_thread', None)
-        if isinstance(detection_thread, threading.Thread):
-            detection_thread.join(timeout=1.0)
-        self.detection_thread = None
-
-        with self.camera_lock:
-            if self.camera:
-                self.camera.release()
-                self.camera = None
-
-        print("\nDetector 3D detenido")
-
-    def get_pose_data(self) -> Dict:
-        """Devuelve los datos de pose suavizados actuales en formato JSON."""
-        with self.data_lock:
-            return self.current_smoothed_data.copy()
-
-    def __del__(self):
-        try:
-            self.stop()
-        except Exception:
-            pass
-
-
-# Ejemplo de uso
 if __name__ == "__main__":
-    # Crear detector con configuración personalizada
-    detector = PoseDetector(
-        verbose=1.0,  # Mostrar datos cada segundo
-        smoothing_window_ms=500,  # Ventana de suavizado de 500ms
-        emit_interval_ms=50,  # Emitir datos cada 50ms (20 FPS)
-        retention_ms=3000  # Retener datos por 3 segundos
-    )
+    tracker = PoseHandTracker(response_time_ms=100, smoothing_time_ms=500,
+                              use_pose=True, use_hands=True,
+                              mirror=True, invert_hands=False,
+                              verbose=True)
 
-    try:
-        # Iniciar detección
-        detector.start(camera_id=0)
+    tracker.run()  # iniciar procesamiento
 
-        # Mantener ejecutándose
-        while True:
-            # Obtener datos actuales
-            pose_data = detector.get_pose_data()
+    # Ejemplo de callback para imprimir datos
+    def print_data(data):
+        print("Head (pitch,yaw,roll):", data["head"],
+              " Torso:", data["torso"],
+              " Left hand:", data["left_hand"],
+              " Right hand:", data["right_hand"])
 
-            # Aquí puedes procesar los datos como necesites
-            # print(f"Datos actuales: {pose_data}")
+    #tracker.subscribe(print_data)
 
-            time.sleep(0.1)  # Pausa pequeña
-
-    except KeyboardInterrupt:
-        print("\nDeteniendo detector...")
-    finally:
-        detector.stop()
+    # ... ejecutar por algún tiempo ...
+    time.sleep(20)  # mantener 20 segundos recibiendo datos
+    tracker.stop()  # detener el seguimiento y liberar recursos

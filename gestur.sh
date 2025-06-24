@@ -55,7 +55,7 @@ install() {
   sudo /opt/gestur/.venv/bin/python -m pip install --upgrade pip setuptools wheel
 
   # Install pytorch, mmpose and other dependencies
-  sudo /opt/gestur/.venv/bin/python -m pip install torch==1.8.1 torchvision==0.9.1 --index-url https://download.pytorch.org/whl/cpu
+  sudo /opt/gestur/.venv/bin/python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
   sudo /opt/gestur/.venv/bin/python -m pip install mmpose
   sudo /opt/gestur/.venv/bin/python -m pip install numpy opencv-python
   sudo /opt/gestur/.venv/bin/python -m pip install mmdet==2.22.0
@@ -69,7 +69,7 @@ install() {
   cd mmcv
   export MMCV_WITH_OPS=1
   export FORCE_CUDA=0
-  sudo /opt/gestur/.venv/bin/python -m pip install -e .
+  sudo /opt/gestur/.venv/bin/python -m pip install .
   cd ..
   sudo rm -rf mmcv
   cd "$CURRENT_DIR"

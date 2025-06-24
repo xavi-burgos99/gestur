@@ -4,9 +4,9 @@ from panda3d.core import DirectionalLight, AmbientLight, Vec3, Filename, getMode
 import sys, os
 
 loadPrcFileData('', 'load-file-type p3assimp')
+loadPrcFileData('', 'win-size 1920 1080')
 
 if sys.platform == 'darwin':
-    loadPrcFileData('', 'win-size 1920 1080')
     loadPrcFileData('', 'fullscreen-windowed true')
 else:
     loadPrcFileData('', 'fullscreen true')

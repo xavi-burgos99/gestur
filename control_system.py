@@ -379,27 +379,27 @@ def create_default_control_system():
     ))
 
     # Mapeos: Manos -> Posición
-    system.add_mapping(ControlMapping(
-        name="hands_x_to_position_x",
-        input_extractor=extractors['hands_center_x'],
-        output_applier=appliers['position_x'](scale=8.0, invert=True),
-        smoother=hands_x_smoother
-    ))
+    #system.add_mapping(ControlMapping(
+    #    name="hands_x_to_position_x",
+    #    input_extractor=extractors['hands_center_x'],
+    #    output_applier=appliers['position_x'](scale=8.0, invert=True),
+    #    smoother=hands_x_smoother
+    #))
 
-    system.add_mapping(ControlMapping(
-        name="hands_y_to_position_z",
-        input_extractor=extractors['hands_center_y'],
-        output_applier=appliers['position_z'](scale=8.0, invert=True),
-        smoother=hands_y_smoother
-    ))
+    #system.add_mapping(ControlMapping(
+    #    name="hands_y_to_position_z",
+    #    input_extractor=extractors['hands_center_y'],
+    #    output_applier=appliers['position_z'](scale=8.0, invert=True),
+    #    smoother=hands_y_smoother
+    #))
 
     # Mapeo: Distancia entre manos -> Escala
-    system.add_mapping(ControlMapping(
-        name="hands_distance_to_scale",
-        input_extractor=extractors['hands_distance'],
-        output_applier=appliers['scale_uniform'](min_scale=0.3, max_scale=2.5),
-        smoother=hands_dist_smoother
-    ))
+    #system.add_mapping(ControlMapping(
+    #    name="hands_distance_to_scale",
+    #    input_extractor=extractors['hands_distance'],
+    #    output_applier=appliers['scale_uniform'](min_scale=0.3, max_scale=2.5),
+    #    smoother=hands_dist_smoother
+    #))
 
     return system
 
@@ -432,19 +432,19 @@ def create_gaming_control_system():
     ))
 
     # Movimiento más amplio
-    system.add_mapping(ControlMapping(
-        name="hands_x_to_position_x_gaming",
-        input_extractor=extractors['hands_center_x'],
-        output_applier=appliers['position_x'](scale=15.0, invert=True),
-        smoother=hands_x_smoother
-    ))
+    #system.add_mapping(ControlMapping(
+    #    name="hands_x_to_position_x_gaming",
+    #    input_extractor=extractors['hands_center_x'],
+    #    output_applier=appliers['position_x'](scale=15.0, invert=True),
+    #    smoother=hands_x_smoother
+    #))
 
-    system.add_mapping(ControlMapping(
-        name="hands_y_to_position_z_gaming",
-        input_extractor=extractors['hands_center_y'],
-        output_applier=appliers['position_z'](scale=12.0, invert=True),
-        smoother=hands_y_smoother
-    ))
+    #system.add_mapping(ControlMapping(
+    #    name="hands_y_to_position_z_gaming",
+    #    input_extractor=extractors['hands_center_y'],
+    #    output_applier=appliers['position_z'](scale=12.0, invert=True),
+    #    smoother=hands_y_smoother
+    #))
 
     return system
 
@@ -485,19 +485,19 @@ def create_precise_control_system():
         smoother=hands_x_smoother
     ))
 
-    system.add_mapping(ControlMapping(
-        name="hands_y_to_position_z_precise",
-        input_extractor=extractors['hands_center_y'],
-        output_applier=appliers['position_z'](scale=5.0, invert=True),
-        smoother=hands_y_smoother
-    ))
+    #system.add_mapping(ControlMapping(
+    #    name="hands_y_to_position_z_precise",
+    #    input_extractor=extractors['hands_center_y'],
+    #    output_applier=appliers['position_z'](scale=5.0, invert=True),
+    #    smoother=hands_y_smoother
+    #))
 
     # Escala más sutil
-    system.add_mapping(ControlMapping(
-        name="hands_distance_to_scale_precise",
-        input_extractor=extractors['hands_distance'],
-        output_applier=appliers['scale_uniform'](min_scale=0.7, max_scale=1.5),
-        smoother=hands_dist_smoother
-    ))
+    #system.add_mapping(ControlMapping(
+    #    name="hands_distance_to_scale_precise",
+    #    input_extractor=extractors['hands_distance'],
+    #    output_applier=appliers['scale_uniform'](min_scale=0.7, max_scale=1.5),
+    #    smoother=hands_dist_smoother
+    #))
 
     return system

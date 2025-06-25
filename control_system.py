@@ -1,5 +1,7 @@
-# control_system.py
+# control_system.py (modificado para combinar funcionalidades)
+
 import math
+import time
 from abc import ABC, abstractmethod
 
 
@@ -43,6 +45,156 @@ class ExponentialSmoother(Smoother):
     def reset(self):
         self.smoothed_value = self.center_value
         self.has_data = False
+
+
+# En tu control_system.py, modifica la clase HybridRotationController:
+
+class HybridRotationController:
+    """
+    Controlador híbrido que combina rotación proporcional + continua con velocidad gradual
+    """
+
+    def __init__(self, max_degrees=30.0, left_threshold=0.25, right_threshold=0.75,
+                 continuous_speed_degrees_per_second=45.0, center=0.5, invert=False):
+        self.max_degrees = max_degrees
+        self.left_threshold = left_threshold
+        self.right_threshold = right_threshold
+        self.max_continuous_speed = continuous_speed_degrees_per_second
+        self.center = center
+        self.invert = invert
+
+        # Estado para rotación continua
+        self.continuous_rotation = 0.0
+        self.last_update_time = time.time()
+        self.is_in_continuous_mode = False
+        self.continuous_direction = 0  # -1, 0, 1
+
+        # Para transición suave
+        self.proportional_rotation_at_threshold = 0.0
+
+    def calculate_continuous_speed_factor(self, head_x_value):
+        """
+        Calcula el factor de velocidad continua basado en la distancia desde el umbral
+
+        Args:
+            head_x_value: Posición X de la cabeza (0.0 a 1.0)
+
+        Returns:
+            Factor de velocidad (0.0 a 1.0)
+        """
+        if head_x_value > self.right_threshold:
+            # Zona derecha: 0.75 -> 1.0
+            # Factor va de 0.0 (en 0.75) a 1.0 (en 1.0)
+            distance_from_threshold = head_x_value - self.right_threshold
+            max_distance = 1.0 - self.right_threshold  # 0.25
+            factor = min(1.0, distance_from_threshold / max_distance)
+            return factor
+
+        elif head_x_value < self.left_threshold:
+            # Zona izquierda: 0.25 -> 0.0
+            # Factor va de 0.0 (en 0.25) a 1.0 (en 0.0)
+            distance_from_threshold = self.left_threshold - head_x_value
+            max_distance = self.left_threshold  # 0.25
+            factor = min(1.0, distance_from_threshold / max_distance)
+            return factor
+        else:
+            # Zona normal: sin rotación continua
+            return 0.0
+
+    def update(self, head_x_value):
+        """
+        Actualiza la rotación híbrida con velocidad gradual
+
+        Args:
+            head_x_value: Posición X de la cabeza (0.0 a 1.0)
+
+        Returns:
+            Rotación total en grados
+        """
+        current_time = time.time()
+        delta_time = current_time - self.last_update_time
+        self.last_update_time = current_time
+
+        if head_x_value is None:
+            # Sin detección -> resetear todo
+            self.is_in_continuous_mode = False
+            self.continuous_direction = 0
+            self.continuous_rotation = 0.0
+            return 0.0
+
+        # Determinar zona actual
+        in_left_extreme = head_x_value < self.left_threshold
+        in_right_extreme = head_x_value > self.right_threshold
+        in_normal_zone = self.left_threshold <= head_x_value <= self.right_threshold
+
+        if in_normal_zone:
+            # MODO NORMAL: Rotación proporcional (comportamiento "asomar")
+            if self.is_in_continuous_mode:
+                # Saliendo de modo continuo -> resetear
+                self.is_in_continuous_mode = False
+                self.continuous_direction = 0
+                print("🛑 Saliendo de modo continuo -> modo proporcional")
+
+            # Calcular rotación proporcional normal
+            offset = head_x_value - self.center
+            if self.invert:
+                offset = -offset
+            proportional_rotation = offset * 2.0 * self.max_degrees
+            proportional_rotation = max(-self.max_degrees, min(self.max_degrees, proportional_rotation))
+
+            return self.continuous_rotation + proportional_rotation
+
+        else:
+            # MODO EXTREMO: Rotación continua con velocidad gradual
+            current_direction = -1 if in_left_extreme else 1
+
+            if not self.is_in_continuous_mode:
+                # Entrando en modo continuo por primera vez
+                self.is_in_continuous_mode = True
+                self.continuous_direction = current_direction
+
+                # Calcular la rotación proporcional en el umbral para transición suave
+                threshold_value = self.left_threshold if in_left_extreme else self.right_threshold
+                offset = threshold_value - self.center
+                if self.invert:
+                    offset = -offset
+                self.proportional_rotation_at_threshold = offset * 2.0 * self.max_degrees
+                self.proportional_rotation_at_threshold = max(-self.max_degrees, min(self.max_degrees,
+                                                                                     self.proportional_rotation_at_threshold))
+
+                print(f"🔄 Entrando en modo CONTINUO GRADUAL {'izquierda' if in_left_extreme else 'derecha'}")
+
+            elif self.continuous_direction != current_direction:
+                # Cambio de dirección en extremos
+                self.continuous_direction = current_direction
+                print(f"🔄 Cambiando dirección continua a {'izquierda' if in_left_extreme else 'derecha'}")
+
+            # NUEVA LÓGICA: Calcular velocidad gradual
+            speed_factor = self.calculate_continuous_speed_factor(head_x_value)
+            current_speed = self.max_continuous_speed * speed_factor
+
+            # Aplicar rotación continua con velocidad gradual
+            if self.is_in_continuous_mode and current_speed > 0:
+                rotation_increment = self.continuous_direction * current_speed * delta_time
+                if self.invert:
+                    rotation_increment = -rotation_increment
+                self.continuous_rotation += rotation_increment
+
+                # Mantener en rango razonable
+                while self.continuous_rotation > 360:
+                    self.continuous_rotation -= 360
+                while self.continuous_rotation < -360:
+                    self.continuous_rotation += 360
+
+                if abs(speed_factor - 1.0) < 0.01:  # Casi al máximo
+                    if not hasattr(self, '_max_speed_logged'):
+                        print(f"🚀 Velocidad máxima alcanzada: {current_speed:.1f}°/s")
+                        self._max_speed_logged = True
+                else:
+                    self._max_speed_logged = False
+
+            return self.continuous_rotation + self.proportional_rotation_at_threshold
+
 
 
 class DataProcessor:
@@ -208,7 +360,11 @@ class ControlSystem:
 
     def get_mappings_info(self):
         """Retorna información sobre los mapeos activos"""
-        return [f"{'✓' if m.enabled else '✗'} {m.name}" for m in self.mappings]
+        info = []
+        for m in self.mappings:
+            mapping_type = "Hybrid" if isinstance(m, HybridRotationMapping) else "Standard"
+            info.append(f"{'✓' if m.enabled else '✗'} {m.name} ({mapping_type})")
+        return info
 
 
 # ===============================
@@ -248,7 +404,7 @@ def create_extractors():
         'hands_center_x': hands_center_x,
         'hands_center_y': hands_center_y,
         'hands_distance': hands_distance,
-        'hands_separation_x': hands_separation_x
+        'hands_separation_x': hands_separation_x,
     }
 
 
@@ -339,12 +495,47 @@ def create_appliers():
         'position_x': position_x,
         'position_y': position_y,
         'position_z': position_z,
-        'scale_uniform': scale_uniform
+        'scale_uniform': scale_uniform,
     }
 
 
+# En tu control_system.py, modifica estas clases:
+
+class HybridRotationMapping:
+    """
+    Mapeo híbrido para rotación proporcional + continua en ROLL
+    """
+
+    def __init__(self, name, rotation_controller, smoother=None, enabled=True):
+        self.name = name
+        self.rotation_controller = rotation_controller
+        self.smoother = smoother
+        self.enabled = enabled
+
+    def process(self, input_data, output_state):
+        """Procesa rotación híbrida aplicada al ROLL"""
+        if not self.enabled:
+            return
+
+        # Extraer posición X de cabeza
+        head = input_data.get('head', {})
+        head_x = head.get('x') if head.get('detected') else None
+
+        # Aplicar suavizado básico si está disponible
+        if self.smoother:
+            head_x = self.smoother.update(head_x)
+
+        # Actualizar rotación híbrida
+        current_rotation = self.rotation_controller.update(head_x)
+
+        # CAMBIO: Aplicar al ROLL (índice 2) en lugar de YAW (índice 0)
+        output_state['rotation'][2] = current_rotation
+
+
 def create_default_control_system():
-    """Crea un sistema de control con configuración por defecto"""
+    """
+    Sistema de control híbrido que combina "asomar" + rotación continua en ROLL
+    """
     system = ControlSystem()
     extractors = create_extractors()
     appliers = create_appliers()
@@ -352,152 +543,50 @@ def create_default_control_system():
     # Crear smoothers
     head_x_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.1, center_value=0.5)
     head_y_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.1, center_value=0.5)
-    hands_x_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.1, center_value=0.5)
-    hands_y_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.1, center_value=0.5)
+    head_x_yaw_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.1, center_value=0.5)  # Para YAW normal
     hands_dist_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.1, center_value=0.3)
 
-    # Mapeos: Cabeza -> Rotación
+    # Controlador híbrido para ROLL
+    hybrid_roll_controller = HybridRotationController(
+        max_degrees=30.0,  # Rotación máxima en zona normal
+        left_threshold=0.25,  # 25% umbral izquierdo
+        right_threshold=0.75,  # 75% umbral derecho
+        continuous_speed_degrees_per_second=60.0,  # Velocidad rotación continua
+        center=0.5,
+        invert=True  # Mantener el comportamiento original
+    )
+
+    # MAPEO HÍBRIDO: Cabeza X -> Rotación ROLL (normal + continua)
+    system.add_mapping(HybridRotationMapping(
+        name="head_x_hybrid_roll",
+        rotation_controller=hybrid_roll_controller,
+        smoother=head_x_smoother
+    ))
+
+    # MAPEO NORMAL: Cabeza X -> Rotación YAW (solo proporcional)
     system.add_mapping(ControlMapping(
         name="head_x_to_yaw",
         input_extractor=extractors['head_x'],
         output_applier=appliers['rotation_yaw'](max_degrees=10.0, invert=True),
-        smoother=head_x_smoother
+        smoother=head_x_yaw_smoother
     ))
 
+    # Mapeos normales mantenidos
     system.add_mapping(ControlMapping(
         name="head_y_to_pitch",
         input_extractor=extractors['head_y'],
-        output_applier=appliers['rotation_pitch'](max_degrees=10.0),
+        output_applier=appliers['rotation_pitch'](max_degrees=30.0),
         smoother=head_y_smoother
     ))
 
-    system.add_mapping(ControlMapping(
-        name="head_x_to_roll",
-        input_extractor=extractors['head_x'],
-        output_applier=appliers['rotation_roll'](max_degrees=45.0, invert=True),
-        smoother=head_x_smoother
-    ))
-
-    # Mapeos: Manos -> Posición
-    #system.add_mapping(ControlMapping(
-    #    name="hands_x_to_position_x",
-    #    input_extractor=extractors['hands_center_x'],
-    #    output_applier=appliers['position_x'](scale=8.0, invert=True),
-    #    smoother=hands_x_smoother
-    #))
-
-    #system.add_mapping(ControlMapping(
-    #    name="hands_y_to_position_z",
-    #    input_extractor=extractors['hands_center_y'],
-    #    output_applier=appliers['position_z'](scale=8.0, invert=True),
-    #    smoother=hands_y_smoother
-    #))
+    # NOTA: Removí head_x_to_roll ya que ahora el roll lo maneja el controlador híbrido
 
     # Mapeo: Distancia entre manos -> Escala
-    #system.add_mapping(ControlMapping(
-    #    name="hands_distance_to_scale",
-    #    input_extractor=extractors['hands_distance'],
-    #    output_applier=appliers['scale_uniform'](min_scale=0.3, max_scale=2.5),
-    #    smoother=hands_dist_smoother
-    #))
-
-    return system
-
-
-def create_gaming_control_system():
-    """Sistema de control optimizado para gaming (más sensible)"""
-    system = ControlSystem()
-    extractors = create_extractors()
-    appliers = create_appliers()
-
-    # Smoothers más rápidos para gaming
-    head_x_smoother = ExponentialSmoother(alpha=0.6, decay_rate=0.2, center_value=0.5)
-    head_y_smoother = ExponentialSmoother(alpha=0.6, decay_rate=0.2, center_value=0.5)
-    hands_x_smoother = ExponentialSmoother(alpha=0.5, decay_rate=0.15, center_value=0.5)
-    hands_y_smoother = ExponentialSmoother(alpha=0.5, decay_rate=0.15, center_value=0.5)
-
-    # Rotaciones más amplias para gaming
     system.add_mapping(ControlMapping(
-        name="head_x_to_yaw_gaming",
-        input_extractor=extractors['head_x'],
-        output_applier=appliers['rotation_yaw'](max_degrees=60.0),
-        smoother=head_x_smoother
+        name="hands_distance_to_scale",
+        input_extractor=extractors['hands_distance'],
+        output_applier=appliers['scale_uniform'](min_scale=0.3, max_scale=2.5),
+        smoother=hands_dist_smoother
     ))
-
-    system.add_mapping(ControlMapping(
-        name="head_y_to_pitch_gaming",
-        input_extractor=extractors['head_y'],
-        output_applier=appliers['rotation_pitch'](max_degrees=45.0),
-        smoother=head_y_smoother
-    ))
-
-    # Movimiento más amplio
-    #system.add_mapping(ControlMapping(
-    #    name="hands_x_to_position_x_gaming",
-    #    input_extractor=extractors['hands_center_x'],
-    #    output_applier=appliers['position_x'](scale=15.0, invert=True),
-    #    smoother=hands_x_smoother
-    #))
-
-    #system.add_mapping(ControlMapping(
-    #    name="hands_y_to_position_z_gaming",
-    #    input_extractor=extractors['hands_center_y'],
-    #    output_applier=appliers['position_z'](scale=12.0, invert=True),
-    #    smoother=hands_y_smoother
-    #))
-
-    return system
-
-
-def create_precise_control_system():
-    """Sistema de control para trabajo de precisión (más suave)"""
-    system = ControlSystem()
-    extractors = create_extractors()
-    appliers = create_appliers()
-
-    # Smoothers más suaves para precisión
-    head_x_smoother = ExponentialSmoother(alpha=0.15, decay_rate=0.05, center_value=0.5)
-    head_y_smoother = ExponentialSmoother(alpha=0.15, decay_rate=0.05, center_value=0.5)
-    hands_x_smoother = ExponentialSmoother(alpha=0.2, decay_rate=0.05, center_value=0.5)
-    hands_y_smoother = ExponentialSmoother(alpha=0.2, decay_rate=0.05, center_value=0.5)
-    hands_dist_smoother = ExponentialSmoother(alpha=0.2, decay_rate=0.05, center_value=0.3)
-
-    # Rotaciones más sutiles
-    system.add_mapping(ControlMapping(
-        name="head_x_to_yaw_precise",
-        input_extractor=extractors['head_x'],
-        output_applier=appliers['rotation_yaw'](max_degrees=15.0),
-        smoother=head_x_smoother
-    ))
-
-    system.add_mapping(ControlMapping(
-        name="head_y_to_pitch_precise",
-        input_extractor=extractors['head_y'],
-        output_applier=appliers['rotation_pitch'](max_degrees=15.0),
-        smoother=head_y_smoother
-    ))
-
-    # Movimiento más controlado
-    system.add_mapping(ControlMapping(
-        name="hands_x_to_position_x_precise",
-        input_extractor=extractors['hands_center_x'],
-        output_applier=appliers['position_x'](scale=5.0, invert=True),
-        smoother=hands_x_smoother
-    ))
-
-    #system.add_mapping(ControlMapping(
-    #    name="hands_y_to_position_z_precise",
-    #    input_extractor=extractors['hands_center_y'],
-    #    output_applier=appliers['position_z'](scale=5.0, invert=True),
-    #    smoother=hands_y_smoother
-    #))
-
-    # Escala más sutil
-    #system.add_mapping(ControlMapping(
-    #    name="hands_distance_to_scale_precise",
-    #    input_extractor=extractors['hands_distance'],
-    #    output_applier=appliers['scale_uniform'](min_scale=0.7, max_scale=1.5),
-    #    smoother=hands_dist_smoother
-    #))
 
     return system

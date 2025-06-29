@@ -40,7 +40,7 @@ class PoseHandTracker:
         # Estructura para datos actuales (filtrados)
         self.current_data = {
             "head":  {"detected": False, "x": None, "y": None,
-                      "pitch": None, "yaw": None, "roll": None},
+                      "pitch": None, "yaw": None, "roll": None, "scale": None},
             "torso": {"detected": False, "x": None, "y": None,
                       "pitch": None, "yaw": None, "roll": None},
             "left_hand":  {"detected": False, "x": None, "y": None,
@@ -116,6 +116,7 @@ class PoseHandTracker:
 
             # Variables locales para nuevos valores calculados (sin filtrar)
             head_pitch = head_yaw = head_roll = 0.0
+            head_scale = 0.5
             torso_pitch = torso_yaw = torso_roll = 0.0
             head_x = head_y = None
             torso_x = torso_y = None
@@ -135,13 +136,13 @@ class PoseHandTracker:
                 head_detected = True
                 torso_detected = True
                 # Extraer landmarks necesarios
-                # Nota: accederemos a pose_world_landmarks (3D) para cálculos de ángulos,
-                # y pose_landmarks (2D) para posiciones en pixeles si hiciera falta.
                 lm = pose_res.pose_world_landmarks.landmark  # lista de 33 landmarks 3D
                 lm2d = pose_res.pose_landmarks.landmark if pose_res.pose_landmarks else None  # lista 2D normalizados
 
                 # Puntos de interés
                 nose = lm[0]
+                left_eye = lm[1]
+                right_eye = lm[2]
                 left_ear = lm[7]
                 right_ear = lm[8]
                 left_shoulder = lm[11]
@@ -149,7 +150,7 @@ class PoseHandTracker:
                 left_hip = lm[23]
                 right_hip = lm[24]
 
-                # Calcular orientación de la cabeza (usando nariz y orejas)
+                # Calcular orientación de la cabeza (usando nariz y orejas para orientación)
                 # Vector de dirección de la cabeza: desde centro de orejas hacia la nariz
                 ear_mid_x = (left_ear.x + right_ear.x) / 2.0
                 ear_mid_y = (left_ear.y + right_ear.y) / 2.0
@@ -160,8 +161,6 @@ class PoseHandTracker:
                     nose.z - ear_mid_z
                 )
                 # Yaw de la cabeza: ángulo de dir_head proyectado en plano X-Z
-                # Tomamos eje Z hacia adelante de la cámara. Suponiendo que el eje Z de landmarks
-                # apunta hacia la cámara (negativo hacia adelante).
                 dir_x, dir_y, dir_z = dir_head
                 # Proyección en plano horizontal (x-z)
                 proj_xz = math.sqrt(dir_x ** 2 + dir_z ** 2)
@@ -172,23 +171,14 @@ class PoseHandTracker:
                 # Pitch de la cabeza: ángulo entre vector y su proyección horizontal (y vs xz)
                 head_pitch = math.degrees(math.atan2(dir_y, proj_xz))
                 # Roll de la cabeza: ángulo de inclinación de la línea de orejas
-                # Vector oreja->oreja
-                ear_vec = (
-                    right_ear.x - left_ear.x,
-                    right_ear.y - left_ear.y,
-                    right_ear.z - left_ear.z
-                )
-                # Roll calculado con atan2(diferencia_y, diferencia_z) respecto al plano horizontal,
-                # pero dado que la cámara puede no estar perfectamente alineada, simplificaremos
-                # usando solo la componente Y vs X (en imagen 2D esto sería la pendiente).
-                # Usamos landmarks 2D para mayor precisión en imagen:
                 if lm2d:
-                    left_ear_2d = lm2d[7];
+                    left_ear_2d = lm2d[7]
                     right_ear_2d = lm2d[8]
                     dy = right_ear_2d.y - left_ear_2d.y
                     dx = right_ear_2d.x - left_ear_2d.x
                 else:
-                    dy = ear_vec[1];
+                    ear_vec = (right_ear.x - left_ear.x, right_ear.y - left_ear.y, right_ear.z - left_ear.z)
+                    dy = ear_vec[1]
                     dx = ear_vec[0]
                 head_roll = math.degrees(math.atan2(dy, dx))
 
@@ -197,10 +187,22 @@ class PoseHandTracker:
                     nose2d = pose_res.pose_landmarks.landmark[0]  # nariz índice 0
                     head_x, head_y = nose2d.x, nose2d.y
                     hip_mid2d_x = (pose_res.pose_landmarks.landmark[23].x +
-                                    pose_res.pose_landmarks.landmark[24].x) / 2.0
+                                   pose_res.pose_landmarks.landmark[24].x) / 2.0
                     hip_mid2d_y = (pose_res.pose_landmarks.landmark[23].y +
-                                    pose_res.pose_landmarks.landmark[24].y) / 2.0
+                                   pose_res.pose_landmarks.landmark[24].y) / 2.0
                     torso_x, torso_y = hip_mid2d_x, hip_mid2d_y
+
+                # Escalar de la cabeza: distancia entre ojos (landmark 1 y 2)
+                if lm2d:
+                    left_eye_2d = lm2d[1]
+                    right_eye_2d = lm2d[2]
+                    eye_dist = math.sqrt((right_eye_2d.x - left_eye_2d.x) ** 2 +
+                                         (right_eye_2d.y - left_eye_2d.y) ** 2)
+                    head_min_dist = 0.003
+                    head_max_dist = 0.03
+                    head_scale = (eye_dist - head_min_dist) / (head_max_dist - head_min_dist)
+                    head_scale = max(0.0, min(1.0, head_scale))
+
 
                 # Calcular orientación del torso (usando hombros y caderas)
                 # Vectores base del torso
@@ -240,10 +242,10 @@ class PoseHandTracker:
                 # Pitch del torso: ángulo de forward_axis vs horizontal
                 torso_pitch = math.degrees(math.atan2(fwd_y, proj_xz_torso)) if proj_xz_torso > 1e-6 else 0.0
                 # Roll del torso: inclinación de la línea de hombros
-                # Usamos diferencia de alturas entre hombros
                 shoulder_dy = right_shoulder.y - left_shoulder.y
                 shoulder_dx = right_shoulder.x - left_shoulder.x
                 torso_roll = math.degrees(math.atan2(shoulder_dy, shoulder_dx))
+
             # Cálculo de datos de manos si disponible
             if hand_res and hand_res.multi_hand_landmarks:
                 # Recorremos cada mano detectada
@@ -283,11 +285,9 @@ class PoseHandTracker:
                     vec_x, vec_y, vec_z = vec_palm
                     proj_xz_hand = math.sqrt(vec_x ** 2 + vec_z ** 2)
                     hand_pitch_val = math.degrees(math.atan2(-vec_y, proj_xz_hand)) if proj_xz_hand > 1e-6 else 0.0
-                    # (Usamos -vec_y porque si la palma se inclina hacia abajo, y aumenta, pero queremos pitch positivo)
                     # Yaw de la mano: ángulo de vec_palm en plano horizontal (X-Z)
                     hand_yaw_val = math.degrees(math.atan2(vec_x, vec_z)) if proj_xz_hand > 1e-6 else 0.0
                     # Roll de la mano: rotación de la palma alrededor de vec_palm.
-                    # Calculamos el normal de la palma usando cross product (wrist->index) x (wrist->pinky)
                     v_wrist_index = (
                         index_mcp.x - wrist.x,
                         index_mcp.y - wrist.y,
@@ -304,7 +304,6 @@ class PoseHandTracker:
                         v_wrist_index[0] * v_wrist_pinky[1] - v_wrist_index[1] * v_wrist_pinky[0]
                     )
                     # Para calcular roll, medimos el ángulo del normal respecto a la vertical (eje Y).
-                    # Proyectar normal en plano Y-Z (plano vertical mirando de lado)
                     norm_yz = math.sqrt(normal_palm[1] ** 2 + normal_palm[2] ** 2)
                     hand_roll_val = math.degrees(math.atan2(normal_palm[0], norm_yz)) if norm_yz > 1e-6 else 0.0
                     # Asignar a la mano correspondiente
@@ -322,27 +321,36 @@ class PoseHandTracker:
             self.current_data["torso"]["y"] = torso_y
             # Si no se detectó cabeza/torso en este frame, vaciar valores
             if not head_detected:
-                head_pitch = head_yaw = head_roll = None
+                head_pitch = head_yaw = head_roll = head_scale = None
             if not torso_detected:
                 torso_pitch = torso_yaw = torso_roll = None
 
             # Aplicar suavizado (exponential smoothing) a cada valor antes de actualizar current_data
             # Cabeza
             if head_detected:
-                self.current_data["head"]["pitch"] = (1 - self.alpha) * (self.current_data["head"]["pitch"] or 0) + self.alpha * head_pitch
-                self.current_data["head"]["yaw"]   = (1 - self.alpha) * (self.current_data["head"]["yaw"] or 0)   + self.alpha * head_yaw
-                self.current_data["head"]["roll"]  = (1 - self.alpha) * (self.current_data["head"]["roll"] or 0)  + self.alpha * head_roll
+                self.current_data["head"]["pitch"] = (1 - self.alpha) * (
+                            self.current_data["head"]["pitch"] or 0) + self.alpha * head_pitch
+                self.current_data["head"]["yaw"] = (1 - self.alpha) * (
+                            self.current_data["head"]["yaw"] or 0) + self.alpha * head_yaw
+                self.current_data["head"]["roll"] = (1 - self.alpha) * (
+                            self.current_data["head"]["roll"] or 0) + self.alpha * head_roll
+                self.current_data["head"]["scale"] = (1 - self.alpha) * (
+                            self.current_data["head"]["scale"] or 0.5) + self.alpha * head_scale
             elif not self.current_data["head"]["detected"]:
-                self.current_data["head"]["pitch"] = self.current_data["head"]["yaw"] = self.current_data["head"]["roll"] = None
+                self.current_data["head"]["pitch"] = self.current_data["head"]["yaw"] = self.current_data["head"][
+                    "roll"] = self.current_data["head"]["scale"] = None  # ← CORREGIDO: añadir scale
             # Torso
             if torso_detected:
-                self.current_data["torso"]["pitch"] = (1 - self.alpha) * (self.current_data["torso"]["pitch"] or 0) + self.alpha * torso_pitch
-                self.current_data["torso"]["yaw"]   = (1 - self.alpha) * (self.current_data["torso"]["yaw"] or 0)   + self.alpha * torso_yaw
-                self.current_data["torso"]["roll"]  = (1 - self.alpha) * (self.current_data["torso"]["roll"] or 0)  + self.alpha * torso_roll
+                self.current_data["torso"]["pitch"] = (1 - self.alpha) * (
+                            self.current_data["torso"]["pitch"] or 0) + self.alpha * torso_pitch
+                self.current_data["torso"]["yaw"] = (1 - self.alpha) * (
+                            self.current_data["torso"]["yaw"] or 0) + self.alpha * torso_yaw
+                self.current_data["torso"]["roll"] = (1 - self.alpha) * (
+                            self.current_data["torso"]["roll"] or 0) + self.alpha * torso_roll
             elif not self.current_data["torso"]["detected"]:
-                self.current_data["torso"]["pitch"] = self.current_data["torso"]["yaw"] = self.current_data["torso"]["roll"] = None
+                self.current_data["torso"]["pitch"] = self.current_data["torso"]["yaw"] = self.current_data["torso"][
+                    "roll"] = None
             # Manos
-            # Para manos, si no se detectó mano en este frame, mantenemos la posición previa (no la actualizamos para no poner None a mitad de suavizado).
             if left_x is not None and left_y is not None:
                 self.current_data["left_hand"]["x"] = left_x
                 self.current_data["left_hand"]["y"] = left_y
@@ -363,23 +371,23 @@ class PoseHandTracker:
             # Suavizar orientaciones solo si la mano está presente (dentro del periodo de smoothing)
             if left_present:
                 prev_lp = self.current_data["left_hand"]["pitch"] or 0.0
-                prev_ly = self.current_data["left_hand"]["yaw"]   or 0.0
-                prev_lr = self.current_data["left_hand"]["roll"]  or 0.0
+                prev_ly = self.current_data["left_hand"]["yaw"] or 0.0
+                prev_lr = self.current_data["left_hand"]["roll"] or 0.0
                 self.current_data["left_hand"]["pitch"] = (1 - self.alpha) * prev_lp + self.alpha * left_pitch
-                self.current_data["left_hand"]["yaw"]   = (1 - self.alpha) * prev_ly + self.alpha * left_yaw
-                self.current_data["left_hand"]["roll"]  = (1 - self.alpha) * prev_lr + self.alpha * left_roll
+                self.current_data["left_hand"]["yaw"] = (1 - self.alpha) * prev_ly + self.alpha * left_yaw
+                self.current_data["left_hand"]["roll"] = (1 - self.alpha) * prev_lr + self.alpha * left_roll
             if right_present:
                 prev_rp = self.current_data["right_hand"]["pitch"] or 0.0
-                prev_ry = self.current_data["right_hand"]["yaw"]   or 0.0
-                prev_rr = self.current_data["right_hand"]["roll"]  or 0.0
+                prev_ry = self.current_data["right_hand"]["yaw"] or 0.0
+                prev_rr = self.current_data["right_hand"]["roll"] or 0.0
                 self.current_data["right_hand"]["pitch"] = (1 - self.alpha) * prev_rp + self.alpha * right_pitch
-                self.current_data["right_hand"]["yaw"]   = (1 - self.alpha) * prev_ry + self.alpha * right_yaw
-                self.current_data["right_hand"]["roll"]  = (1 - self.alpha) * prev_rr + self.alpha * right_roll
+                self.current_data["right_hand"]["yaw"] = (1 - self.alpha) * prev_ry + self.alpha * right_yaw
+                self.current_data["right_hand"]["roll"] = (1 - self.alpha) * prev_rr + self.alpha * right_roll
 
             # Update detection flags exposed to the exterior
             self.current_data["left_hand"]["detected"] = left_present
             self.current_data["right_hand"]["detected"] = right_present
-            self.current_data["head"]["detected"]  = head_detected
+            self.current_data["head"]["detected"] = head_detected
             self.current_data["torso"]["detected"] = torso_detected
 
             # Clear coordinates and rotations when the hand is no longer present
@@ -427,27 +435,32 @@ class PoseHandTracker:
         """Imprime datos actuales: posición (%) y rotación, en formato tabulado."""
         d = self.current_data
         # Helper for row logging
-        def log_row(hand):
+        def log_row(data):
             # Choose flag symbol
-            if hand["detected"]:
+            if data["detected"]:
                 det_flag = "✔"
-            elif hand["x"] is not None:
+            elif data["x"] is not None:
                 det_flag = "·"   # smoothing grace period
             else:
                 det_flag = "✖"
             # x/y
-            if hand["x"] is not None:
-                x_disp = f"{hand['x']*100:5.1f}%"
-                y_disp = f"{hand['y']*100:5.1f}%"
+            if data["x"] is not None:
+                x_disp = f"{data['x'] * 100:5.1f}%"
+                y_disp = f"{data['y'] * 100:5.1f}%"
             else:
                 x_disp = "-"
                 y_disp = "-"
+            # scale
+            if "scale" in data and data["scale"] is not None:
+                scale = f"{data['scale'] * 100:5.1f}%"
+            else:
+                scale = "  -  "
             # rotation
             def f(val):
                 return f"{val:7.2f}°" if val is not None else "   -   "
-            return (f"{det_flag}  x={x_disp:>6}  y={y_disp:>6} | "
-                    f"pitch={f(hand['pitch'])}  yaw={f(hand['yaw'])}  "
-                    f"roll={f(hand['roll'])}")
+            return (f"{det_flag}  x={x_disp:>6}  y={y_disp:>6} z={scale}%  "
+                    f"pitch={f(data['pitch'])}  yaw={f(data['yaw'])}  "
+                    f"roll={f(data['roll'])}")
 
         print("\n[PoseHandTracker]")
         print(f"  HEAD   : {log_row(d['head'])}")

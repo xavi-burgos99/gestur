@@ -136,8 +136,7 @@ def main():
     controller = PoseController(
         obj_path=args.obj,
         control_system=control_system,
-        verbose=args.verbose,
-
+        verbose=args.verbose
     )
 
     controller.run()

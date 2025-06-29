@@ -1,13 +1,10 @@
-# control_system.py (modificado para combinar funcionalidades)
-
+# control_system.py
 import math
 import time
 from abc import ABC, abstractmethod
 
 
 class Smoother(ABC):
-    """Clase base para algoritmos de suavizado"""
-
     @abstractmethod
     def update(self, value):
         pass
@@ -18,8 +15,6 @@ class Smoother(ABC):
 
 
 class ExponentialSmoother(Smoother):
-    """Suavizado exponencial con decaimiento al centro"""
-
     def __init__(self, alpha=0.3, decay_rate=0.1, center_value=0.5):
         self.alpha = alpha
         self.decay_rate = decay_rate
@@ -47,15 +42,10 @@ class ExponentialSmoother(Smoother):
         self.has_data = False
 
 
-# En tu control_system.py, modifica la clase HybridRotationController:
-
 class HybridRotationController:
-    """
-    Controlador híbrido que combina rotación proporcional + continua con velocidad gradual
-    """
-
     def __init__(self, max_degrees=30.0, left_threshold=0.25, right_threshold=0.75,
-                 continuous_speed_degrees_per_second=45.0, center=0.5, invert=False):
+                 continuous_speed_degrees_per_second=45.0, center=0.5, invert=False,
+                 reset_timeout_seconds=3.0):
         self.max_degrees = max_degrees
         self.left_threshold = left_threshold
         self.right_threshold = right_threshold
@@ -67,149 +57,116 @@ class HybridRotationController:
         self.continuous_rotation = 0.0
         self.last_update_time = time.time()
         self.is_in_continuous_mode = False
-        self.continuous_direction = 0  # -1, 0, 1
-
-        # Para transición suave
+        self.continuous_direction = 0
         self.proportional_rotation_at_threshold = 0.0
 
-    def calculate_continuous_speed_factor(self, head_x_value):
-        """
-        Calcula el factor de velocidad continua basado en la distancia desde el umbral
-
-        Args:
-            head_x_value: Posición X de la cabeza (0.0 a 1.0)
-
-        Returns:
-            Factor de velocidad (0.0 a 1.0)
-        """
-        if head_x_value > self.right_threshold:
-            # Zona derecha: 0.75 -> 1.0
-            # Factor va de 0.0 (en 0.75) a 1.0 (en 1.0)
-            distance_from_threshold = head_x_value - self.right_threshold
-            max_distance = 1.0 - self.right_threshold  # 0.25
-            factor = min(1.0, distance_from_threshold / max_distance)
-            return factor
-
-        elif head_x_value < self.left_threshold:
-            # Zona izquierda: 0.25 -> 0.0
-            # Factor va de 0.0 (en 0.25) a 1.0 (en 0.0)
-            distance_from_threshold = self.left_threshold - head_x_value
-            max_distance = self.left_threshold  # 0.25
-            factor = min(1.0, distance_from_threshold / max_distance)
-            return factor
-        else:
-            # Zona normal: sin rotación continua
-            return 0.0
+        # Estado para reseteo completo
+        self.is_resetting = False
+        self.reset_start_time = None
+        self.reset_start_rotation = 0.0
 
     def update(self, head_x_value):
-        """
-        Actualiza la rotación híbrida con velocidad gradual
-
-        Args:
-            head_x_value: Posición X de la cabeza (0.0 a 1.0)
-
-        Returns:
-            Rotación total en grados
-        """
         current_time = time.time()
         delta_time = current_time - self.last_update_time
         self.last_update_time = current_time
 
         if head_x_value is None:
-            # Sin detección -> resetear todo
-            self.is_in_continuous_mode = False
-            self.continuous_direction = 0
-            self.continuous_rotation = 0.0
-            return 0.0
+            # **INICIAR O CONTINUAR RESETEO**
+            if not self.is_resetting:
+                self.is_resetting = True
+                self.reset_start_time = current_time
+                self.reset_start_rotation = self.continuous_rotation + self.proportional_rotation_at_threshold
 
-        # Determinar zona actual
+            # **RESETEO GRADUAL A 0 GRADOS**
+            reset_duration = 1.0  # 1 segundo para llegar a 0
+            reset_elapsed = current_time - self.reset_start_time
+
+            if reset_elapsed >= reset_duration:
+                # Reseteo completado
+                self.continuous_rotation = 0.0
+                self.proportional_rotation_at_threshold = 0.0
+                self.is_in_continuous_mode = False
+                self.continuous_direction = 0
+                return 0.0
+            else:
+                # Interpolación suave hacia 0
+                progress = reset_elapsed / reset_duration
+                smooth_progress = progress * progress * (3.0 - 2.0 * progress)
+                current_rotation = self.reset_start_rotation * (1.0 - smooth_progress)
+                return current_rotation
+
+        # **CABEZA DETECTADA - CANCELAR RESETEO**
+        self.is_resetting = False
+
+        # **RESTO DE LA LÓGICA NORMAL**
         in_left_extreme = head_x_value < self.left_threshold
         in_right_extreme = head_x_value > self.right_threshold
         in_normal_zone = self.left_threshold <= head_x_value <= self.right_threshold
 
         if in_normal_zone:
-            # MODO NORMAL: Rotación proporcional (comportamiento "asomar")
             if self.is_in_continuous_mode:
-                # Saliendo de modo continuo -> resetear
                 self.is_in_continuous_mode = False
                 self.continuous_direction = 0
-                print("🛑 Saliendo de modo continuo -> modo proporcional")
 
-            # Calcular rotación proporcional normal
             offset = head_x_value - self.center
             if self.invert:
                 offset = -offset
             proportional_rotation = offset * 2.0 * self.max_degrees
             proportional_rotation = max(-self.max_degrees, min(self.max_degrees, proportional_rotation))
-
             return self.continuous_rotation + proportional_rotation
-
         else:
-            # MODO EXTREMO: Rotación continua con velocidad gradual
             current_direction = -1 if in_left_extreme else 1
 
             if not self.is_in_continuous_mode:
-                # Entrando en modo continuo por primera vez
                 self.is_in_continuous_mode = True
                 self.continuous_direction = current_direction
-
-                # Calcular la rotación proporcional en el umbral para transición suave
                 threshold_value = self.left_threshold if in_left_extreme else self.right_threshold
                 offset = threshold_value - self.center
                 if self.invert:
                     offset = -offset
                 self.proportional_rotation_at_threshold = offset * 2.0 * self.max_degrees
-                self.proportional_rotation_at_threshold = max(-self.max_degrees, min(self.max_degrees,
-                                                                                     self.proportional_rotation_at_threshold))
-
-                print(f"🔄 Entrando en modo CONTINUO GRADUAL {'izquierda' if in_left_extreme else 'derecha'}")
-
+                self.proportional_rotation_at_threshold = max(-self.max_degrees,
+                                                              min(self.max_degrees,
+                                                                  self.proportional_rotation_at_threshold))
             elif self.continuous_direction != current_direction:
-                # Cambio de dirección en extremos
                 self.continuous_direction = current_direction
-                print(f"🔄 Cambiando dirección continua a {'izquierda' if in_left_extreme else 'derecha'}")
 
-            # NUEVA LÓGICA: Calcular velocidad gradual
             speed_factor = self.calculate_continuous_speed_factor(head_x_value)
             current_speed = self.max_continuous_speed * speed_factor
 
-            # Aplicar rotación continua con velocidad gradual
             if self.is_in_continuous_mode and current_speed > 0:
                 rotation_increment = self.continuous_direction * current_speed * delta_time
                 if self.invert:
                     rotation_increment = -rotation_increment
                 self.continuous_rotation += rotation_increment
 
-                # Mantener en rango razonable
                 while self.continuous_rotation > 360:
                     self.continuous_rotation -= 360
                 while self.continuous_rotation < -360:
                     self.continuous_rotation += 360
 
-                if abs(speed_factor - 1.0) < 0.01:  # Casi al máximo
-                    if not hasattr(self, '_max_speed_logged'):
-                        print(f"🚀 Velocidad máxima alcanzada: {current_speed:.1f}°/s")
-                        self._max_speed_logged = True
-                else:
-                    self._max_speed_logged = False
-
             return self.continuous_rotation + self.proportional_rotation_at_threshold
 
+    def calculate_continuous_speed_factor(self, head_x_value):
+        if head_x_value > self.right_threshold:
+            distance_from_threshold = head_x_value - self.right_threshold
+            max_distance = 1.0 - self.right_threshold
+            factor = min(1.0, distance_from_threshold / max_distance)
+            return factor
+        elif head_x_value < self.left_threshold:
+            distance_from_threshold = self.left_threshold - head_x_value
+            max_distance = self.left_threshold
+            factor = min(1.0, distance_from_threshold / max_distance)
+            return factor
+        else:
+            return 0.0
 
 
 class DataProcessor:
-    """Procesador de datos que enriquece la información de entrada"""
-
     def __init__(self):
         pass
 
     def process_hands(self, left_hand_data, right_hand_data):
-        """
-        Procesa datos de manos y calcula información derivada
-
-        Returns:
-            Dict con datos procesados de manos
-        """
         left_detected = left_hand_data.get('detected', False)
         right_detected = right_hand_data.get('detected', False)
 
@@ -221,7 +178,7 @@ class DataProcessor:
             'count': sum([left_detected, right_detected])
         }
 
-        # Datos de mano izquierda
+        # Datos de manos
         if left_detected:
             result['left_x'] = left_hand_data.get('x')
             result['left_y'] = left_hand_data.get('y')
@@ -229,7 +186,6 @@ class DataProcessor:
             result['left_x'] = None
             result['left_y'] = None
 
-        # Datos de mano derecha
         if right_detected:
             result['right_x'] = right_hand_data.get('x')
             result['right_y'] = right_hand_data.get('y')
@@ -264,17 +220,7 @@ class DataProcessor:
 
 
 class ControlMapping:
-    """Define una relación entre entrada y salida con procesamiento"""
-
     def __init__(self, name, input_extractor, output_applier, smoother=None, enabled=True):
-        """
-        Args:
-            name: Nombre descriptivo del mapeo
-            input_extractor: Función que extrae valor de los datos de entrada
-            output_applier: Función que aplica el valor procesado al estado de salida
-            smoother: Instancia de Smoother opcional
-            enabled: Si el mapeo está activo
-        """
         self.name = name
         self.input_extractor = input_extractor
         self.output_applier = output_applier
@@ -282,84 +228,58 @@ class ControlMapping:
         self.enabled = enabled
 
     def process(self, input_data, output_state):
-        """Procesa un mapeo completo de entrada a salida"""
         if not self.enabled:
             return
 
-        # Extraer valor de entrada
         raw_value = self.input_extractor(input_data)
 
-        # Aplicar suavizado si está disponible
         if self.smoother:
             processed_value = self.smoother.update(raw_value)
         else:
             processed_value = raw_value
 
-        # Aplicar al estado de salida
         if processed_value is not None:
             self.output_applier(processed_value, output_state)
 
 
 class ControlSystem:
-    """Sistema de control que procesa entrada y genera salida para el visualizador"""
-
     def __init__(self):
         self.mappings = []
         self.data_processor = DataProcessor()
 
     def add_mapping(self, mapping):
-        """Añade un mapeo de control"""
         self.mappings.append(mapping)
 
     def remove_mapping(self, name):
-        """Remueve un mapeo por nombre"""
         self.mappings = [m for m in self.mappings if m.name != name]
 
     def enable_mapping(self, name, enabled=True):
-        """Habilita/deshabilita un mapeo"""
         for mapping in self.mappings:
             if mapping.name == name:
                 mapping.enabled = enabled
 
     def process_input(self, pose_data):
-        """
-        Procesa datos de pose y genera comandos para el visualizador
-
-        Args:
-            pose_data: Datos del detector de pose
-
-        Returns:
-            Dict con parámetros para visualizer.update_model()
-        """
-        # Enriquecer datos de entrada
         enriched_data = self._enrich_input_data(pose_data)
 
-        # Estado de salida inicial
         output_state = {
             'position': [0.0, 0.0, 0.0],
-            'rotation': [0.0, 0.0, 0.0],  # [yaw, pitch, roll]
+            'rotation': [0.0, 0.0, 0.0],
             'scale': 1.0
         }
 
-        # Procesar cada mapeo
         for mapping in self.mappings:
             mapping.process(enriched_data, output_state)
 
         return output_state
 
     def _enrich_input_data(self, pose_data):
-        """Enriquece los datos de pose con información procesada"""
         enriched = pose_data.copy()
-
-        # Procesar manos si están disponibles
         left_hand = pose_data.get('left_hand', {})
         right_hand = pose_data.get('right_hand', {})
         enriched['hands'] = self.data_processor.process_hands(left_hand, right_hand)
-
         return enriched
 
     def get_mappings_info(self):
-        """Retorna información sobre los mapeos activos"""
         info = []
         for m in self.mappings:
             mapping_type = "Hybrid" if isinstance(m, HybridRotationMapping) else "Standard"
@@ -367,13 +287,7 @@ class ControlSystem:
         return info
 
 
-# ===============================
-# FACTORY FUNCTIONS
-# ===============================
-
 def create_extractors():
-    """Factory de funciones extractoras comunes"""
-
     def head_x(data):
         head = data.get('head', {})
         return head.get('x') if head.get('detected') else None
@@ -381,6 +295,10 @@ def create_extractors():
     def head_y(data):
         head = data.get('head', {})
         return head.get('y') if head.get('detected') else None
+
+    def head_scale(data):
+        head = data.get('head', {})
+        return head.get('scale') if head.get('detected') else None
 
     def hands_center_x(data):
         hands = data.get('hands', {})
@@ -401,6 +319,7 @@ def create_extractors():
     return {
         'head_x': head_x,
         'head_y': head_y,
+        'head_scale': head_scale,
         'hands_center_x': hands_center_x,
         'hands_center_y': hands_center_y,
         'hands_distance': hands_distance,
@@ -409,8 +328,6 @@ def create_extractors():
 
 
 def create_appliers():
-    """Factory de funciones aplicadoras comunes"""
-
     def rotation_yaw(max_degrees=30.0, center=0.5, invert=False):
         def applier(value, output_state):
             offset = value - center
@@ -473,18 +390,63 @@ def create_appliers():
             if value is None:
                 output_state['scale'] = 1.0
             else:
-                # Mapear distancia a escala
                 if value <= center_distance:
-                    # Distancia pequeña -> escala pequeña
                     scale_factor = value / center_distance
                     output_state['scale'] = min_scale + scale_factor * (1.0 - min_scale)
                 else:
-                    # Distancia grande -> escala grande
                     scale_factor = (value - center_distance) / (1.0 - center_distance)
                     output_state['scale'] = 1.0 + scale_factor * (max_scale - 1.0)
-
-                # Limitar rango
                 output_state['scale'] = max(min_scale, min(max_scale, output_state['scale']))
+
+        return applier
+
+    def scale_stepped_timed(threshold=0.5, small_scale=1.0, large_scale=2.0, transition_time_ms=200):
+        state = {
+            'current_target': small_scale,
+            'transition_start_time': None,
+            'transition_start_value': small_scale,
+            'transition_end_value': small_scale,
+            'is_transitioning': False,
+            'last_output_scale': small_scale
+        }
+
+        transition_time_seconds = transition_time_ms / 1000.0
+
+        def applier(value, output_state):
+            if value is None:
+                output_state['scale'] = small_scale
+                state['current_target'] = small_scale
+                state['is_transitioning'] = False
+                state['last_output_scale'] = small_scale
+                return
+
+            current_time = time.time()
+            target_scale = large_scale if value > threshold else small_scale
+
+            if target_scale != state['current_target']:
+                state['current_target'] = target_scale
+                state['transition_start_time'] = current_time
+                state['transition_start_value'] = state['last_output_scale']
+                state['transition_end_value'] = target_scale
+                state['is_transitioning'] = True
+
+            if state['is_transitioning']:
+                elapsed_time = current_time - state['transition_start_time']
+                progress = min(1.0, elapsed_time / transition_time_seconds)
+                smooth_progress = progress * progress * (3.0 - 2.0 * progress)
+
+                current_scale = (state['transition_start_value'] +
+                                 smooth_progress * (state['transition_end_value'] - state['transition_start_value']))
+
+                if progress >= 1.0:
+                    state['is_transitioning'] = False
+                    current_scale = state['transition_end_value']
+
+                state['last_output_scale'] = current_scale
+                output_state['scale'] = current_scale
+            else:
+                state['last_output_scale'] = target_scale
+                output_state['scale'] = target_scale
 
         return applier
 
@@ -496,74 +458,87 @@ def create_appliers():
         'position_y': position_y,
         'position_z': position_z,
         'scale_uniform': scale_uniform,
+        'scale_stepped': scale_stepped_timed,
     }
 
 
-# En tu control_system.py, modifica estas clases:
-
 class HybridRotationMapping:
-    """
-    Mapeo híbrido para rotación proporcional + continua en ROLL
-    """
-
     def __init__(self, name, rotation_controller, smoother=None, enabled=True):
         self.name = name
         self.rotation_controller = rotation_controller
         self.smoother = smoother
         self.enabled = enabled
 
+        # **TIMEOUT INDEPENDIENTE PARA RESETEO**
+        self.last_real_detection_time = time.time()
+        self.reset_timeout_seconds = 3.0
+
     def process(self, input_data, output_state):
-        """Procesa rotación híbrida aplicada al ROLL"""
         if not self.enabled:
             return
 
-        # Extraer posición X de cabeza
         head = input_data.get('head', {})
-        head_x = head.get('x') if head.get('detected') else None
+        head_detected = head.get('detected', False)
+        head_x_raw = head.get('x') if head_detected else None
 
-        # Aplicar suavizado básico si está disponible
-        if self.smoother:
-            head_x = self.smoother.update(head_x)
+        current_time = time.time()
 
-        # Actualizar rotación híbrida
-        current_rotation = self.rotation_controller.update(head_x)
+        # **ACTUALIZAR TIEMPO DE DETECCIÓN REAL**
+        if head_detected and head_x_raw is not None:
+            self.last_real_detection_time = current_time
 
-        # CAMBIO: Aplicar al ROLL (índice 2) en lugar de YAW (índice 0)
+        # **VERIFICAR SI HAN PASADO 3 SEGUNDOS SIN DETECCIÓN**
+        time_since_real_detection = current_time - self.last_real_detection_time
+        timeout_reached = time_since_real_detection >= self.reset_timeout_seconds
+
+        # **PREPARAR VALOR PARA EL CONTROLADOR**
+        if timeout_reached:
+            # **DESPUÉS DE 3 SEGUNDOS: Enviar None para activar reseteo**
+            head_x_for_controller = None
+        else:
+            # **ANTES DE 3 SEGUNDOS: Usar smoother normalmente**
+            if self.smoother and head_x_raw is not None:
+                head_x_for_controller = self.smoother.update(head_x_raw)
+            elif self.smoother:
+                # Permitir que el smoother maneje la interpolación
+                head_x_for_controller = self.smoother.update(head_x_raw)
+            else:
+                head_x_for_controller = head_x_raw
+
+        # **ACTUALIZAR CONTROLADOR**
+        current_rotation = self.rotation_controller.update(head_x_for_controller)
         output_state['rotation'][2] = current_rotation
 
 
 def create_default_control_system():
-    """
-    Sistema de control híbrido que combina "asomar" + rotación continua en ROLL
-    """
     system = ControlSystem()
     extractors = create_extractors()
     appliers = create_appliers()
 
-    # Crear smoothers
+    # Smoothers
     head_x_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.2, center_value=0.5)
     head_y_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.2, center_value=0.5)
-    head_x_yaw_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.2, center_value=0.5)  # Para YAW normal
-    hands_dist_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.2, center_value=0.3)
+    head_x_yaw_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.2, center_value=0.5)
+    head_scale_smoother = ExponentialSmoother(alpha=0.7, decay_rate=0.3, center_value=0.3)
 
-    # Controlador híbrido para ROLL
+    # Controlador híbrido para ROLL con timeout de 3 segundos
     hybrid_roll_controller = HybridRotationController(
-        max_degrees=30.0,  # Rotación máxima en zona normal
-        left_threshold=0.25,  # 25% umbral izquierdo
-        right_threshold=0.75,  # 75% umbral derecho
-        continuous_speed_degrees_per_second=100.0,  # Velocidad rotación continua
+        max_degrees=30.0,
+        left_threshold=0.25,
+        right_threshold=0.75,
+        continuous_speed_degrees_per_second=100.0,
         center=0.5,
-        invert=True  # Mantener el comportamiento original
+        invert=True,
+        reset_timeout_seconds=3
     )
 
-    # MAPEO HÍBRIDO: Cabeza X -> Rotación ROLL (normal + continua)
+    # Mapeos
     system.add_mapping(HybridRotationMapping(
         name="head_x_hybrid_roll",
         rotation_controller=hybrid_roll_controller,
         smoother=head_x_smoother
     ))
 
-    # MAPEO NORMAL: Cabeza X -> Rotación YAW (solo proporcional)
     system.add_mapping(ControlMapping(
         name="head_x_to_yaw",
         input_extractor=extractors['head_x'],
@@ -571,7 +546,6 @@ def create_default_control_system():
         smoother=head_x_yaw_smoother
     ))
 
-    # Mapeos normales mantenidos
     system.add_mapping(ControlMapping(
         name="head_y_to_pitch",
         input_extractor=extractors['head_y'],
@@ -579,14 +553,16 @@ def create_default_control_system():
         smoother=head_y_smoother
     ))
 
-    # NOTA: Removí head_x_to_roll ya que ahora el roll lo maneja el controlador híbrido
-
-    # Mapeo: Distancia entre manos -> Escala
     system.add_mapping(ControlMapping(
-        name="hands_distance_to_scale",
-        input_extractor=extractors['hands_distance'],
-        output_applier=appliers['scale_uniform'](min_scale=0.3, max_scale=2.5),
-        smoother=hands_dist_smoother
+        name="head_scale_to_model_scale",
+        input_extractor=extractors['head_scale'],
+        output_applier=appliers['scale_stepped'](
+            threshold=0.4,
+            small_scale=1.0,
+            large_scale=1.75,
+            transition_time_ms=750
+        ),
+        smoother=head_scale_smoother
     ))
 
     return system

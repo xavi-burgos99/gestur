@@ -41,10 +41,10 @@ class PoseController:
         """Inicializa el detector de pose con configuración mínima"""
         print("Iniciando detector de pose...")
         self.pose_tracker = PoseHandTracker(
-            response_time_ms=50,
+            response_time_ms=10,
             smoothing_time_ms=50,  # Smoothing mínimo en el detector
             use_pose=True,
-            use_hands=True,
+            use_hands=False,
             mirror=True,
             verbose=self.verbose
         )
@@ -136,7 +136,8 @@ def main():
     controller = PoseController(
         obj_path=args.obj,
         control_system=control_system,
-        verbose=args.verbose
+        verbose=args.verbose,
+
     )
 
     controller.run()

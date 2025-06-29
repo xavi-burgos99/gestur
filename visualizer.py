@@ -16,6 +16,8 @@ class ControlledObjViewer(ShowBase):
     def __init__(self, obj_path):
         super().__init__()
 
+        self.setBackgroundColor(0, 0, 0, 1)
+
         # --- Configurar ruta de búsqueda de texturas ---
         obj_dir = os.path.dirname(os.path.abspath(obj_path))
         getModelPath().appendPath(obj_dir)

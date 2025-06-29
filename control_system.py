@@ -541,17 +541,17 @@ def create_default_control_system():
     appliers = create_appliers()
 
     # Crear smoothers
-    head_x_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.1, center_value=0.5)
-    head_y_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.1, center_value=0.5)
-    head_x_yaw_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.1, center_value=0.5)  # Para YAW normal
-    hands_dist_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.1, center_value=0.3)
+    head_x_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.2, center_value=0.5)
+    head_y_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.2, center_value=0.5)
+    head_x_yaw_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.2, center_value=0.5)  # Para YAW normal
+    hands_dist_smoother = ExponentialSmoother(alpha=0.3, decay_rate=0.2, center_value=0.3)
 
     # Controlador híbrido para ROLL
     hybrid_roll_controller = HybridRotationController(
         max_degrees=30.0,  # Rotación máxima en zona normal
         left_threshold=0.25,  # 25% umbral izquierdo
         right_threshold=0.75,  # 75% umbral derecho
-        continuous_speed_degrees_per_second=60.0,  # Velocidad rotación continua
+        continuous_speed_degrees_per_second=100.0,  # Velocidad rotación continua
         center=0.5,
         invert=True  # Mantener el comportamiento original
     )

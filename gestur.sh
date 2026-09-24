@@ -100,12 +100,18 @@ PROFILE
     chown gestur:gestur /home/gestur/.bash_profile
     # Use stock KMS/Mesa. No gpu_mem edits, experimental firmware or full OS upgrade.
     systemctl daemon-reload
+    bash "$GESTUR_PREFIX/scripts/install-portal.sh" "$GESTUR_PREFIX"
     echo "Instalación completada. Reinicia para arrancar el expositor."
     echo "Configuración conservada en $GESTUR_STATE/config.json"
 }
 
 uninstall_gestur() {
     require_host uninstall
+    if [[ -f /etc/systemd/system/gestur-portal.service ]]; then
+        systemctl disable --now gestur-portal.service
+        rm -f /etc/systemd/system/gestur-portal.service
+    fi
+    rm -f /etc/sudoers.d/gestur-wifi /usr/local/libexec/gestur-wifi
     if [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur ]]; then
         mv /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur \
             /etc/systemd/system/getty@tty1.service.d/override.conf
@@ -118,7 +124,7 @@ uninstall_gestur() {
     fi
     rm -f /usr/local/bin/gestur-session
     systemctl daemon-reload
-    echo "Arranque automático retirado. Código, usuario, modelos y configuración conservados."
+    echo "Arranque y portal retirados. Código, usuarios, Wi-Fi, modelos y configuración conservados."
 }
 
 case "${1:-}" in

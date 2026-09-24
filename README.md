@@ -9,7 +9,7 @@ Requiere Raspberry Pi OS Lite/Debian **de 64 bits**, pantalla HDMI y cámara USB
 ```bash
 git clone https://github.com/xavi-burgos99/gestur.git
 cd gestur
-git switch codex/performance-pi5
+git switch codex/web-portal
 sudo bash gestur.sh install
 sudo reboot
 ```
@@ -20,6 +20,28 @@ El instalador despliega **la copia local de la rama elegida** en `/opt/gestur`; 
 - Modelos importados: `/var/lib/gestur/models`.
 - Registro del expositor: `/var/log/gestur/viewer.log`.
 - `sudo bash gestur.sh uninstall` retira el arranque automático y conserva los datos.
+
+## Portal de administración
+
+Esta rama incorpora las mejoras de rendimiento y añade un portal **React + Mantine + Node/Fastify**, con componentes locales que funcionan sin Internet. El instalador también prepara Node, el servicio web y el punto de acceso.
+
+En instalaciones nuevas la red es **GESTUR-XXXX**, donde XXXX son los últimos cuatro caracteres de la MAC permanente de `wlan0`, sin separadores. Se crea **abierta**. Configura previamente el país Wi-Fi desde Raspberry Pi Imager o `raspi-config`; usa Ethernet para instalar, pues activar el punto de acceso puede interrumpir una conexión Wi-Fi existente.
+
+Conéctate a esa red y abre **http://10.42.0.1:3000**. La clave de administración del portal aparece al terminar la instalación y puede recuperarse con `sudo cat /etc/gestur/portal-token`. Esta clave protege los cambios del dispositivo y es independiente de la contraseña opcional de la red Wi-Fi.
+
+- **Modelos 3D**: el Capitel está siempre disponible. Importa un ZIP con un único modelo OBJ + MTL + texturas, glTF + BIN + texturas o GLB. Se validan rutas, referencias, límites y carga real con Panda3D antes de añadirlo. Los modelos importados se centran y encuadran automáticamente. El panel distingue el modelo seleccionado del que el visor está mostrando.
+- **Parámetros**: ajusta sensibilidad, suavizado, umbrales y asignaciones de cabeza, pinza u orientación de manos a rotación, desplazamiento y escala. Las manos se pueden activar cuando hagan falta.
+- **Configuración**: en **Punto de acceso Wi-Fi** puedes cambiar el nombre, **Añadir contraseña**, **Cambiar contraseña** o **Eliminar contraseña**. Los cambios se aplican con unos segundos de margen para avisar antes de la desconexión; si fallan, se intenta recuperar la configuración anterior.
+
+Reinstalar conserva los modelos, los parámetros, la clave de administración y la red existente. Si ya había un punto de acceso, su dirección puede ser distinta de `10.42.0.1`. Consulta [docs/portal.md](docs/portal.md) para desarrollo, permisos, formatos y recuperación.
+
+```bash
+cd portal
+npm ci
+npm test
+npm run build
+# Variables y comando de desarrollo en docs/portal.md
+```
 
 ## Desarrollo local
 

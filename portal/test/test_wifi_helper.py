@@ -3,6 +3,9 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
 spec = importlib.util.spec_from_file_location('wifi', Path(__file__).resolve().parents[2] / 'scripts' / 'gestur-wifi.py')
 wifi = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wifi)
@@ -10,6 +13,8 @@ spec.loader.exec_module(wifi)
 class FakeDBus:
     ByteArray = bytes
     UInt32 = int
+    Int32 = int
+    Boolean = bool
     @staticmethod
     def Dictionary(value, **kwargs): return dict(value)
     @staticmethod
@@ -61,5 +66,42 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(connection.updates[0]['802-11-wireless-security']['psk'],'new-password')
         self.assertEqual(connection.updates[1]['802-11-wireless-security']['psk'],'previous-password')
         self.assertEqual(len(calls),2)
+
+    def test_first_install_creates_open_mac_named_access_point(self):
+        helper = wifi.NetworkManager.__new__(wifi.NetworkManager)
+        helper.dbus = FakeDBus
+        enabled, created, activated = [], [], []
+        helper.interface = lambda *args: SimpleNamespace(Set=lambda *args: enabled.append(args))
+        helper.nm = SimpleNamespace(GetDeviceByIpIface=lambda interface: 'wlan-device')
+        def add(settings):
+            created.append(copy.deepcopy(settings))
+            return 'new-profile'
+        helper.settings = SimpleNamespace(ListConnections=lambda: [], AddConnection=add)
+        helper.prop = lambda *args: 'DC:A6:32:01:AB:CD'
+        helper.active = lambda *args: False
+        helper.activate = lambda *args: activated.append(args)
+        helper.status = lambda: {'ssid': 'GESTUR-ABCD', 'secured': False, 'active': True}
+        with tempfile.TemporaryDirectory() as directory, patch.object(wifi, 'PROFILE', Path(directory) / 'wifi-profile.json'):
+            result = helper.bootstrap()
+            self.assertTrue(wifi.PROFILE.exists())
+            self.assertEqual(wifi.PROFILE.stat().st_mode & 0o777, 0o600)
+        self.assertFalse(result['secured'])
+        self.assertEqual(created[0]['802-11-wireless']['ssid'], b'GESTUR-ABCD')
+        self.assertNotIn('802-11-wireless-security', created[0])
+        self.assertEqual(created[0]['ipv4']['method'], 'shared')
+        self.assertEqual(activated, [('wlan-device', 'new-profile')])
+        self.assertTrue(enabled)
+
+    def test_reinstall_reactivates_existing_profile_without_modifying_credentials(self):
+        helper, connection = self.helper()
+        helper.interface = lambda *args: SimpleNamespace(Set=lambda *args: None)
+        helper.active = lambda *args: False
+        activated = []
+        helper.activate = lambda *args: activated.append(args)
+        with tempfile.TemporaryDirectory() as directory, patch.object(wifi, 'PROFILE', Path(directory) / 'wifi-profile.json'):
+            wifi.PROFILE.write_text('{"uuid":"fixed","interface":"wlan0"}')
+            helper.bootstrap()
+        self.assertEqual(connection.updates, [])
+        self.assertEqual(activated, [('device', 'profile')])
 
 if __name__ == '__main__': unittest.main()

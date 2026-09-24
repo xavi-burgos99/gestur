@@ -132,3 +132,13 @@ docs/**/modelzoo.md
 *.pth
 
 *.DS_Store
+
+# Gestur runtime, portal build and local verification
+node_modules/
+tracking_models/*.task
+tracking_models/*.tflite
+artifacts/
+*.local.json
+.bootstrap/
+.python/
+.venv-backup-*/

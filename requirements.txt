@@ -1,0 +1,16 @@
+# ARM64 wheel availability limits MediaPipe to Python 3.9–3.12; the installer
+# targets Python 3.11/3.12 on a 64-bit Raspberry Pi OS. See docs/tracking.md.
+mediapipe==0.10.18
+numpy==1.26.4
+# MediaPipe depends on this package: do not install a second cv2 wheel alongside.
+opencv-contrib-python==4.11.0.86
+protobuf==4.25.9
+panda3d==1.10.16
+panda3d-gltf==1.3.0
+panda3d-simplepbr==0.13.1
+# MediaPipe imports these transitively; pin compatible ARM64/NumPy 1 versions.
+jax==0.7.1
+jaxlib==0.7.1
+scipy==1.16.3
+matplotlib==3.10.8
+flatbuffers==25.12.19

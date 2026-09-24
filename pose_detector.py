@@ -1,513 +1,356 @@
-import cv2
-import mediapipe as mp
+"""Bounded, offline MediaPipe Lite tracking for the Raspberry Pi 5.
+
+Capture drains the camera independently from inference. There is exactly one
+pending frame: inference always uses the most recent frame and never queues old
+frames. The pose and hand models have separate cadence budgets.
+"""
+import logging
 import math
-import time
+from pathlib import Path
 import threading
+import time
+
+from tracking_geometry import (TrackingFilter, anatomical_hand, empty_data,
+                               empty_part, hand_features, pose_features)
+
+_LOG = logging.getLogger(__name__)
+_MODEL_DIR = Path(__file__).resolve().parent / 'tracking_models'
+
+
+class _MediaPipeBackend:
+    def __init__(self, model_dir, use_pose, use_hands, confidence):
+        import cv2
+        import mediapipe as mp
+        from mediapipe.tasks import python
+        from mediapipe.tasks.python import vision
+        self.cv2, self.mp = cv2, mp
+        self.pose = self.hands = None
+        cv2.setNumThreads(1)
+        try:
+            def options(filename):
+                path = Path(model_dir) / filename
+                if not path.is_file():
+                    raise FileNotFoundError(
+                        f'Falta {path}. Ejecuta python scripts/provision_models.py '
+                        'durante la instalación (el seguimiento funciona sin Internet).')
+                return python.BaseOptions(model_asset_path=str(path),
+                                          delegate=python.BaseOptions.Delegate.CPU)
+            if use_pose:
+                self.pose = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
+                    base_options=options('pose_landmarker_lite.task'),
+                    running_mode=vision.RunningMode.VIDEO, num_poses=1,
+                    min_pose_detection_confidence=confidence,
+                    min_pose_presence_confidence=confidence,
+                    min_tracking_confidence=confidence, output_segmentation_masks=False))
+            if use_hands:
+                self.hands = vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
+                    base_options=options('hand_landmarker_lite.task'),
+                    running_mode=vision.RunningMode.VIDEO, num_hands=2,
+                    min_hand_detection_confidence=confidence,
+                    min_hand_presence_confidence=confidence,
+                    min_tracking_confidence=confidence))
+        except Exception:
+            self.close()
+            raise
+
+    def image(self, frame, mirror):
+        if mirror:
+            frame = self.cv2.flip(frame, 1)
+        rgb = self.cv2.cvtColor(frame, self.cv2.COLOR_BGR2RGB)
+        return self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb)
+
+    def close(self):
+        for name in ('pose', 'hands'):
+            model = getattr(self, name, None)
+            if model is not None:
+                try:
+                    model.close()
+                finally:
+                    setattr(self, name, None)
 
 
 class PoseHandTracker:
-    def __init__(self, response_time_ms=50, smoothing_time_ms=500,
-                 use_pose=True, use_hands=True,
-                 mirror=False, invert_hands=False, verbose=False):
-        """Inicializa el tracker de pose y manos en tiempo real."""
-        # Configuración de parámetros
-        self.use_pose = use_pose
-        self.use_hands = use_hands
-        # Opciones extra
-        self.mirror = mirror            # espejo horizontal del frame
-        self.invert_hands = invert_hands  # intercambiar izquierda/derecha
-        self.response_time = response_time_ms / 1000.0  # en segundos
-        self.smoothing_time = smoothing_time_ms / 1000.0  # en segundos
-        # Factor de suavizado (exponencial): α = dt / smoothing_time
-        # Si smoothing_time es 0 (sin suavizado), ponemos α=1
-        self.alpha = 1.0 if self.smoothing_time <= 0 else min(1.0, self.response_time / self.smoothing_time)
+    def __init__(self, response_time_ms=50, smoothing_time_ms=60,
+                 use_pose=True, use_hands=True, mirror=False,
+                 invert_hands=False, verbose=False, *, camera_index=0,
+                 inference_fps=None, hand_fps=15, width=640, height=480,
+                 model_dir=None, visibility_threshold=.5,
+                 detection_timeout_ms=250, head_scale_min=.02, head_scale_max=.20):
+        """Keep the legacy callback schema, adding hand rotation/pinch/gesture.
 
-        # Inicializar MediaPipe Pose y Hands si corresponden
-        mp_pose = mp.solutions.pose
-        mp_hands = mp.solutions.hands
-        self.pose_model = None
-        self.hands_model = None
-        if self.use_pose:
-            # Modelo pose: usar modelo ligero (model_complexity=0) para rendimiento
-            self.pose_model = mp_pose.Pose(static_image_mode=False, model_complexity=1,
-                                           enable_segmentation=False,
-                                           min_detection_confidence=0.5, min_tracking_confidence=0.5)
-        if self.use_hands:
-            # Modelo hands: max 2 manos, modelo complejo=1 (se podría bajar a 0 si fuera necesario)
-            self.hands_model = mp_hands.Hands(static_image_mode=False, max_num_hands=2, model_complexity=1,
-                                              min_detection_confidence=0.5, min_tracking_confidence=0.5)
-
-        # Estructura para datos actuales (filtrados)
-        self.current_data = {
-            "head":  {"detected": False, "x": None, "y": None,
-                      "pitch": None, "yaw": None, "roll": None, "scale": None},
-            "torso": {"detected": False, "x": None, "y": None,
-                      "pitch": None, "yaw": None, "roll": None},
-            "left_hand":  {"detected": False, "x": None, "y": None,
-                           "pitch": None, "yaw": None, "roll": None},
-            "right_hand": {"detected": False, "x": None, "y": None,
-                           "pitch": None, "yaw": None, "roll": None}
-        }
-
-        # Lista de listeners para callback
+        Construction opens no camera or models. ``run`` allocates resources and
+        can be called again after ``stop``. Frame timestamps are monotonic seconds;
+        MediaPipe receives strictly increasing integer milliseconds per session.
+        ``response_time_ms`` remains a compatibility alias for pose cadence.
+        """
+        if inference_fps is None:
+            inference_fps = 1000.0 / max(1.0, response_time_ms)
+        if not all(math.isfinite(float(value)) and float(value) > 0
+                   for value in (inference_fps, hand_fps, width, height)):
+            raise ValueError('Frecuencias y resolución deben ser mayores que cero.')
+        if not all(math.isfinite(float(value)) for value in
+                   (smoothing_time_ms, detection_timeout_ms, visibility_threshold, head_scale_min, head_scale_max)):
+            raise ValueError('Los parámetros del tracker deben ser finitos.')
+        if not 0 <= visibility_threshold <= 1 or head_scale_max <= head_scale_min:
+            raise ValueError('Confianza o rango de escala no válido.')
+        self.use_pose, self.use_hands = bool(use_pose), bool(use_hands)
+        self.mirror, self.invert_hands, self.verbose = bool(mirror), bool(invert_hands), bool(verbose)
+        self.camera_index, self.width, self.height = camera_index, int(width), int(height)
+        self.inference_fps, self.hand_fps = float(inference_fps), float(hand_fps)
+        self.response_time = 1 / self.inference_fps
+        self.smoothing_time = max(0, smoothing_time_ms / 1000)
+        # A slow configured cadence must not expire between scheduled inferences.
+        self.detection_timeout = max(detection_timeout_ms / 1000,
+                                     2 / min(self.inference_fps, self.hand_fps))
+        self.visibility_threshold = visibility_threshold
+        self.head_scale_min, self.head_scale_max = head_scale_min, head_scale_max
+        self.model_dir = Path(model_dir) if model_dir else _MODEL_DIR
         self.listeners = []
-
-        # Verbose option
-        self.verbose = verbose
-        if self.verbose:
-            print(f"[PoseHandTracker] Init | pose={self.use_pose} hands={self.use_hands} "
-                  f"| mirror={self.mirror} invert_hands={self.invert_hands} "
-                  f"| dt={self.response_time*1000:.0f} ms smooth={self.smoothing_time*1000:.0f} ms")
-
-        # Configurar cámara (webcam 0)
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            raise RuntimeError("No se pudo acceder a la cámara.")
-        # Opcional: reducir resolución para mejorar rendimiento
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-        # Control diferido: el seguimiento se inicia con run()
+        self.current_data = empty_data()
         self.running = False
-        self.thread = None
-        # Timestamp de la última detección por mano (se reinicia en run)
-        self.last_left_time = 0.0
-        self.last_right_time = 0.0
+        self.thread = self.capture_thread = None
+        self.cap = self._backend = None
+        self.pose_model = self.hands_model = None
+        self.last_error = None
+        self._stop_event = threading.Event()
+        self._condition = threading.Condition()
+        self._state_lock = threading.Lock()
+        self._lifecycle_lock = threading.RLock()
+        self._latest_frame = None
+        self._sequence = 0
+        self._metrics = {}
+        self._filter = TrackingFilter(self.smoothing_time, self.detection_timeout)
+
+    def _open_camera(self):
+        import cv2
+        cap = cv2.VideoCapture(self.camera_index)
+        if not cap.isOpened():
+            cap.release()
+            raise RuntimeError(f'No se pudo acceder a la cámara {self.camera_index}.')
+        # Not all backends implement buffer size; the one-frame slot also bounds
+        # application memory and latency if the driver ignores this property.
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+        cap.set(cv2.CAP_PROP_FPS, max(self.inference_fps, self.hand_fps))
+        return cap
+
+    def _build_backend(self):
+        return _MediaPipeBackend(self.model_dir, self.use_pose, self.use_hands,
+                                self.visibility_threshold)
 
     def run(self):
-        """Arranca el hilo de captura/procesamiento si aún no está en marcha."""
-        if self.running:
-            if self.verbose:
-                print("[PoseHandTracker] run() ya fue llamado; ignorando.")
-            return
-        # Reiniciar marcas de tiempo
-        now = time.time()
-        self.last_left_time = now
-        self.last_right_time = now
-        # Iniciar hilo
-        self.running = True
-        self.thread = threading.Thread(target=self._process_loop, daemon=True)
-        self.thread.start()
-        if self.verbose:
-            print("[PoseHandTracker] Tracking iniciado.")
+        with self._lifecycle_lock:
+            if self.running:
+                return
+            if any(t and t.is_alive() for t in (self.thread, self.capture_thread)):
+                raise RuntimeError('La sesión anterior todavía está cerrando la cámara.')
+            self._stop_event.clear()
+            self.last_error = None
+            self._latest_frame, self._sequence = None, 0
+            self._filter = TrackingFilter(self.smoothing_time, self.detection_timeout)
+            self.current_data = empty_data()
+            self._metrics = dict(captured_frames=0, pose_frames=0, hand_frames=0,
+                                 capture_failures=0, inference_ms=0.0, frame_age_ms=0.0)
+            if not self.use_pose and not self.use_hands:
+                return
+            try:
+                self._backend = self._build_backend()
+                self.pose_model, self.hands_model = self._backend.pose, self._backend.hands
+                self.cap = self._open_camera()
+                self.running = True
+                self.capture_thread = threading.Thread(target=self._capture_loop,
+                                                        name='gestur-camera', daemon=True)
+                self.thread = threading.Thread(target=self._process_loop,
+                                               name='gestur-inference', daemon=True)
+                self.capture_thread.start()
+                self.thread.start()
+            except Exception:
+                self.running = False
+                self._stop_event.set()
+                if self.capture_thread and self.capture_thread.is_alive():
+                    self.capture_thread.join(timeout=2)
+                elif self.cap is not None:
+                    self.cap.release()
+                self._close_backend()
+                raise
+
+    def _capture_loop(self):
+        failures = 0
+        try:
+            while not self._stop_event.is_set():
+                success, frame = self.cap.read()
+                timestamp = time.monotonic()
+                if not success or frame is None:
+                    failures += 1
+                    with self._state_lock:
+                        self._metrics['capture_failures'] += 1
+                    if failures >= 10:
+                        raise RuntimeError('La cámara no entrega imágenes (10 lecturas fallidas).')
+                    self._stop_event.wait(.05)
+                    continue
+                failures = 0
+                with self._condition:
+                    self._sequence += 1
+                    self._latest_frame = (self._sequence, timestamp, frame)
+                    self._condition.notify()
+                with self._state_lock:
+                    self._metrics['captured_frames'] += 1
+        except Exception as error:
+            self.last_error = error
+            _LOG.error('Error de captura: %s', error)
+            self._stop_event.set()
+        finally:
+            self.cap.release()
+            with self._condition:
+                self._condition.notify_all()
 
     def _process_loop(self):
-        """Bucle interno que captura frames y actualiza datos a la frecuencia deseada."""
-        prev_time = time.time()
-        while self.running:
-            success, frame = self.cap.read()
-            # Aplicar espejo si se solicita
-            if self.mirror and success:
-                frame = cv2.flip(frame, 1)  # 1 == flip horizontal
-            if not success:
-                continue  # si falla lectura, intentar siguiente
+        sequence, timestamp_ms = 0, -1
+        next_pose = next_hand = 0.0
+        try:
+            while not self._stop_event.is_set():
+                now = time.monotonic()
+                due_pose = self.use_pose and now >= next_pose
+                due_hand = self.use_hands and now >= next_hand
+                due_times = ([next_pose] if self.use_pose else []) + ([next_hand] if self.use_hands else [])
+                delay = max(0, min(due_times)-now)
+                with self._condition:
+                    latest = self._latest_frame
+                    fresh = latest is not None and latest[0] != sequence
+                    if not fresh or not (due_pose or due_hand):
+                        self._condition.wait(timeout=min(.05, delay) if delay > 0 else .05)
+                        latest = None
+                if latest is None:
+                    self._filter.expire(time.monotonic())
+                    self._publish()
+                    continue
+                sequence, captured_at, frame = latest
+                now = time.monotonic()
+                if now-captured_at > self.detection_timeout:
+                    self._filter.expire(now)
+                    self._publish()
+                    continue
+                started = now
+                timestamp_ms = max(timestamp_ms+1, int(captured_at*1000))
+                image = self._backend.image(frame, self.mirror)
+                aspect = frame.shape[1] / frame.shape[0]
+                if due_pose:
+                    result = self.pose_model.detect_for_video(image, timestamp_ms)
+                    normalized = result.pose_landmarks[0] if result.pose_landmarks else []
+                    world = result.pose_world_landmarks[0] if result.pose_world_landmarks else []
+                    features = pose_features(normalized, world, self.visibility_threshold, aspect,
+                                             self.head_scale_min, self.head_scale_max)
+                    for key, sample in features.items():
+                        self._filter.update(key, sample, captured_at)
+                    next_pose = max(started + 1 / self.inference_fps, time.monotonic())
+                    with self._state_lock:
+                        self._metrics['pose_frames'] += 1
+                if due_hand:
+                    hand_started = time.monotonic()
+                    result = self.hands_model.detect_for_video(image, timestamp_ms)
+                    self._update_hands(result, captured_at, aspect)
+                    next_hand = max(hand_started + 1 / self.hand_fps, time.monotonic())
+                    with self._state_lock:
+                        self._metrics['hand_frames'] += 1
+                completed = time.monotonic()
+                self._filter.expire(completed)
+                with self._state_lock:
+                    self._metrics['inference_ms'] = (completed-started)*1000
+                    self._metrics['frame_age_ms'] = (completed-captured_at)*1000
+                self._publish()
+        except Exception as error:
+            self.last_error = error
+            _LOG.exception('Error en el seguimiento: %s', error)
+        finally:
+            self._stop_event.set()
+            if self.capture_thread and self.capture_thread.is_alive():
+                self.capture_thread.join(timeout=2)
+            self._close_backend()
+            self._filter = TrackingFilter(self.smoothing_time, self.detection_timeout)
+            self._publish()
+            self.running = False
 
-            # Convertir a RGB (MediaPipe espera color RGB)
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_height, frame_width = frame.shape[0], frame.shape[1]
+    def _update_hands(self, result, timestamp, aspect):
+        samples = {'left_hand': empty_part(hand=True), 'right_hand': empty_part(hand=True)}
+        scores = {'left_hand': -1, 'right_hand': -1}
+        for normalized, world, categories in zip(result.hand_landmarks,
+                result.hand_world_landmarks, result.handedness):
+            if not categories:
+                continue
+            category = max(categories, key=lambda c: c.score)
+            label = anatomical_hand(category.category_name, self.mirror, self.invert_hands)
+            if label is None or category.score < self.visibility_threshold:
+                continue
+            key = label.lower() + '_hand'
+            if category.score > scores[key]:
+                samples[key] = hand_features(normalized, world, category.category_name, aspect)
+                scores[key] = category.score
+        for key, sample in samples.items():
+            self._filter.update(key, sample, timestamp)
 
-            # Resultados de MediaPipe
-            pose_res = None
-            hand_res = None
-            if self.use_pose and self.pose_model:
-                pose_res = self.pose_model.process(frame_rgb)
-            if self.use_hands and self.hands_model:
-                hand_res = self.hands_model.process(frame_rgb)
+    def _close_backend(self):
+        if self._backend is not None:
+            try:
+                self._backend.close()
+            except Exception:
+                _LOG.exception('No se pudo cerrar MediaPipe correctamente.')
+            self._backend = None
+        self.pose_model = self.hands_model = None
 
-            # Variables locales para nuevos valores calculados (sin filtrar)
-            head_pitch = head_yaw = head_roll = 0.0
-            head_scale = 0.5
-            torso_pitch = torso_yaw = torso_roll = 0.0
-            head_x = head_y = None
-            torso_x = torso_y = None
-            left_x = left_y = None
-            right_x = right_y = None
-            left_pitch = left_yaw = left_roll = 0.0
-            right_pitch = right_yaw = right_roll = 0.0
-
-            # Reset detection flags for this frame
-            left_detected = False
-            right_detected = False
-            head_detected = False
-            torso_detected = False
-
-            # Cálculo de datos de pose (cabeza y torso) si disponible
-            if pose_res and pose_res.pose_world_landmarks:
-                head_detected = True
-                torso_detected = True
-                # Extraer landmarks necesarios
-                lm = pose_res.pose_world_landmarks.landmark  # lista de 33 landmarks 3D
-                lm2d = pose_res.pose_landmarks.landmark if pose_res.pose_landmarks else None  # lista 2D normalizados
-
-                # Puntos de interés
-                nose = lm[0]
-                left_eye = lm[1]
-                right_eye = lm[2]
-                left_ear = lm[7]
-                right_ear = lm[8]
-                left_shoulder = lm[11]
-                right_shoulder = lm[12]
-                left_hip = lm[23]
-                right_hip = lm[24]
-
-                # Calcular orientación de la cabeza (usando nariz y orejas para orientación)
-                # Vector de dirección de la cabeza: desde centro de orejas hacia la nariz
-                ear_mid_x = (left_ear.x + right_ear.x) / 2.0
-                ear_mid_y = (left_ear.y + right_ear.y) / 2.0
-                ear_mid_z = (left_ear.z + right_ear.z) / 2.0
-                dir_head = (
-                    nose.x - ear_mid_x,
-                    nose.y - ear_mid_y,
-                    nose.z - ear_mid_z
-                )
-                # Yaw de la cabeza: ángulo de dir_head proyectado en plano X-Z
-                dir_x, dir_y, dir_z = dir_head
-                # Proyección en plano horizontal (x-z)
-                proj_xz = math.sqrt(dir_x ** 2 + dir_z ** 2)
-                if proj_xz > 1e-6:
-                    head_yaw = math.degrees(math.atan2(dir_x, -dir_z))
-                else:
-                    head_yaw = 0.0
-                # Pitch de la cabeza: ángulo entre vector y su proyección horizontal (y vs xz)
-                head_pitch = math.degrees(math.atan2(dir_y, proj_xz))
-                # Roll de la cabeza: ángulo de inclinación de la línea de orejas
-                if lm2d:
-                    left_ear_2d = lm2d[7]
-                    right_ear_2d = lm2d[8]
-                    dy = right_ear_2d.y - left_ear_2d.y
-                    dx = right_ear_2d.x - left_ear_2d.x
-                else:
-                    ear_vec = (right_ear.x - left_ear.x, right_ear.y - left_ear.y, right_ear.z - left_ear.z)
-                    dy = ear_vec[1]
-                    dx = ear_vec[0]
-                head_roll = math.degrees(math.atan2(dy, dx))
-
-                # Posición 2D normalizada de la cabeza (nariz) y del torso (punto medio caderas)
-                if pose_res.pose_landmarks:
-                    nose2d = pose_res.pose_landmarks.landmark[0]  # nariz índice 0
-                    head_x, head_y = nose2d.x, nose2d.y
-                    hip_mid2d_x = (pose_res.pose_landmarks.landmark[23].x +
-                                   pose_res.pose_landmarks.landmark[24].x) / 2.0
-                    hip_mid2d_y = (pose_res.pose_landmarks.landmark[23].y +
-                                   pose_res.pose_landmarks.landmark[24].y) / 2.0
-                    torso_x, torso_y = hip_mid2d_x, hip_mid2d_y
-
-                # Escalar de la cabeza: distancia entre ojos (landmark 1 y 2)
-                if lm2d:
-                    left_eye_2d = lm2d[1]
-                    right_eye_2d = lm2d[2]
-                    eye_dist = math.sqrt((right_eye_2d.x - left_eye_2d.x) ** 2 +
-                                         (right_eye_2d.y - left_eye_2d.y) ** 2)
-                    head_min_dist = 0.003
-                    head_max_dist = 0.03
-                    head_scale = (eye_dist - head_min_dist) / (head_max_dist - head_min_dist)
-                    head_scale = max(0.0, min(1.0, head_scale))
-
-
-                # Calcular orientación del torso (usando hombros y caderas)
-                # Vectores base del torso
-                shoulder_mid = (
-                    (left_shoulder.x + right_shoulder.x) / 2.0,
-                    (left_shoulder.y + right_shoulder.y) / 2.0,
-                    (left_shoulder.z + right_shoulder.z) / 2.0
-                )
-                hip_mid = (
-                    (left_hip.x + right_hip.x) / 2.0,
-                    (left_hip.y + right_hip.y) / 2.0,
-                    (left_hip.z + right_hip.z) / 2.0
-                )
-                vertical_axis = (
-                    shoulder_mid[0] - hip_mid[0],
-                    shoulder_mid[1] - hip_mid[1],
-                    shoulder_mid[2] - hip_mid[2]
-                )
-                lateral_axis = (
-                    right_shoulder.x - left_shoulder.x,
-                    right_shoulder.y - left_shoulder.y,
-                    right_shoulder.z - left_shoulder.z
-                )
-                # Vector frontal mediante producto cruz: vertical x lateral
-                forward_axis = (
-                    vertical_axis[1] * lateral_axis[2] - vertical_axis[2] * lateral_axis[1],
-                    vertical_axis[2] * lateral_axis[0] - vertical_axis[0] * lateral_axis[2],
-                    vertical_axis[0] * lateral_axis[1] - vertical_axis[1] * lateral_axis[0]
-                )
-                # Yaw del torso: ángulo del forward_axis en plano X-Z
-                fwd_x, fwd_y, fwd_z = forward_axis
-                proj_xz_torso = math.sqrt(fwd_x ** 2 + fwd_z ** 2)
-                if proj_xz_torso > 1e-6:
-                    torso_yaw = math.degrees(math.atan2(fwd_x, -fwd_z))
-                else:
-                    torso_yaw = 0.0
-                # Pitch del torso: ángulo de forward_axis vs horizontal
-                torso_pitch = math.degrees(math.atan2(fwd_y, proj_xz_torso)) if proj_xz_torso > 1e-6 else 0.0
-                # Roll del torso: inclinación de la línea de hombros
-                shoulder_dy = right_shoulder.y - left_shoulder.y
-                shoulder_dx = right_shoulder.x - left_shoulder.x
-                torso_roll = math.degrees(math.atan2(shoulder_dy, shoulder_dx))
-
-            # Cálculo de datos de manos si disponible
-            if hand_res and hand_res.multi_hand_landmarks:
-                # Recorremos cada mano detectada
-                for hand_landmarks, hand_handedness in zip(hand_res.multi_hand_landmarks, hand_res.multi_handedness):
-                    # Determinar si es mano izquierda o derecha según el modelo
-                    label = hand_handedness.classification[0].label  # "Left" o "Right"
-                    # Si se pidió invertir manos, intercambiar la etiqueta
-                    if self.invert_hands:
-                        label = "Left" if label == "Right" else "Right"
-                    # Actualizar flags de detección
-                    if label == "Left":
-                        left_detected = True
-                    else:
-                        right_detected = True
-                    # Obtener coordenadas normalizadas de la muñeca (landmark 0)
-                    wrist = hand_landmarks.landmark[mp.solutions.hands.HandLandmark.WRIST]
-                    # Guardar coordenadas normalizadas (0‑1) como porcentaje
-                    wrist_x_pct = wrist.x  # 0‑1
-                    wrist_y_pct = wrist.y  # 0‑1
-                    # Calcular orientaciones de la mano (pitch, yaw, roll)
-                    # Usaremos varios puntos de la mano para estimar el plano de la palma.
-                    # Puntos base: muñeca (0), base dedo índice (5), base dedo meñique (17)
-                    index_mcp = hand_landmarks.landmark[mp.solutions.hands.HandLandmark.INDEX_FINGER_MCP]
-                    pinky_mcp = hand_landmarks.landmark[mp.solutions.hands.HandLandmark.PINKY_MCP]
-                    # Vector muñeca -> centro de la palma (promedio entre índice y meñique)
-                    palm_center = (
-                        (index_mcp.x + pinky_mcp.x) / 2.0,
-                        (index_mcp.y + pinky_mcp.y) / 2.0,
-                        (index_mcp.z + pinky_mcp.z) / 2.0
-                    )
-                    vec_palm = (
-                        palm_center[0] - wrist.x,
-                        palm_center[1] - wrist.y,
-                        palm_center[2] - wrist.z
-                    )
-                    # Pitch de la mano: ángulo de vec_palm vs plano horizontal (eje Y vs X-Z)
-                    vec_x, vec_y, vec_z = vec_palm
-                    proj_xz_hand = math.sqrt(vec_x ** 2 + vec_z ** 2)
-                    hand_pitch_val = math.degrees(math.atan2(-vec_y, proj_xz_hand)) if proj_xz_hand > 1e-6 else 0.0
-                    # Yaw de la mano: ángulo de vec_palm en plano horizontal (X-Z)
-                    hand_yaw_val = math.degrees(math.atan2(vec_x, vec_z)) if proj_xz_hand > 1e-6 else 0.0
-                    # Roll de la mano: rotación de la palma alrededor de vec_palm.
-                    v_wrist_index = (
-                        index_mcp.x - wrist.x,
-                        index_mcp.y - wrist.y,
-                        index_mcp.z - wrist.z
-                    )
-                    v_wrist_pinky = (
-                        pinky_mcp.x - wrist.x,
-                        pinky_mcp.y - wrist.y,
-                        pinky_mcp.z - wrist.z
-                    )
-                    normal_palm = (
-                        v_wrist_index[1] * v_wrist_pinky[2] - v_wrist_index[2] * v_wrist_pinky[1],
-                        v_wrist_index[2] * v_wrist_pinky[0] - v_wrist_index[0] * v_wrist_pinky[2],
-                        v_wrist_index[0] * v_wrist_pinky[1] - v_wrist_index[1] * v_wrist_pinky[0]
-                    )
-                    # Para calcular roll, medimos el ángulo del normal respecto a la vertical (eje Y).
-                    norm_yz = math.sqrt(normal_palm[1] ** 2 + normal_palm[2] ** 2)
-                    hand_roll_val = math.degrees(math.atan2(normal_palm[0], norm_yz)) if norm_yz > 1e-6 else 0.0
-                    # Asignar a la mano correspondiente
-                    if label == "Left":
-                        left_x, left_y = wrist_x_pct, wrist_y_pct
-                        left_pitch, left_yaw, left_roll = hand_pitch_val, hand_yaw_val, hand_roll_val
-                    else:  # "Right"
-                        right_x, right_y = wrist_x_pct, wrist_y_pct
-                        right_pitch, right_yaw, right_roll = hand_pitch_val, hand_yaw_val, hand_roll_val
-
-            # Guardar posiciones (sin suavizado)
-            self.current_data["head"]["x"] = head_x
-            self.current_data["head"]["y"] = head_y
-            self.current_data["torso"]["x"] = torso_x
-            self.current_data["torso"]["y"] = torso_y
-            # Si no se detectó cabeza/torso en este frame, vaciar valores
-            if not head_detected:
-                head_pitch = head_yaw = head_roll = head_scale = None
-            if not torso_detected:
-                torso_pitch = torso_yaw = torso_roll = None
-
-            # Aplicar suavizado (exponential smoothing) a cada valor antes de actualizar current_data
-            # Cabeza
-            if head_detected:
-                self.current_data["head"]["pitch"] = (1 - self.alpha) * (
-                            self.current_data["head"]["pitch"] or 0) + self.alpha * head_pitch
-                self.current_data["head"]["yaw"] = (1 - self.alpha) * (
-                            self.current_data["head"]["yaw"] or 0) + self.alpha * head_yaw
-                self.current_data["head"]["roll"] = (1 - self.alpha) * (
-                            self.current_data["head"]["roll"] or 0) + self.alpha * head_roll
-                self.current_data["head"]["scale"] = (1 - self.alpha) * (
-                            self.current_data["head"]["scale"] or 0.5) + self.alpha * head_scale
-            elif not self.current_data["head"]["detected"]:
-                self.current_data["head"]["pitch"] = self.current_data["head"]["yaw"] = self.current_data["head"][
-                    "roll"] = self.current_data["head"]["scale"] = None  # ← CORREGIDO: añadir scale
-            # Torso
-            if torso_detected:
-                self.current_data["torso"]["pitch"] = (1 - self.alpha) * (
-                            self.current_data["torso"]["pitch"] or 0) + self.alpha * torso_pitch
-                self.current_data["torso"]["yaw"] = (1 - self.alpha) * (
-                            self.current_data["torso"]["yaw"] or 0) + self.alpha * torso_yaw
-                self.current_data["torso"]["roll"] = (1 - self.alpha) * (
-                            self.current_data["torso"]["roll"] or 0) + self.alpha * torso_roll
-            elif not self.current_data["torso"]["detected"]:
-                self.current_data["torso"]["pitch"] = self.current_data["torso"]["yaw"] = self.current_data["torso"][
-                    "roll"] = None
-            # Manos
-            if left_x is not None and left_y is not None:
-                self.current_data["left_hand"]["x"] = left_x
-                self.current_data["left_hand"]["y"] = left_y
-            if right_x is not None and right_y is not None:
-                self.current_data["right_hand"]["x"] = right_x
-                self.current_data["right_hand"]["y"] = right_y
-            # Remember last detection time stamps
-            now = time.time()
-            if left_detected:
-                self.last_left_time = now
-            if right_detected:
-                self.last_right_time = now
-
-            # Determine if hand is still considered "present"
-            left_present = (now - self.last_left_time) < self.smoothing_time
-            right_present = (now - self.last_right_time) < self.smoothing_time
-
-            # Suavizar orientaciones solo si la mano está presente (dentro del periodo de smoothing)
-            if left_present:
-                prev_lp = self.current_data["left_hand"]["pitch"] or 0.0
-                prev_ly = self.current_data["left_hand"]["yaw"] or 0.0
-                prev_lr = self.current_data["left_hand"]["roll"] or 0.0
-                self.current_data["left_hand"]["pitch"] = (1 - self.alpha) * prev_lp + self.alpha * left_pitch
-                self.current_data["left_hand"]["yaw"] = (1 - self.alpha) * prev_ly + self.alpha * left_yaw
-                self.current_data["left_hand"]["roll"] = (1 - self.alpha) * prev_lr + self.alpha * left_roll
-            if right_present:
-                prev_rp = self.current_data["right_hand"]["pitch"] or 0.0
-                prev_ry = self.current_data["right_hand"]["yaw"] or 0.0
-                prev_rr = self.current_data["right_hand"]["roll"] or 0.0
-                self.current_data["right_hand"]["pitch"] = (1 - self.alpha) * prev_rp + self.alpha * right_pitch
-                self.current_data["right_hand"]["yaw"] = (1 - self.alpha) * prev_ry + self.alpha * right_yaw
-                self.current_data["right_hand"]["roll"] = (1 - self.alpha) * prev_rr + self.alpha * right_roll
-
-            # Update detection flags exposed to the exterior
-            self.current_data["left_hand"]["detected"] = left_present
-            self.current_data["right_hand"]["detected"] = right_present
-            self.current_data["head"]["detected"] = head_detected
-            self.current_data["torso"]["detected"] = torso_detected
-
-            # Clear coordinates and rotations when the hand is no longer present
-            if not left_present:
-                self.current_data["left_hand"]["x"] = None
-                self.current_data["left_hand"]["y"] = None
-                self.current_data["left_hand"]["pitch"] = None
-                self.current_data["left_hand"]["yaw"] = None
-                self.current_data["left_hand"]["roll"] = None
-            if not right_present:
-                self.current_data["right_hand"]["x"] = None
-                self.current_data["right_hand"]["y"] = None
-                self.current_data["right_hand"]["pitch"] = None
-                self.current_data["right_hand"]["yaw"] = None
-                self.current_data["right_hand"]["roll"] = None
-
-            # Notificar a los listeners con los nuevos datos
-            for callback in self.listeners:
-                try:
-                    callback(self.current_data)
-                except Exception as e:
-                    print(f"Error en callback de listener: {e}")
-
-            # Verbose pretty print
-            if self.verbose:
-                self._print_verbose_data()
-
-            # Controlar la tasa de refresco para aproximarla a response_time_ms
-            current_time = time.time()
-            elapsed = current_time - prev_time
-            # Si el procesamiento fue más rápido que el intervalo deseado, dormir el resto
-            sleep_time = self.response_time - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-            prev_time = time.time()
-        # Fin del while
-        # Al salir del loop, liberar la cámara y modelos
-        self.cap.release()
-        if self.pose_model:
-            self.pose_model.close()
-        if self.hands_model:
-            self.hands_model.close()
-
-    def _print_verbose_data(self):
-        """Imprime datos actuales: posición (%) y rotación, en formato tabulado."""
-        d = self.current_data
-        # Helper for row logging
-        def log_row(data):
-            # Choose flag symbol
-            if data["detected"]:
-                det_flag = "✔"
-            elif data["x"] is not None:
-                det_flag = "·"   # smoothing grace period
-            else:
-                det_flag = "✖"
-            # x/y
-            if data["x"] is not None:
-                x_disp = f"{data['x'] * 100:5.1f}%"
-                y_disp = f"{data['y'] * 100:5.1f}%"
-            else:
-                x_disp = "-"
-                y_disp = "-"
-            # scale
-            if "scale" in data and data["scale"] is not None:
-                scale = f"{data['scale'] * 100:5.1f}%"
-            else:
-                scale = "  -  "
-            # rotation
-            def f(val):
-                return f"{val:7.2f}°" if val is not None else "   -   "
-            return (f"{det_flag}  x={x_disp:>6}  y={y_disp:>6} z={scale}%  "
-                    f"pitch={f(data['pitch'])}  yaw={f(data['yaw'])}  "
-                    f"roll={f(data['roll'])}")
-
-        print("\n[PoseHandTracker]")
-        print(f"  HEAD   : {log_row(d['head'])}")
-        print(f"  TORSO  : {log_row(d['torso'])}")
-        print(f"  LEFT H : {log_row(d['left_hand'])}")
-        print(f"  RIGHT H: {log_row(d['right_hand'])}")
-        print("-"*64)
+    def _publish(self):
+        snapshot = self._filter.snapshot()
+        with self._state_lock:
+            self.current_data = snapshot
+            listeners = tuple(self.listeners)
+        for callback in listeners:
+            try:
+                callback({key: value.copy() for key, value in snapshot.items()})
+            except Exception:
+                _LOG.exception('Error en callback de seguimiento')
 
     def get_current_data(self):
-        """Devuelve el diccionario JSON actual con los datos de rotación/posición."""
-        return self.current_data
+        with self._state_lock:
+            return {key: value.copy() for key, value in self.current_data.items()}
+
+    def get_metrics(self):
+        with self._state_lock:
+            return self._metrics.copy()
 
     def subscribe(self, listener_fn):
-        """Registra una función de callback para escuchar datos nuevos."""
         if callable(listener_fn):
-            self.listeners.append(listener_fn)
+            with self._state_lock:
+                if listener_fn not in self.listeners:
+                    self.listeners.append(listener_fn)
 
     def unsubscribe(self, listener_fn):
-        """Elimina una función de callback de la lista de suscriptores."""
-        if listener_fn in self.listeners:
-            self.listeners.remove(listener_fn)
+        with self._state_lock:
+            if listener_fn in self.listeners:
+                self.listeners.remove(listener_fn)
 
     def stop(self):
-        """Detiene el bucle de procesamiento y libera recursos."""
-        if not self.running:
-            return
-        self.running = False
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=2.0)
+        self._stop_event.set()
+        with self._condition:
+            self._condition.notify_all()
+        # The capture thread owns release(); avoid closing a camera while a
+        # driver is inside read(). Do not close models while inference uses them.
+        current = threading.current_thread()
+        for thread in (self.thread, self.capture_thread):
+            if thread is not None and thread is not current and thread.is_alive():
+                thread.join(timeout=3)
+        if not any(t and t.is_alive() for t in (self.thread, self.capture_thread)):
+            self.running = False
 
-if __name__ == "__main__":
-    tracker = PoseHandTracker(response_time_ms=100, smoothing_time_ms=500,
-                              use_pose=True, use_hands=True,
-                              mirror=True, invert_hands=False,
-                              verbose=True)
 
-    tracker.run()  # iniciar procesamiento
-
-    # Ejemplo de callback para imprimir datos
-    def print_data(data):
-        print("Head (pitch,yaw,roll):", data["head"],
-              " Torso:", data["torso"],
-              " Left hand:", data["left_hand"],
-              " Right hand:", data["right_hand"])
-
-    #tracker.subscribe(print_data)
-
-    # ... ejecutar por algún tiempo ...
-    time.sleep(20)  # mantener 20 segundos recibiendo datos
-    tracker.stop()  # detener el seguimiento y liberar recursos
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    tracker = PoseHandTracker(mirror=True)
+    tracker.subscribe(lambda data: print(data))
+    try:
+        tracker.run()
+        while tracker.running:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        tracker.stop()

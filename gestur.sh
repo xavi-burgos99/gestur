@@ -1,267 +1,128 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Install the checked-out revision, including feature branches. Never pulls main.
+set -euo pipefail
+GESTUR_SOURCE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+GESTUR_PREFIX=/opt/gestur
+GESTUR_STATE=/var/lib/gestur
 
-CURRENT_DIR=$(pwd)
-
-# Detectar si estamos en Raspberry Pi 5
-is_rpi5() {
-    if grep -q "Raspberry Pi 5" /proc/cpuinfo 2>/dev/null; then
-        return 0
+require_host() {
+    if [[ $(id -u) != 0 ]]; then
+        echo "Ejecuta: sudo bash $0 $*" >&2
+        exit 1
     fi
-    return 1
+    if [[ $(uname -s) != Linux || $(uname -m) != aarch64 ]]; then
+        echo "El instalador requiere Raspberry Pi OS / Debian de 64 bits (aarch64)." >&2
+        exit 1
+    fi
 }
 
-install() {
-    echo "Iniciando instalación para Raspberry Pi..."
-
-    # Actualizar el sistema
-    sudo apt-get update
-    sudo apt-get upgrade -y
-
-    # Instalar firmware y herramientas específicas de Raspberry Pi
-    sudo apt-get install -y rpi-update raspi-config
-
-    # Configurar GPU memory split para Raspberry Pi 5
-    if is_rpi5; then
-        echo "Configurando Raspberry Pi 5..."
-        # GPU memory split de 128MB para mejor rendimiento gráfico
-        if ! grep -q "gpu_mem=128" /boot/firmware/config.txt; then
-            echo "gpu_mem=128" | sudo tee -a /boot/firmware/config.txt >/dev/null
-        fi
-        # Habilitar DRM/KMS para mejor compatibilidad con X11
-        if ! grep -q "dtoverlay=vc4-kms-v3d" /boot/firmware/config.txt; then
-            echo "dtoverlay=vc4-kms-v3d" | sudo tee -a /boot/firmware/config.txt >/dev/null
-        fi
-        # Configuración adicional para Pi 5
-        if ! grep -q "arm_64bit=1" /boot/firmware/config.txt; then
-            echo "arm_64bit=1" | sudo tee -a /boot/firmware/config.txt >/dev/null
-        fi
+install_gestur() {
+    require_host install
+    if systemctl is-active --quiet display-manager.service || \
+       systemctl is-enabled --quiet display-manager.service; then
+        echo "Gestur necesita una sesión de expositor exclusiva en tty1/:0." >&2
+        echo "Usa Raspberry Pi OS Lite o desactiva antes tu gestor de escritorio." >&2
+        exit 1
     fi
+    echo "Instalando la copia local de Gestur desde $GESTUR_SOURCE"
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl rsync python3 python3-venv \
+        xserver-xorg xinit openbox x11-xserver-utils \
+        mesa-utils libgl1-mesa-dri libglx-mesa0 libegl1 libgles2 \
+        libglib2.0-0 libsm6 libxext6 libxrender1 libportaudio2 libgomp1
 
-    # Herramientas de compilación
-    sudo apt-get install -y build-essential tk-dev libncurses5-dev libncursesw5-dev \
-        libreadline6-dev libdb5.3-dev libgdbm-dev libsqlite3-dev libssl-dev libbz2-dev \
-        libexpat1-dev liblzma-dev zlib1g-dev libffi-dev uuid-dev git cmake pkg-config
-
-    # Instalar entorno gráfico (sin lightdm como solicitas)
-    sudo apt-get install -y --no-install-recommends \
-        xserver-xorg \
-        xserver-xorg-video-fbdev \
-        xserver-xorg-video-vesa \
-        xserver-xorg-video-modesetting \
-        xinit \
-        openbox \
-        mesa-utils \
-        libgl1-mesa-dri \
-        libglx-mesa0 \
-        libgl1-mesa-glx
-
-    # Dependencias específicas para OpenCV y MediaPipe en Raspberry Pi
-    sudo apt-get install -y \
-        libopencv-dev \
-        libavcodec-dev \
-        libavformat-dev \
-        libswscale-dev \
-        libgstreamer1.0-dev \
-        libgstreamer-plugins-base1.0-dev \
-        libgtk-3-dev \
-        libpng-dev \
-        libjpeg-dev \
-        libopenexr-dev \
-        libtiff-dev \
-        libwebp-dev \
-        libegl1-mesa-dev \
-        libgles2-mesa-dev \
-        libv4l-dev \
-        libxvidcore-dev \
-        libx264-dev \
-        libatlas-base-dev \
-        gfortran \
-        libblas-dev \
-        liblapack-dev
-
-    # Instalar Python 3 y pip
-    sudo apt-get install -y python3 python3-dev python3-pip python3-venv \
-        python3-numpy python3-opencv
-    python3 -m pip install --upgrade pip setuptools wheel
-
-    # Crear usuario gestur si no existe
     if ! id -u gestur >/dev/null 2>&1; then
-        sudo useradd -m -s /bin/bash gestur
-        # Añadir usuario a grupos necesarios para acceso a GPU y video
-        sudo usermod -a -G video,render,input gestur
+        useradd --create-home --shell /bin/bash gestur
+    fi
+    usermod -a -G video,render,input gestur
+    install -d -o root -g root -m 755 "$GESTUR_PREFIX"
+    install -d -o gestur -g gestur -m 2770 "$GESTUR_STATE" "$GESTUR_STATE/models"
+    install -d -o gestur -g gestur -m 750 /var/log/gestur
+    if [[ "$GESTUR_SOURCE" != "$GESTUR_PREFIX" ]]; then
+        rsync -a --chown=root:root \
+            --exclude=.git --exclude=.venv --exclude=.bootstrap --exclude=.python \
+            --exclude=node_modules --exclude=dist --exclude=__pycache__ \
+            --exclude=.pytest_cache --exclude=data --exclude=models \
+            --exclude=.cache --exclude=artifacts --exclude='*.local.json' \
+            "$GESTUR_SOURCE/" "$GESTUR_PREFIX/"
     fi
 
-    # Clonar / actualizar el repo
-    if [ ! -d /opt/gestur ]; then
-        sudo mkdir -p /opt/gestur
+    # Pi OS can ship Python 3.13+, but the verified ARM64 MediaPipe wheel
+    # targets 3.12. A private, managed interpreter leaves system Python intact.
+    python3 -m venv "$GESTUR_PREFIX/.bootstrap"
+    "$GESTUR_PREFIX/.bootstrap/bin/python" -m pip install --disable-pip-version-check uv==0.12.18
+    export UV_PYTHON_INSTALL_DIR="$GESTUR_PREFIX/.python"
+    export UV_PYTHON_BIN_DIR="$GESTUR_PREFIX/.python/bin"
+    "$GESTUR_PREFIX/.bootstrap/bin/uv" python install 3.12.14
+    if [[ -x "$GESTUR_PREFIX/.venv/bin/python" ]] && \
+       ! "$GESTUR_PREFIX/.venv/bin/python" -c 'import sys; assert sys.version_info[:2] == (3, 12)'; then
+        mv "$GESTUR_PREFIX/.venv" "$GESTUR_PREFIX/.venv-backup-$(date +%s)"
     fi
-
-    cd /opt/gestur
-    if [ ! -d .git ]; then
-        sudo rm -rf /opt/gestur/*
-        sudo git clone https://github.com/xavi-burgos99/gestur.git /opt/gestur
-    else
-        sudo git pull origin main
+    if [[ ! -x "$GESTUR_PREFIX/.venv/bin/python" ]]; then
+        "$GESTUR_PREFIX/.bootstrap/bin/uv" venv --python 3.12.14 --managed-python "$GESTUR_PREFIX/.venv"
     fi
-    cd "$CURRENT_DIR"
-
-    # Dar propiedad del directorio al usuario gestur
-    sudo chown -R gestur:gestur /opt/gestur
-
-    # Crear entorno virtual limpio
-    if [ -d /opt/gestur/.venv ]; then
-        sudo rm -rf /opt/gestur/.venv
+    "$GESTUR_PREFIX/.bootstrap/bin/uv" pip install \
+        --only-binary :all: --python "$GESTUR_PREFIX/.venv/bin/python" -r "$GESTUR_PREFIX/requirements.txt"
+    "$GESTUR_PREFIX/.venv/bin/python" "$GESTUR_PREFIX/scripts/provision_models.py"
+    chown -R root:root "$GESTUR_PREFIX"
+    if [[ ! -f "$GESTUR_STATE/config.json" ]]; then
+        install -o gestur -g gestur -m 660 "$GESTUR_PREFIX/config/default.json" "$GESTUR_STATE/config.json"
     fi
-    sudo python3 -m venv /opt/gestur/.venv
-    sudo chown -R gestur:gestur /opt/gestur/.venv
-    sudo chmod -R 755 /opt/gestur/.venv
-    sudo /opt/gestur/.venv/bin/python -m pip install --upgrade pip setuptools wheel
+    # Validate without opening a camera or changing existing parameters.
+    (cd "$GESTUR_PREFIX" && .venv/bin/python -c \
+        'from runtime_config import load_config; load_config("/var/lib/gestur/config.json")')
 
-    # Dependencias de Python (con versiones compatibles para ARM)
-    echo "Instalando dependencias de Python optimizadas para Raspberry Pi..."
-    sudo /opt/gestur/.venv/bin/python -m pip install \
-        numpy \
-        opencv-python-headless \
-        mediapipe \
-        panda3d
-
-    # Configurar autologin en tty1
-    sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
-    sudo bash -c "cat > /etc/systemd/system/getty@tty1.service.d/override.conf" <<'EOF'
+    install -o root -g root -m 755 "$GESTUR_PREFIX/scripts/kiosk-session.sh" /usr/local/bin/gestur-session
+    install -d /etc/systemd/system/getty@tty1.service.d
+    if [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf ]] && \
+       [[ ! -f /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur ]]; then
+        cp -p /etc/systemd/system/getty@tty1.service.d/override.conf \
+            /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur
+    fi
+    cat > /etc/systemd/system/getty@tty1.service.d/override.conf <<'GETTY'
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin gestur --noclear %I $TERM
-EOF
-
-    # SOLUCIÓN ESPECÍFICA para el error de framebuffer en Raspberry Pi 5
-    sudo mkdir -p /etc/X11/xorg.conf.d
-    sudo bash -c "cat > /etc/X11/xorg.conf.d/99-vc4.conf" <<'EOF'
-Section "OutputClass"
-    Identifier "vc4"
-    MatchDriver "vc4"
-    Driver "modesetting"
-    Option "PrimaryGPU" "true"
-EndSection
-EOF
-
-    # Configuración adicional para optimización de rendimiento
-    sudo bash -c "cat > /etc/X11/xorg.conf.d/99-raspi.conf" <<'EOF'
-Section "Device"
-    Identifier "Raspberry Pi Graphics"
-    Driver "modesetting"
-    Option "AccelMethod" "glamor"
-    Option "DRI" "3"
-EndSection
-
-Section "ServerLayout"
-    Identifier "Default Layout"
-    Option "BlankTime" "0"
-    Option "StandbyTime" "0"
-    Option "SuspendTime" "0"
-    Option "OffTime" "0"
-EndSection
-EOF
-
-    # Añadir arranque automático en bash_profile
-    PROFILE_FILE=/home/gestur/.bash_profile
-    sudo -u gestur touch "${PROFILE_FILE}"
-    if ! grep -q "Gestur autostart" "${PROFILE_FILE}"; then
-        sudo bash -c "cat >> ${PROFILE_FILE}" <<'EOF'
+GETTY
+    touch /home/gestur/.bash_profile
+    if [[ ! -f /home/gestur/.bash_profile.before-gestur ]]; then
+        cp -p /home/gestur/.bash_profile /home/gestur/.bash_profile.before-gestur
+    fi
+    # Migrate the old installer's managed block, preserving other profile content.
+    sed -i '/# Gestur autostart/,/^fi/d' /home/gestur/.bash_profile
+    cat >> /home/gestur/.bash_profile <<'PROFILE'
 # Gestur autostart
-if [ "$(tty)" = "/dev/tty1" ]; then
-    # Configurar variables de entorno para hardware acelerado
-    export DISPLAY=:0
-    export LIBGL_ALWAYS_SOFTWARE=0
-    exec startx /home/gestur/run.sh -- :0 vt1 -keeptty
+if [ "$(tty)" = /dev/tty1 ] && [ -z "${DISPLAY:-}" ]; then
+    exec startx /usr/local/bin/gestur-session -- :0 vt1 -keeptty
 fi
-EOF
-        sudo chmod 644 "${PROFILE_FILE}"
-    fi
-
-    # Crear script de inicio
-    START_SCRIPT=/home/gestur/run.sh
-    sudo -u gestur mkdir -p "$(dirname "${START_SCRIPT}")"
-    sudo bash -c "cat > ${START_SCRIPT}" <<'EOF'
-#!/bin/bash
-# Configurar entorno para Raspberry Pi
-export DISPLAY=:0
-export LIBGL_ALWAYS_SOFTWARE=0
-
-# Arranca Openbox y el visualizador a pantalla completa
-cd /opt/gestur
-openbox-session &
-
-# Esperar a que Openbox esté listo
-sleep 2
-
-# Ejecutar el visualizador
-/opt/gestur/.venv/bin/python /opt/gestur/visualizer.py capitell.obj
-EOF
-
-    sudo chmod +x "${START_SCRIPT}"
-    sudo chown gestur:gestur "${START_SCRIPT}"
-
-    # Recargar systemd y reiniciar getty
-    sudo systemctl daemon-reload
-    sudo systemctl restart getty@tty1
-
-    echo "=============================================="
-    echo "Instalación completada para Raspberry Pi 5."
-    echo "El visualizador se iniciará automáticamente."
-    echo "Reinicia el sistema para aplicar todos los cambios."
-    echo "=============================================="
+PROFILE
+    chown gestur:gestur /home/gestur/.bash_profile
+    # Use stock KMS/Mesa. No gpu_mem edits, experimental firmware or full OS upgrade.
+    systemctl daemon-reload
+    echo "Instalación completada. Reinicia para arrancar el expositor."
+    echo "Configuración conservada en $GESTUR_STATE/config.json"
 }
 
-uninstall() {
-    # Deshacer autologin en tty1
-    if [ -f /etc/systemd/system/getty@tty1.service.d/override.conf ]; then
-        sudo rm -f /etc/systemd/system/getty@tty1.service.d/override.conf
-        sudo systemctl daemon-reload
-        sudo systemctl restart getty@tty1
+uninstall_gestur() {
+    require_host uninstall
+    if [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur ]]; then
+        mv /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur \
+            /etc/systemd/system/getty@tty1.service.d/override.conf
+    elif [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf ]] && \
+         grep -q -- '--autologin gestur' /etc/systemd/system/getty@tty1.service.d/override.conf; then
+        rm /etc/systemd/system/getty@tty1.service.d/override.conf
     fi
-
-    # Retirar configuraciones X11 personalizadas
-    if [ -f /etc/X11/xorg.conf.d/99-vc4.conf ]; then
-        sudo rm -f /etc/X11/xorg.conf.d/99-vc4.conf
+    if [[ -f /home/gestur/.bash_profile ]]; then
+        sed -i '/# Gestur autostart/,/^fi/d' /home/gestur/.bash_profile
     fi
-    if [ -f /etc/X11/xorg.conf.d/99-raspi.conf ]; then
-        sudo rm -f /etc/X11/xorg.conf.d/99-raspi.conf
-    fi
-
-    # Retirar bloque de autostart del bash_profile
-    PROFILE_FILE=/home/gestur/.bash_profile
-    if [ -f "${PROFILE_FILE}" ]; then
-        sudo sed -i '/# Gestur autostart/,/fi/d' "${PROFILE_FILE}"
-    fi
-
-    # Borrar /opt/gestur
-    if [ -d /opt/gestur ]; then
-        sudo rm -rf /opt/gestur
-    fi
-
-    # Eliminar usuario gestur
-    if id -u gestur >/dev/null 2>&1; then
-        sudo userdel -r gestur 2>/dev/null
-    fi
-
-    echo "Gestur desinstalado por completo."
+    rm -f /usr/local/bin/gestur-session
+    systemctl daemon-reload
+    echo "Arranque automático retirado. Código, usuario, modelos y configuración conservados."
 }
 
-# Comprobaciones iniciales
-if [ "$(id -u)" -ne 0 ]; then
-    echo "Este script debe ejecutarse como root. Usa 'sudo'."
-    exit 1
-fi
-
-case "$1" in
-    install)
-        install
-        ;;
-    uninstall)
-        uninstall
-        ;;
-    *)
-        echo "Uso: $0 {install|uninstall}"
-        exit 1
-        ;;
+case "${1:-}" in
+    install) install_gestur ;;
+    uninstall) uninstall_gestur ;;
+    *) echo "Uso: sudo bash $0 {install|uninstall}"; exit 1 ;;
 esac

@@ -92,10 +92,15 @@ def validate_config(config):
     schema = json.loads((CONFIG_DIR / "schema.json").read_text(encoding="utf-8"))
     _validate(config, schema)
     ids = set()
+    enabled_outputs = set()
     for mapping in config["controls"]["mappings"]:
         if mapping["id"] in ids:
             raise ConfigurationError(f"Duplicate mapping id: {mapping['id']}")
         ids.add(mapping["id"])
+        if mapping["enabled"]:
+            if mapping["output"] in enabled_outputs:
+                raise ConfigurationError("Each movement may have only one enabled gesture mapping")
+            enabled_outputs.add(mapping["output"])
         if mapping["mode"] == "hybrid":
             if not mapping["left_threshold"] < mapping["center"] < mapping["right_threshold"]:
                 raise ConfigurationError(f"{mapping['id']}: left_threshold < center < right_threshold required")

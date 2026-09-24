@@ -9,7 +9,7 @@ Requiere Raspberry Pi OS Lite/Debian **de 64 bits**, pantalla HDMI y cámara USB
 ```bash
 git clone https://github.com/xavi-burgos99/gestur.git
 cd gestur
-git switch codex/web-portal
+git switch web-portal
 sudo bash gestur.sh install
 sudo reboot
 ```

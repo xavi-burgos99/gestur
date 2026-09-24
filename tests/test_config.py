@@ -83,3 +83,17 @@ class ConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_duplicate_enabled_outputs_match_portal_validation():
+    from runtime_config import ConfigurationError, default_config, validate_config
+    config = default_config()
+    config['controls']['mappings'][1]['output'] = config['controls']['mappings'][0]['output']
+    try:
+        validate_config(config)
+    except ConfigurationError:
+        pass
+    else:
+        raise AssertionError('Duplicate enabled movements must be rejected')
+    config['controls']['mappings'][1]['enabled'] = False
+    validate_config(config)

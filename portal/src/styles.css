@@ -1,0 +1,173 @@
+:root {
+  color: #172d28;
+  background: #f7f8fa;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  margin: 0;
+}
+.mantine-AppShell-main {
+  background: #f7f8fa;
+}
+.mantine-AppShell-header {
+  border-bottom: 1px solid #e5e9e6;
+  background: #fff;
+}
+.brand-mark {
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  background: #d9ece5;
+  color: #255c49;
+  border-radius: 12px;
+}
+.wordmark {
+  font-size: 25px;
+  letter-spacing: -1.5px;
+  line-height: 1.15;
+  font-weight: 750;
+}
+.wordmark span {
+  font-size: 10px;
+  vertical-align: top;
+  letter-spacing: 0;
+  margin-left: 3px;
+}
+.main-tabs > .mantine-Tabs-list {
+  padding-top: 23px;
+  gap: 25px;
+  border-bottom: 1px solid #e2e8e3;
+}
+.main-tabs > .mantine-Tabs-list:before {
+  border: 0;
+}
+.main-tabs > .mantine-Tabs-list .mantine-Tabs-tab {
+  padding: 15px 3px 19px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #6b7671;
+  border-bottom-width: 3px;
+}
+.main-tabs > .mantine-Tabs-list .mantine-Tabs-tab[data-active] {
+  color: #22604a;
+}
+.main-tabs > .mantine-Tabs-panel {
+  padding: 42px 0;
+}
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 1.75px;
+  font-weight: 750;
+  color: #657c70;
+  margin-bottom: 9px;
+}
+.mantine-Title-root {
+  letter-spacing: -0.65px;
+}
+.mantine-Title-root[data-order="1"] {
+  font-size: 32px;
+}
+.mantine-Title-root[data-order="2"] {
+  font-size: 20px;
+}
+.mantine-Title-root[data-order="3"] {
+  font-size: 18px;
+}
+.model-card {
+  overflow: hidden;
+  transition:
+    box-shadow 0.2s,
+    border-color 0.2s;
+}
+.model-card:hover {
+  box-shadow: 0 10px 25px #1e392510;
+}
+.model-card.selected {
+  border-color: #83ae98;
+}
+.model-art {
+  height: 226px;
+  display: grid;
+  place-items: center;
+  border-bottom: 1px solid #e7eae5;
+  position: relative;
+}
+.model-art.stone {
+  background: radial-gradient(ellipse at 50% 40%, #f6f4ed, #e9ebe3);
+}
+.model-art.digital {
+  background: radial-gradient(ellipse at 50% 40%, #ebf2f4, #dfe9ec);
+  color: #6b8b92;
+}
+.model-art svg {
+  max-width: 95%;
+  height: 185px;
+}
+.model-art.digital svg {
+  height: 76px;
+}
+.import-guide {
+  background: #fafcfa;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 385px;
+  border-style: dashed;
+}
+.note-panel {
+  background: #edf2ed;
+  color: #526c5e;
+}
+.arrow {
+  color: #98a69d;
+  margin: 0 7px;
+}
+.mantine-Accordion-control {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.mantine-Accordion-item {
+  background: #fff;
+}
+footer {
+  padding: 25px 0 32px;
+  border-top: 1px solid #e2e8e3;
+}
+.centered {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(ellipse at top left, #e1eee5, transparent 60%), #f7f8fa;
+}
+.login-card {
+  width: min(100%, 420px);
+  box-shadow: 0 16px 60px #2345320a;
+}
+@media (max-width: 600px) {
+  .main-tabs > .mantine-Tabs-list {
+    gap: 10px;
+  }
+  .main-tabs > .mantine-Tabs-list .mantine-Tabs-tab {
+    font-size: 12px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .main-tabs > .mantine-Tabs-panel {
+    padding: 28px 0;
+  }
+  .mantine-Title-root[data-order="1"] {
+    font-size: 27px;
+  }
+  .model-art {
+    height: 200px;
+  }
+}

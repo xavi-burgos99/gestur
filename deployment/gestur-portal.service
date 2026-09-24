@@ -1,0 +1,32 @@
+[Unit]
+Description=GESTUR local administration portal
+After=network.target NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+User=gestur-portal
+Group=gestur
+SupplementaryGroups=gestur-portal
+WorkingDirectory=/opt/gestur/portal
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=GESTUR_CONFIG=/var/lib/gestur/config.json
+Environment=GESTUR_MODELS_DIR=/var/lib/gestur/models
+Environment=GESTUR_TOKEN_FILE=/etc/gestur/portal-token
+ExecStart=/usr/bin/node /opt/gestur/portal/server/index.mjs
+Restart=on-failure
+RestartSec=3
+UMask=0007
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/gestur
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+# The exact sudo helper needs privilege elevation; NoNewPrivileges would block it.
+
+[Install]
+WantedBy=multi-user.target

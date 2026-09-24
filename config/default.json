@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "active_model": "capitell.obj",
+  "tracking": {
+    "use_pose": true,
+    "use_hands": false,
+    "inference_fps": 24,
+    "hand_fps": 15,
+    "camera_index": 0,
+    "width": 640,
+    "height": 480,
+    "mirror": true,
+    "smoothing_ms": 60
+  },
+  "render": {
+    "target_fps": 60,
+    "antialias_samples": 2,
+    "fullscreen": true,
+    "hide_cursor": true
+  },
+  "controls": {
+    "smoothing_ms": 90,
+    "reset_timeout_seconds": 3,
+    "reset_duration_seconds": 1,
+    "mappings": [
+      {
+        "id": "head_x_hybrid_roll",
+        "input": "head_x",
+        "output": "rotation_roll",
+        "mode": "hybrid",
+        "enabled": true,
+        "scale": 30,
+        "invert": true,
+        "center": 0.5,
+        "left_threshold": 0.25,
+        "right_threshold": 0.75,
+        "continuous_speed": 100
+      },
+      {
+        "id": "head_x_to_yaw",
+        "input": "head_x",
+        "output": "rotation_yaw",
+        "mode": "absolute",
+        "enabled": true,
+        "scale": 10,
+        "invert": true,
+        "center": 0.5
+      },
+      {
+        "id": "head_y_to_pitch",
+        "input": "head_y",
+        "output": "rotation_pitch",
+        "mode": "absolute",
+        "enabled": true,
+        "scale": 30,
+        "invert": false,
+        "center": 0.5
+      },
+      {
+        "id": "head_scale_to_model_scale",
+        "input": "head_scale",
+        "output": "scale_uniform",
+        "mode": "stepped",
+        "enabled": true,
+        "scale": 1,
+        "invert": false,
+        "center": 0.3,
+        "threshold": 0.4,
+        "small_scale": 1,
+        "large_scale": 1.75,
+        "transition_ms": 750,
+        "hysteresis": 0.02
+      }
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "assets": {
+    "pose_landmarker_lite.task": {
+      "url": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+      "bytes": 5777746,
+      "sha256": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a"
+    },
+    "palm_detection_lite.tflite": {
+      "url": "https://storage.googleapis.com/mediapipe-assets/palm_detection_lite.tflite",
+      "bytes": 1985440,
+      "sha256": "e9a4aaddf90dda56a87235303cf00e4c2d3fb28725f68fd88772997dac905c18"
+    },
+    "hand_landmark_lite.tflite": {
+      "url": "https://storage.googleapis.com/mediapipe-assets/hand_landmark_lite.tflite",
+      "bytes": 2071408,
+      "sha256": "d7fde8ac11f8ce03f8663775bfc323f4fc9f2a38062b4f4efa142874ef5b2a48"
+    }
+  },
+  "hand_bundle": {
+    "filename": "hand_landmarker_lite.task",
+    "members": {
+      "hand_detector.tflite": "palm_detection_lite.tflite",
+      "hand_landmarks_detector.tflite": "hand_landmark_lite.tflite"
+    },
+    "processed_assets": {
+      "hand_detector.tflite": {
+        "bytes": 1983998,
+        "sha256": "285da51b7dcba66a842c33808ff29027e46afb911ba0be3a34e4dbfc933bf156"
+      },
+      "hand_landmarks_detector.tflite": {
+        "bytes": 2070822,
+        "sha256": "b420c662af98e9cf31b5ca5e3fd8bdec20fcb8e8eb8ddd67f78cd0f714119d48"
+      }
+    }
+  }
+}

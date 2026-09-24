@@ -1,309 +1,83 @@
-# Gestur: Control de interfaces 3D por gestos y pose
-  
-Sistema de interacción con entornos digitales mediante visión artificial, eliminando la necesidad de hardware especializado para exploración inmersiva de contenidos virtuales
+# Gestur
 
+Visor de objetos 3D controlado por cámara para exposiciones, orientado a Raspberry Pi 5. Conserva Panda3D, el capitell original y sus controles de cabeza, proximidad y retorno al reposo.
 
-## Table of contents
+## Instalación en Raspberry Pi 5
 
-- [Introducción](#introducción)
-- [Características](#características)
-- [Estructura del proyecto](#estructura-del-proyecto)
-- [Instalación](#instalación)
-  - [Requisitos previos](#requisitos-previos)
-  - [Instalación desde código fuente](#instalación-desde-código-fuente)
-- [Uso](#uso)
-  - [Ejecución básica](#ejecución-básica)
-  - [Configuración personalizada](#configuración-personalizada)
-- [Componentes](#componentes)
-  - [PoseDetector](#posedetector)
-  - [ControlSystem](#controlsystem)
-  - [Visualizer](#visualizer)
-  - [Controller](#controller)
-- [Configuración](#configuración)
-- [Ejemplos](#ejemplos)
-- [Especificaciones técnicas](#especificaciones-técnicas)
-- [Bugs y solicitudes de características](#bugs-y-solicitudes-de-características)
-- [Creadores](#creadores)
-- [Licencia](#licencia)
-
-## Introducción
-
-**Gestur** es un sistema de control de interfaces 3D mediante gestos y pose corporal desarrollado específicamente para museos y exposiciones interactivas. Utiliza tecnologías avanzadas de detección de gestos y seguimiento corporal en tiempo real, permitiendo una exploración inmersiva y natural de contenidos virtuales sin necesidad de hardware especializado.
-
-El proyecto aprovecha la cámara web integrada en la mayoría de ordenadores y combina los avances en visión por computador —especialmente en el reconocimiento de poses mediante redes neuronales— para transformar gestos naturales en un sistema de control 3D completamente basado en software.
-
-## Características
-
-* **Control sin contacto**: Interacción completamente hands-free mediante movimientos naturales de cabeza y torso
-* **Hardware mínimo**: Funciona únicamente con una cámara RGB estándar, sin sensores especializados
-* **Tiempo real**: Procesamiento fluido a 17-24 FPS en Raspberry Pi 5
-* **Gestos intuitivos**: Sistema de aprendizaje implícito que no requiere instrucciones
-* **Arquitectura modular**: Componentes intercambiables y configurables
-* **Multiplataforma**: Compatible con Windows, macOS y Linux
-* **Optimizado para museos**: Diseñado específicamente para espacios culturales y educativos
-
-## Estructura del proyecto
-
-```text
-gestur/
-├── controller.py          # Controlador principal y orquestador
-├── pose_detector.py       # Detección de pose con MediaPipe
-├── visualizer.py          # Visualizador 3D con Panda3D
-├── control_system.py      # Sistema de mapeo de gestos
-├── requirements.txt       # Dependencias del proyecto
-└── README.md             # Documentación
-```
-
-## Instalación
-
-### Requisitos previos
-
-Asegúrate de tener los siguientes componentes instalados en tu sistema:
-
-- **Python 3.9 o superior**
-- **Cámara RGB** (webcam integrada o USB)
-- **OpenCV** para procesamiento de video
-- **MediaPipe** para detección de pose
-- **Panda3D** para renderizado 3D
-
-### Instalación desde código fuente
-
-1. **Clona el repositorio**:
-   ```bash
-   git clone https://github.com/gestur/gestur.git
-   cd gestur
-   ```
-
-2. **Instala las dependencias**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Verifica la instalación**:
-   ```bash
-   python controller.py --help
-   ```
-
-## Uso
-
-### Ejecución básica
-
-Para ejecutar Gestur con un modelo 3D:
+Requiere Raspberry Pi OS Lite/Debian **de 64 bits**, pantalla HDMI y cámara USB compatible con OpenCV/V4L2. En una imagen Desktop hay que desactivar antes el gestor de escritorio: el instalador comprueba que la pantalla esté disponible para el expositor. Usa refrigeración adecuada. La instalación descarga dependencias y modelos; después el expositor funciona sin Internet.
 
 ```bash
-python controller.py modelo.obj
+git clone https://github.com/xavi-burgos99/gestur.git
+cd gestur
+git switch codex/performance-pi5
+sudo bash gestur.sh install
+sudo reboot
 ```
 
-### Configuración personalizada
+El instalador despliega **la copia local de la rama elegida** en `/opt/gestur`; no hace `pull main`. Crea un Python 3.12.14 privado, instala versiones fijadas con ruedas ARM64, aprovisiona los modelos Lite verificados y configura el arranque del controlador completo. No modifica el Python del sistema, el firmware ni la memoria GPU. La configuración y los modelos de usuario se conservan al reinstalar.
 
-Ejecutar con modo debug activado:
+- Configuración: `/var/lib/gestur/config.json`.
+- Modelos importados: `/var/lib/gestur/models`.
+- Registro del expositor: `/var/log/gestur/viewer.log`.
+- `sudo bash gestur.sh uninstall` retira el arranque automático y conserva los datos.
+
+## Desarrollo local
+
+Python **3.11 o 3.12** (MediaPipe 0.10.18 tiene ruedas ARM64 verificadas; sus versiones posteriores no son intercambiables para esta plataforma).
 
 ```bash
-python controller.py modelo.obj --verbose
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python scripts/provision_models.py
+.venv/bin/python controller.py capitell.obj --windowed
 ```
 
-Especificar preset de control:
+El cursor queda oculto en el expositor. `Esc` cierra el visor. Con `--windowed` se conserva una ventana para desarrollo; la visibilidad del cursor es configurable en el JSON. La cámara predeterminada es la USB de índice 0. Las cámaras CSI que no expongan V4L2 requieren un adaptador de captura adicional.
 
 ```bash
-python controller.py modelo.obj --control-preset continuous --verbose
+# Sólo el visor, sin abrir la cámara
+.venv/bin/python controller.py capitell.obj --no-camera --windowed
+
+# Seguimiento opcional de manos; asignar una entrada de mano en config para controlarlo
+.venv/bin/python controller.py --config config/default.json --hands
+
+# Comprobar que los modelos están disponibles sin descargar nada
+.venv/bin/python scripts/provision_models.py --check
 ```
 
-### Gestos de control
+## Rendimiento y reconocimiento
 
-El sistema reconoce los siguientes gestos naturales:
+La captura guarda únicamente el fotograma más reciente. La inferencia de pose y manos tiene frecuencias limitadas e independientes; el renderizador procesa los controles en su propio hilo a la frecuencia de pantalla. No se acumulan fotogramas pendientes ni se modifica Panda3D desde el hilo de cámara.
 
-- **Zona neutra (25%-75%)**: Sin rotación, modelo estático
-- **Cabeza > 75%**: Rotación continua hacia la derecha
-- **Cabeza < 25%**: Rotación continua hacia la izquierda
-- **Acercarse**: Ampliación del modelo (escala 1:1.75)
-- **Alejarse**: Modelo en tamaño normal (escala 1:1)
+Se usan **Pose Landmarker Lite** y, al activar manos, **Palm Detection Lite + Hand Landmark Lite**. El seguimiento de manos incorpora orientación de palma, pinza y gestos geométricos, sin otra red de clasificación. Las manos están desactivadas por defecto para conservar el perfil del capitell y ahorrar trabajo; pueden activarse desde configuración.
 
-## Componentes
+Se mantienen los **491.038 triángulos y la textura 2048 × 2048 del capitell**. No hay reducción de malla o resolución de textura. Se agrupan nodos compatibles y se evitan transformaciones redundantes. MSAA 2× es el valor inicial; se puede elegir 0/2/4 muestras. El código anterior no activaba explícitamente el antialiasing, por lo que no se atribuye a él un coste medido.
 
-### PoseDetector
+Los valores de 60 FPS de render y 24 detecciones/s son **objetivos configurables, no resultados garantizados en una Pi**. Ver [la guía de medición](docs/performance.md) para comprobar tiempos de fotograma, carga y temperatura en el dispositivo real.
 
-El componente `PoseHandTracker` es responsable de la detección en tiempo real de la posición y orientación de la cabeza, torso y manos2].
+## Controles y parámetros
 
-#### Características principales
+El perfil predeterminado conserva:
 
-- **MediaPipe Integration**: Utiliza MediaPipe Pose 2D para detección robusta2]
-- **Suavizado temporal**: Filtrado exponencial para eliminar ruido
-- **Múltiples fuentes**: Detección simultánea de cabeza, torso y manos
-- **Configuración flexible**: Parámetros ajustables de respuesta y suavizado
+- Desplazamiento horizontal de la cabeza: giro proporcional y giro continuo en los extremos 25 % / 75 %.
+- Altura de la cabeza: inclinación.
+- Proximidad: escala 1 a 1,75 con transición suave.
+- Ausencia: parada del giro y retorno al reposo tras 3 segundos.
 
-#### Configuración
+El archivo [config/default.json](config/default.json) define captura, render y asignaciones de gestos. [docs/configuration.md](docs/configuration.md) explica las entradas, salidas, límites, suavizado y modos. Los controles, el modelo activo, el límite de FPS y el cursor se actualizan al cambiar el archivo. Cambiar cámara, frecuencia de inferencia, seguimiento de manos, pantalla completa o MSAA reinicia el visor automáticamente para recrear sus recursos.
 
-```python
-tracker = PoseHandTracker(
-    response_time_ms=10,     # Tiempo de respuesta
-    smoothing_time_ms=50,    # Tiempo de suavizado
-    use_pose=True,           # Activar detección de pose
-    use_hands=False,         # Desactivar manos en Pi
-    mirror=True,             # Efecto espejo
-    verbose=False            # Modo debug
-)
+## Verificación
+
+```bash
+.venv/bin/python -m pip install pytest
+.venv/bin/python -m pytest tests -q
+bash -n gestur.sh scripts/kiosk-session.sh
 ```
 
-### ControlSystem
+Las pruebas cubren pérdida y recuperación de seguimiento, cadencia de control, orientación circular, configuración inválida, transferencia entre hilos y carga del capitell. La precisión visual con personas, los controladores gráficos y el rendimiento térmico requieren validación en la instalación real.
 
-El sistema de control traduce las poses detectadas en comandos 3D mediante mapeos configurables.
+## Créditos
 
-#### Tipos de mapeo
+Proyecto académico de Xavier Burgos (`xavi@dzin.es`), Escola d'Enginyeria de la Universitat Autònoma de Barcelona, curso 2024/2025. Dirección de Fernando Vilariño, Centre de Visió per Computador. Agradecimientos a Fran Iglesias, Fundación Épica – La Fura dels Baus y Cátedra UAB–Cruïlla (TSI-100929-2023-2).
 
-- **Rotación híbrida**: Combinación de control proporcional y continuo
-- **Mapeo estándar**: Relación directa entre pose y transformación
-- **Suavizado exponencial**: Filtros temporales para estabilidad
-
-#### Controlador híbrido
-
-```python
-hybrid_controller = HybridRotationController(
-    max_degrees=30.0,                    # Rotación máxima
-    left_threshold=0.25,                 # Umbral izquierdo
-    right_threshold=0.75,                # Umbral derecho
-    continuous_speed_degrees_per_second=100.0,  # Velocidad continua
-    center=0.5,                          # Centro neutral
-    invert=True                          # Invertir dirección
-)
-```
-
-### Visualizer
-
-El componente `ControlledObjViewer` maneja el renderizado 3D usando Panda3D.
-
-#### Características
-
-- **Múltiples formatos**: Soporte para OBJ y GLTF
-- **Texturas**: Carga automática de materiales
-- **60 FPS**: Renderizado independiente del detector
-- **Pantalla completa**: Optimizado para instalaciones
-
-#### Métodos principales
-
-```python
-# Actualizar modelo con múltiples propiedades
-visualizer.update_model(
-    position=[x, y, z],      # Posición
-    rotation=[yaw, pitch, roll],  # Rotación
-    scale=factor             # Escala
-)
-
-# Estado actual
-current_state = visualizer.get_current_state()
-```
-
-### Controller
-
-El controlador principal `PoseController` actúa como orquestador entre todos los componentes.
-
-#### Funciones principales
-
-- **Inicialización**: Configuración automática de componentes
-- **Callbacks**: Manejo de eventos de pose
-- **Cleanup**: Liberación de recursos
-- **Debug**: Información detallada en modo verbose
-
-## Configuración
-
-### Suavizado exponencial
-
-```python
-smoother_config = {
-    'alpha': 0.3,           # Factor de suavizado (0-1)
-    'decay_rate': 0.1,      # Velocidad de decaimiento
-    'center_x': 0.5,        # Centro horizontal
-    'center_y': 0.5         # Centro vertical
-}
-```
-
-### Sistema de control por defecto
-
-El sistema incluye mapeos preconfigurados:
-
-- **head_x_hybrid_roll**: Control híbrido de rotación en roll
-- **head_x_to_yaw**: Mapeo de cabeza a rotación yaw
-- **head_y_to_pitch**: Mapeo de cabeza a rotación pitch  
-- **head_scale_to_model_scale**: Control de escala por proximidad
-
-## Ejemplos
-
-### Ejemplo básico
-
-```python
-from pose_detector import PoseHandTracker
-from visualizer import ControlledObjViewer
-from control_system import create_default_control_system
-from controller import PoseController
-
-# Crear controlador
-controller = PoseController(
-    obj_path="modelo.obj",
-    control_system=create_default_control_system(),
-    verbose=True
-)
-
-# Ejecutar sistema
-controller.run()
-```
-
-### Configuración personalizada
-
-```python
-# Sistema de control personalizado
-control_system = ControlSystem()
-
-# Agregar mapeos específicos
-control_system.add_mapping(ControlMapping(
-    name="custom_rotation",
-    input_extractor=extractors['head_x'],
-    output_applier=appliers['rotation_yaw'](max_degrees=45.0),
-    smoother=ExponentialSmoother(alpha=0.5)
-))
-```
-
-## Especificaciones técnicas
-
-### Rendimiento
-
-| Plataforma | FPS Promedio | Detección Manos | Uso CPU |
-|------------|--------------|-----------------|---------|
-| Mac M2 Pro | 22-24 FPS | 49.5% | Medio |
-| Raspberry Pi 5 | 17-24 FPS | < 15% | Alto |
-
-### Requisitos mínimos
-
-- **CPU**: Dual-core 1.5 GHz (Raspberry Pi 5 o superior)
-- **RAM**: 4 GB
-- **Cámara**: RGB 720p mínimo, 1080p recomendado
-- **Almacenamiento**: 2 GB para dependencias
-
-### Latencia
-
-- **Detección**: < 50ms
-- **Renderizado**: 16ms (60 FPS)
-- **Total**: < 100ms para respuesta perceptible
-
-## Bugs y solicitudes de características
-
-¿Tienes un bug o una solicitud de característica? Por favor busca en los issues existentes y cerrados. Si tu problema o idea no está contemplada, [abre un nuevo issue](https://github.com/gestur/issues/new).
-
-## Creadores
-
-Este proyecto fue desarrollado como Trabajo de Fin de Grado en la Escola d'Enginyeria de la Universitat Autònoma de Barcelona (UAB).
-
-### Xavier Burgos
-- Email: xavi@dzin.es
-- Profesor: Prof. Fernando Vilariño
-- Centro: Computer Vision Center - Dep. Computer Science UAB
-- Curso: 2024/2025
-
-### Agradecimientos
-
-- **Prof. Fernando Vilariño**: Director del TFG y guía constante
-- **Centro de Visión por Computador (CVC)**: Cesión de hardware y servidor de cálculo
-- **Fran Iglesias y Fundación Épica – La Fura dels Baus**: Facilitar pantalla 4K para prototipo
-- **Cátedra UAB–Cruïlla (TSI-100929-2023-2)**: Apoyo institucional
-
-## Licencia
-
-Este proyecto está desarrollado como trabajo académico en la Universitat Autònoma de Barcelona. Para información sobre uso y distribución, consulta los términos específicos del proyecto académico.
+Para uso y distribución, consulta los términos específicos del proyecto académico.

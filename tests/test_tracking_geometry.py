@@ -1,0 +1,170 @@
+import math
+from types import SimpleNamespace as Point
+
+import pytest
+
+from tracking_geometry import (TrackingFilter, anatomical_hand, empty_part,
+                               hand_features, pose_features, smooth_value)
+
+
+def point(x=0, y=0, z=0, visibility=1, presence=1):
+    return Point(x=x, y=y, z=z, visibility=visibility, presence=presence)
+
+
+def hand():
+    points = [point() for _ in range(21)]
+    points[0] = point(0, .04)
+    points[1], points[2], points[3], points[4] = [point(-.07, v) for v in (.03,.01,-.01,-.04)]
+    for base, x, tip_y in ((5,-.035,-.095),(9,0,-.11),(13,.02,-.09),(17,.04,-.065)):
+        for offset in range(4):
+            points[base+offset] = point(x, -.005 + (tip_y+.005)*offset/3)
+    return points
+
+
+def rotate(points, axis, degrees):
+    a = math.radians(degrees)
+    c, s = math.cos(a), math.sin(a)
+    result = []
+    for p in points:
+        if axis == 'z':
+            result.append(point(c*p.x-s*p.y, s*p.x+c*p.y, p.z))
+        elif axis == 'y':
+            result.append(point(c*p.x+s*p.z,p.y,-s*p.x+c*p.z))
+        else:
+            result.append(point(p.x,c*p.y-s*p.z,s*p.y+c*p.z))
+    return result
+
+
+def test_open_hand_has_neutral_orientation():
+    features = hand_features(hand(), hand(), 'Right', aspect=1)
+    assert features['detected']
+    assert features['pitch'] == pytest.approx(0)
+    assert features['yaw'] == pytest.approx(0)
+    assert features['rotation'] == pytest.approx(0)
+    assert features['gesture'] == 'open'
+    assert features['openness'] == 1
+
+
+@pytest.mark.parametrize('degrees', [-179,-90,-30,30,90,179])
+def test_signed_image_rotation_is_not_limited_to_90_degrees(degrees):
+    world = rotate(hand(), 'z', degrees)
+    features = hand_features(world, world, 'Right', aspect=1)
+    assert features['rotation'] == pytest.approx(degrees)
+    assert features['gesture'] == 'open'
+
+
+@pytest.mark.parametrize('axis,field,angle', [('x','pitch',40),('y','yaw',-50)])
+def test_world_palm_rotation_survives_non_square_image(axis, field, angle):
+    world = rotate(hand(), axis, angle)
+    # Changing image aspect/coordinates cannot change metric palm normal.
+    normalized = [point(p.x/2,p.y,p.z) for p in world]
+    features = hand_features(normalized, world, 'Right', aspect=2)
+    assert features[field] == pytest.approx(angle if axis == 'x' else -angle)
+
+
+def test_pinch_is_scale_and_rotation_invariant():
+    world = hand()
+    world[4] = point(world[8].x+.001,world[8].y,world[8].z)
+    features = hand_features(world, world, 'Right', aspect=1)
+    rotated = rotate(world,'z',100)
+    scaled = [point(p.x*5,p.y*5,p.z*5) for p in rotated]
+    changed = hand_features(scaled,scaled,'Right',aspect=1)
+    assert features['gesture'] == changed['gesture'] == 'pinch'
+    assert features['pinch'] == pytest.approx(changed['pinch'])
+
+
+def test_folded_fingers_are_fist():
+    points = hand()
+    for base in (5,9,13,17):
+        points[base+2] = point(points[base].x,.005,-.015)
+        points[base+3] = point(points[base].x,.025,-.01)
+    result = hand_features(points, points, 'Right', aspect=1)
+    assert result['gesture'] == 'fist'
+    assert result['openness'] == 0
+
+
+@pytest.mark.parametrize('mirror,invert,result', [(True,False,'Right'),(False,False,'Left'),
+                                                 (True,True,'Left'),(False,True,'Right')])
+def test_tasks_handedness_accounts_for_mirror_and_explicit_inversion(mirror,invert,result):
+    assert anatomical_hand('Left',mirror,invert) == result
+
+
+def test_missing_or_degenerate_landmarks_never_detect_hand():
+    assert not hand_features([], [], 'Right')['detected']
+    points = [point() for _ in range(21)]
+    assert not hand_features(points, points, 'Right')['detected']
+    points = hand();points[8].x = float('nan')
+    assert not hand_features(points, points, 'Right')['detected']
+
+
+def test_circular_smoothing_crosses_wrap_via_180_not_zero():
+    result = smooth_value(179,-179,.1,.1,circular=True)
+    assert result < -179 or result > 179
+    assert smooth_value(0,10,.1,.1) == pytest.approx(6.3212056)
+    assert smooth_value(.4,0,.1,.1) < .4
+
+
+def test_zero_smoothing_detects_real_hand_on_first_frame_then_clears_loss():
+    state = TrackingFilter(smoothing_time=0)
+    state.update('left_hand', hand_features(hand(),hand(),'Right',1), 1)
+    assert state.snapshot()['left_hand']['detected']
+    assert state.snapshot()['left_hand']['rotation'] == 0
+    state.update('left_hand', empty_part(hand=True), 1.02)
+    assert state.snapshot()['left_hand']['detected'] is False
+    assert state.snapshot()['left_hand']['rotation'] is None
+
+
+def test_no_phantom_hands_on_start_and_stale_results_expire():
+    state = TrackingFilter()
+    state.expire(10)
+    assert not state.snapshot()['left_hand']['detected']
+    state.update('left_hand', hand_features(hand(),hand(),'Right',1), 10)
+    state.expire(10.1)
+    assert state.snapshot()['left_hand']['detected']
+    state.expire(10.3)
+    assert not state.snapshot()['left_hand']['detected']
+
+
+def test_filter_is_independent_of_sampling_rate():
+    final = []
+    for fps in (10,30,60):
+        state = TrackingFilter(smoothing_time=.3,timeout=2)
+        sample = empty_part();sample.update(detected=True,x=0,y=0,pitch=0,yaw=0,roll=0)
+        state.update('torso',sample,0)
+        sample['x'] = 1
+        for i in range(1,fps+1):
+            state.update('torso',sample,i/fps)
+        final.append(state.snapshot()['torso']['x'])
+    assert final == pytest.approx([final[0]]*3)
+
+
+def pose():
+    points = [point(.5,.5,0) for _ in range(33)]
+    points[0] = point(.5,.25,-.1)
+    points[1] = point(.46,.22,0)
+    points[2] = point(.47,.22,0)
+    points[5] = point(.53,.22,0)
+    points[7] = point(.42,.25,0)
+    points[8] = point(.58,.25,0)
+    points[11] = point(.3,.4,0);points[12] = point(.7,.4,0)
+    points[23] = point(.4,.8,0);points[24] = point(.6,.8,0)
+    return points
+
+
+def test_head_scale_uses_both_eye_centres_and_preserves_zero_to_one_range():
+    points = pose()
+    result = pose_features(points,points)
+    assert result['head']['scale'] == pytest.approx((.06-.02)/.18)
+    points[1].x = .4
+    assert pose_features(points,points)['head']['scale'] == result['head']['scale']
+    points[5].x = .9
+    assert pose_features(points,points)['head']['scale'] == 1
+
+
+def test_head_visibility_is_independent_of_torso_visibility():
+    points = pose();points[23].visibility = .1
+    result = pose_features(points,points)
+    assert result['head']['detected']
+    assert not result['torso']['detected']
+    points[2].presence = .1
+    assert not pose_features(points,points)['head']['detected']

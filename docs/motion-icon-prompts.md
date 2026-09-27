@@ -11,6 +11,12 @@ contornos cerrados. La mano izquierda refleja la derecha y la pinza tiene su
 propia silueta. Las dos manos se reducen juntas conservando las proporciones
 del trazo para evitar que los dedos se fusionen en tamaños pequeños.
 
+La apertura se representa con un puño cerrado. La pinza es una variación breve
+de la mano base: conserva palma, muñeca y los tres dedos secundarios; solo
+acerca el índice y el pulgar. Sus puntas deben conservar una separación visible
+a 36 píxeles, sin formar un círculo.
+La inclinación lateral utiliza una figura ladeada y un arco bidireccional.
+
 Los pasos de movimiento y eje utilizan símbolos de dirección y rotación; la
 parte del cuerpo ya elegida se muestra en el resumen del selector. Así se evita
 superponer flechas sobre todas las siluetas. El catálogo

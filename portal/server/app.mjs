@@ -165,6 +165,7 @@ export async function createApp(options) {
         selected_model: state.selected_model,
         rendered_model: state.rendered_model,
         rendered_orientation: state.rendered_orientation ?? null,
+        idle: state.idle ?? null,
         error: state.error || null,
         render_fps: state.render?.render_fps ?? null,
       };

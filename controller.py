@@ -149,9 +149,17 @@ class PoseController:
             restart_keys = ("antialias_samples", "fullscreen")
             needs_restart = any(candidate["render"][k] != self.config["render"][k] for k in restart_keys)
             if candidate["controls"] != self.config["controls"]:
-                self.control_system = create_control_system(candidate)
+                replacement = create_control_system(candidate)
+                previous = self.control_system
+                if not hasattr(previous, "_output"):
+                    previous = self.visualizer.get_current_state()
+                    # Portal controls use one uniform scale; the viewer exposes XYZ.
+                    previous["scale"] = previous["scale"][0]
+                replacement.adopt_output_state(previous)
+                self.control_system = replacement
             self.visualizer.apply_settings(target_fps=candidate["render"]["target_fps"],
-                                           hide_cursor=candidate["render"]["hide_cursor"])
+                                           hide_cursor=candidate["render"]["hide_cursor"],
+                                           ambient_light=candidate["render"]["ambient_light"])
             self.config = candidate
             self.config_error = None
             self.last_error = self.model_error or self.tracking_error
@@ -164,6 +172,11 @@ class PoseController:
             self.last_error = self.config_error
             LOG.error("No se pudo aplicar la configuración; se conserva la anterior: %s", exc)
 
+    def _idle_status(self):
+        # Custom control systems remain supported by the Python embedding API.
+        status = getattr(self.control_system, "get_idle_status", None)
+        return status() if status is not None else {"mode": "hold", "active": False}
+
     def _write_status(self):
         if not self.status_path:
             return
@@ -174,6 +187,7 @@ class PoseController:
                   "render": self.visualizer.render_metrics.summary(),
                   "control_loop": self.metrics.summary(),
                   "render_scheduler": self.visualizer.get_render_status(),
+                  "idle": self._idle_status(),
                   "tracking": self.tracking_session.snapshot(), "hardware": self._hardware}
         temporary = self.status_path.with_suffix(".tmp")
         try:
@@ -186,6 +200,8 @@ class PoseController:
         now = time.monotonic()
         self.metrics.tick(now)
         output = self.control_system.process_input(self.mailbox.read())
+        idle = self._idle_status()
+        self.visualizer.set_idle_animation(idle["mode"] == "float" and idle["active"])
         self.visualizer.update_model(**output)
         if now - self._last_config_check >= 1.0:
             self._last_config_check = now

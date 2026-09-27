@@ -68,6 +68,21 @@ export async function createStore({
   const validate = new Ajv({ allErrors: true, strict: false }).compile(schema);
   await mkdir(modelsDir, { recursive: true, mode: 0o2770 });
   function check(config) {
+    config = structuredClone(config);
+    if (config?.schema_version === 1) {
+      for (const [section, key, value] of [
+        ["render", "ambient_light", "none"],
+        ["controls", "idle_mode", "return"],
+      ]) {
+        if (
+          config[section] &&
+          typeof config[section] === "object" &&
+          !Array.isArray(config[section]) &&
+          !Object.hasOwn(config[section], key)
+        )
+          config[section][key] = value;
+      }
+    }
     if (!validate(config))
       throw new ApiError(
         400,
@@ -163,13 +178,13 @@ export async function createStore({
   async function readCurrent(models) {
     let saved;
     let missing = false;
-    let persistedSelection;
+    let persistedConfig;
     try {
       saved = JSON.parse(await readFile(configPath, "utf8"));
-      persistedSelection = saved.active_model;
+      persistedConfig = JSON.stringify(saved);
       if (saved.schema_version === 1 && saved.active_model === "capitell.obj")
         saved.active_model = null;
-      check(saved);
+      saved = check(saved);
     } catch (error) {
       if (error.code !== "ENOENT")
         throw new ApiError(
@@ -182,8 +197,8 @@ export async function createStore({
     const original = saved.active_model;
     if (!models.some((model) => model.id === original))
       saved.active_model = models[0]?.id ?? null;
-    // Also persist the legacy migration even if the resulting library is empty.
-    if (missing || persistedSelection !== saved.active_model)
+    // Persist schema-v1 field migrations and selection reconciliation together.
+    if (missing || persistedConfig !== JSON.stringify(saved))
       await atomicJson(configPath, saved);
     return saved;
   }

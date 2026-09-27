@@ -319,3 +319,50 @@ test("mutations reject symlink packages without modifying their target", async (
   );
   assert.equal(await readFile(path.join(modelsDir, realId), "utf8"), "fixture");
 });
+
+test("legacy v1 defaults migrate atomically once without changing user parameters", async (t) => {
+  const { store, configPath } = await fixture(t);
+  const legacy = structuredClone(store.defaults);
+  delete legacy.render.ambient_light;
+  delete legacy.controls.idle_mode;
+  legacy.render.target_fps = 30;
+  legacy.controls.smoothing_ms = 237;
+  legacy.controls.mappings[0].scale = 44;
+  legacy.tracking.use_hands = true;
+  await writeFile(configPath, JSON.stringify(legacy));
+  const originalInode = (await stat(configPath)).ino;
+  const expected = structuredClone(legacy);
+  expected.render.ambient_light = "none";
+  expected.controls.idle_mode = "return";
+  assert.deepEqual(await store.read(), expected);
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")), expected);
+  const migratedInode = (await stat(configPath)).ino;
+  assert.notEqual(migratedInode, originalInode);
+  assert.deepEqual(await store.read(), expected);
+  assert.equal((await stat(configPath)).ino, migratedInode);
+  // An explicit setting survives even if only the other field needs migration.
+  legacy.render.ambient_light = "cool";
+  await writeFile(configPath, JSON.stringify(legacy));
+  assert.equal((await store.read()).render.ambient_light, "cool");
+  delete legacy.render.ambient_light;
+  legacy.controls.idle_mode = "hold";
+  await writeFile(configPath, JSON.stringify(legacy));
+  assert.equal((await store.read()).controls.idle_mode, "hold");
+});
+
+test("explicit invalid lighting or idle setting is never replaced with a default", async (t) => {
+  const { store, configPath } = await fixture(t);
+  for (const [section, field] of [
+    ["render", "ambient_light"],
+    ["controls", "idle_mode"],
+  ]) {
+    for (const value of [null, "", "automatic", 1, false, [], {}]) {
+      const invalid = structuredClone(store.defaults);
+      invalid[section][field] = value;
+      const bytes = JSON.stringify(invalid);
+      await writeFile(configPath, bytes);
+      await assert.rejects(store.read(), /configuración guardada no es válida/);
+      assert.equal(await readFile(configPath, "utf8"), bytes);
+    }
+  }
+});

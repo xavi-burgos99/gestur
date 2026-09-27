@@ -363,7 +363,8 @@ def test_config_restart_exits_without_starting_camera_during_shutdown():
     app.device_metrics = SimpleNamespace(sample=lambda: {})
     app.mailbox = LatestPose()
     app.control_system = create_default_control_system()
-    app.visualizer = SimpleNamespace(update_model=lambda **kwargs: None)
+    app.visualizer = SimpleNamespace(update_model=lambda **kwargs: None,
+                                     set_idle_animation=lambda active: None)
     app._last_config_check = 0
     app._running = True
     app.verbose = False

@@ -1046,7 +1046,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
           </Button>
         }
       />
-      <SimpleGrid cols={{ base: 1, md: 3 }} mb="xl">
+      <SimpleGrid cols={{ base: 1, md: 2, xl: 4 }} mb="xl">
         <Paper p="xl" withBorder>
           <Title order={3} mb="lg">
             Seguimiento
@@ -1091,19 +1091,58 @@ function Parameters({ config, setConfig, defaults, notify }) {
         </Paper>
         <Paper p="xl" withBorder>
           <Title order={3} mb="lg">
-            Volver al centro
+            Luz ambiente
           </Title>
-          <Numeric
-            label="Tiempo sin detectar a nadie"
-            value={draft.controls.reset_timeout_seconds}
-            onChange={(v) => update("controls", "reset_timeout_seconds", v)}
-            max={30}
-            step={0.5}
-            suffix=" s"
+          <Select
+            aria-label="Luz ambiente"
+            value={draft.render.ambient_light ?? "none"}
+            data={[
+              { value: "none", label: "Ninguna" },
+              { value: "soft", label: "Suave" },
+              { value: "warm", label: "Cálida" },
+              { value: "cool", label: "Fría" },
+              { value: "contrast", label: "Contraste" },
+            ]}
+            allowDeselect={false}
+            onChange={(value) =>
+              value !== null && update("render", "ambient_light", value)
+            }
           />
-          <Text c="dimmed" size="xs" mt="sm">
-            0 inicia el regreso inmediatamente.
-          </Text>
+        </Paper>
+        <Paper p="xl" withBorder>
+          <Title order={3} mb="lg">
+            Modo de espera
+          </Title>
+          <Stack gap="md">
+            <Select
+              aria-label="Modo de espera"
+              value={draft.controls.idle_mode ?? "return"}
+              data={[
+                { value: "hold", label: "Mantener posición" },
+                { value: "return", label: "Volver a origen" },
+                { value: "float", label: "Flotante" },
+              ]}
+              allowDeselect={false}
+              onChange={(value) =>
+                value !== null && update("controls", "idle_mode", value)
+              }
+            />
+            {draft.controls.idle_mode === "hold" ? (
+              <Text c="dimmed" size="sm">
+                Conserva la última posición al perder el gesto.
+              </Text>
+            ) : (
+              <Numeric
+                label="Tiempo de espera"
+                description="Sin detectar un gesto activo."
+                value={draft.controls.reset_timeout_seconds}
+                onChange={(v) => update("controls", "reset_timeout_seconds", v)}
+                max={30}
+                step={0.5}
+                suffix=" s"
+              />
+            )}
+          </Stack>
         </Paper>
       </SimpleGrid>
       <ControlsEditor draft={draft} update={update} mapping={mapping} />
@@ -1165,17 +1204,19 @@ function Parameters({ config, setConfig, defaults, notify }) {
                 onChange={(v) => update("tracking", "smoothing_ms", v)}
                 max={1000}
               />
-              <Numeric
-                label="Duración de regreso al centro"
-                suffix=" s"
-                value={draft.controls.reset_duration_seconds}
-                onChange={(v) =>
-                  update("controls", "reset_duration_seconds", v)
-                }
-                min={0.1}
-                max={10}
-                step={0.1}
-              />
+              {(draft.controls.idle_mode ?? "return") === "return" && (
+                <Numeric
+                  label="Duración de regreso a origen"
+                  suffix=" s"
+                  value={draft.controls.reset_duration_seconds}
+                  onChange={(v) =>
+                    update("controls", "reset_duration_seconds", v)
+                  }
+                  min={0.1}
+                  max={10}
+                  step={0.1}
+                />
+              )}
               <Select
                 label="Suavizado de bordes"
                 value={String(draft.render.antialias_samples)}

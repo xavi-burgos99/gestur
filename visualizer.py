@@ -20,6 +20,15 @@ from runtime_state import FrameMetrics
 from runtime_config import validate_model_orientation
 
 
+# One ambient and one directional light per preset; no shadow buffers or extra passes.
+MODEL_LIGHT_PRESETS = {
+    "soft": ((.68, .68, .68, 1), (.42, .42, .42, 1), (-35, 55, 0)),
+    "warm": ((.56, .50, .42, 1), (.65, .52, .36, 1), (-35, 55, 0)),
+    "cool": ((.42, .51, .61, 1), (.38, .54, .72, 1), (-35, 55, 0)),
+    "contrast": ((.45, .45, .45, 1), (.85, .85, .85, 1), (-55, 35, 0)),
+}
+
+
 def _usable_ipv4(address):
     try:
         ip = ipaddress.IPv4Address(address)
@@ -106,10 +115,15 @@ def _welcome_geometry():
 class ControlledObjViewer(ShowBase):
     def __init__(self, obj_path=None, *, target_fps=60, antialias_samples=2,
                  fullscreen=True, hide_cursor=True, show_fps=False,
-                 window_type=None, model_orientation=None):
+                 window_type=None, model_orientation=None, ambient_light="none"):
         # Configure before creating the context. Preserve geometry and textures.
         if antialias_samples not in (0, 2, 4):
             raise ValueError("antialias_samples debe ser 0, 2 o 4")
+        if ambient_light != "none" and ambient_light not in MODEL_LIGHT_PRESETS:
+            raise ValueError("Iluminación ambiental no válida")
+        self._ambient_light = ambient_light
+        self._model_light_root = None
+        self._idle_animation = False
         self._render_cadence = RenderCadence(target_fps)
         self.render_metrics = FrameMetrics()
         self._render_clock = time.monotonic
@@ -164,7 +178,8 @@ class ControlledObjViewer(ShowBase):
             self._draw_region = self.cam.node().get_display_region(0)
             self._draw_callback = PythonCallbackObject(self._record_draw)
             self._draw_region.set_draw_callback(self._draw_callback)
-        self.apply_settings(target_fps=target_fps, hide_cursor=hide_cursor)
+        self.apply_settings(target_fps=target_fps, hide_cursor=hide_cursor,
+                            ambient_light=ambient_light)
         # Panda's built-in FPS meter counts task ticks, including skipped draws.
         self.setFrameRateMeter(False)
         if show_fps:
@@ -179,7 +194,13 @@ class ControlledObjViewer(ShowBase):
             self.destroy()
             raise
 
-    def apply_settings(self, *, target_fps=60, hide_cursor=True):
+    def apply_settings(self, *, target_fps=60, hide_cursor=True, ambient_light=None):
+        if ambient_light is not None:
+            if ambient_light != "none" and ambient_light not in MODEL_LIGHT_PRESETS:
+                raise ValueError("Iluminación ambiental no válida")
+            if ambient_light != self._ambient_light:
+                self._ambient_light = ambient_light
+                self._apply_model_lighting()
         clock = ClockObject.get_global_clock()
         clock.set_mode(ClockObject.MLimited)
         clock.set_frame_rate(target_fps)
@@ -223,7 +244,8 @@ class ControlledObjViewer(ShowBase):
                 self._last_draw_size = size
                 self._layout_welcome()
                 self.invalidate(frames=2)
-            draw = self._render_cadence.due(now, welcome=self.welcome is not None)
+            draw = self._render_cadence.due(
+                now, welcome=self.welcome is not None or self._idle_animation)
             self.win.set_active(draw)
             if draw:
                 self._animate_welcome(task)
@@ -233,7 +255,11 @@ class ControlledObjViewer(ShowBase):
         return {**self.render_metrics.summary(),
                 "control_ticks": self._render_cadence.ticks,
                 "skipped_draws": self._render_cadence.skipped,
-                "mode": self._render_cadence.mode,
+                "mode": ("floating" if self._idle_animation and self._render_cadence.mode == "welcome"
+                         else self._render_cadence.mode),
+                "ambient_light": self._ambient_light,
+                "idle_animation": self._idle_animation,
+                "floating_fps_limit": min(self._render_cadence.target_fps, self._render_cadence.welcome_fps),
                 "idle_refresh_fps": min(self._render_cadence.target_fps, self._render_cadence.idle_fps),
                 "welcome_fps_limit": min(self._render_cadence.target_fps, self._render_cadence.welcome_fps)}
 
@@ -285,6 +311,7 @@ class ControlledObjViewer(ShowBase):
         self.model_basis = basis
         self.model_orientation = orientation
         self.model_path = str(path)
+        self._apply_model_lighting()
         if previous is not None:
             previous.remove_node()
         self._remove_welcome()
@@ -294,6 +321,44 @@ class ControlledObjViewer(ShowBase):
         # The scene owns its assets; avoid retaining previously selected models.
         self.loader.unloadModel(Filename.from_os_specific(str(path)))
         self.invalidate(frames=2)
+
+    def _clear_model_lighting(self):
+        if self.model is not None:
+            self.model.clear_light()
+        if self._model_light_root is not None:
+            self._model_light_root.remove_node()
+            self._model_light_root = None
+
+    def _apply_model_lighting(self):
+        self._clear_model_lighting()
+        if self.model is None or self._ambient_light == "none":
+            return
+        ambient_color, key_color, direction = MODEL_LIGHT_PRESETS[self._ambient_light]
+        # Keep light direction in exhibition space, independent of object gestures.
+        # Attach their state only to the displayed model, never the welcome scene.
+        self._model_light_root = self.render.attach_new_node("gestur-model-lighting")
+        ambient = AmbientLight("model-ambient")
+        ambient.set_color(ambient_color)
+        key = DirectionalLight("model-key")
+        key.set_color(key_color)
+        # Scan textures already contain highlights. Keep the display lights
+        # diffuse so imported zero-shininess materials do not produce white glare.
+        key.set_specular_color((0, 0, 0, 1))
+        key.set_shadow_caster(False)
+        ambient_node = self._model_light_root.attach_new_node(ambient)
+        key_node = self._model_light_root.attach_new_node(key)
+        key_node.set_hpr(*direction)
+        self.model.set_light(ambient_node)
+        self.model.set_light(key_node)
+        self.invalidate(frames=2)
+
+    def set_idle_animation(self, active):
+        """Limit decorative motion only; recognition and control ticks remain live."""
+        active = bool(active) and self.model is not None
+        if active != self._idle_animation:
+            self._idle_animation = active
+            # Also immediately wake both buffers when a person starts controlling.
+            self.invalidate(frames=2)
 
     @staticmethod
     def _orient_and_fit(basis, fit, orientation):
@@ -373,6 +438,8 @@ class ControlledObjViewer(ShowBase):
 
     def show_welcome(self):
         self.invalidate(frames=2)
+        self._idle_animation = False
+        self._clear_model_lighting()
         self._remove_model_error()
         if self.model is not None:
             self.model.remove_node()
@@ -488,7 +555,7 @@ class ControlledObjViewer(ShowBase):
                 setter(*value)
                 self.current_state[key] = value
                 changed = True
-        if changed:
+        if changed and not self._idle_animation:
             self.invalidate()
         return changed
 

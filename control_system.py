@@ -20,6 +20,30 @@ def _shortest_delta(target, current, period):
     return (target - current + period / 2) % period - period / 2
 
 
+_OUTPUT_CHANNELS = [(kind, axis) for kind in ("position", "rotation") for axis in range(3)] + [("scale", None)]
+
+
+def _neutral_output():
+    return {"position": [0.0, 0.0, 0.0], "rotation": [0.0, 0.0, 0.0], "scale": 1.0}
+
+
+def _copy_output(output):
+    return {"position": list(output["position"]), "rotation": list(output["rotation"]), "scale": output["scale"]}
+
+
+def _component(output, channel):
+    kind, axis = channel
+    return output[kind] if axis is None else output[kind][axis]
+
+
+def _set_component(output, channel, value):
+    kind, axis = channel
+    if axis is None:
+        output[kind] = value
+    else:
+        output[kind][axis] = value
+
+
 class Smoother(ABC):
     @abstractmethod
     def update(self, value, now=None):
@@ -94,6 +118,10 @@ class ExponentialSmoother(Smoother):
         self.has_data = False
         self.input_offset = 0.0
         self.last_update_time = self.clock()
+
+    def hold(self, now):
+        """Pause the filter without decaying its value or accumulating elapsed time."""
+        self.last_update_time = now
 
 
 class HybridRotationController:
@@ -215,6 +243,11 @@ class ControlMapping:
         self.output_applier = output_applier
         self.smoother = smoother
         self.enabled = enabled
+        self.output_key = None
+
+    def hold(self, now):
+        if self.smoother:
+            self.smoother.hold(now)
 
     def process(self, input_data, output_state, now=None):
         if not self.enabled:
@@ -238,6 +271,21 @@ class HybridRotationMapping:
         self.clock = clock
         self.last_real_detection_time = None
         self.reset_timeout_seconds = rotation_controller.reset_timeout_seconds
+        self.output_key = ("rotation", output_axis)
+
+    def hold(self, now):
+        if self.smoother:
+            self.smoother.hold(now)
+        self.rotation_controller.hold(now)
+
+    def adopt_rotation(self, output, now):
+        controller = self.rotation_controller
+        controller.current_rotation = output["rotation"][self.output_axis]
+        controller.continuous_rotation = controller.current_rotation
+        controller.is_resetting = False
+        controller._has_input = True
+        controller.hold(now)
+        self.last_real_detection_time = now
 
     def process(self, input_data, output_state, now=None):
         if not self.enabled:
@@ -258,10 +306,22 @@ class HybridRotationMapping:
 
 
 class ControlSystem:
-    def __init__(self, clock=time.monotonic):
+    def __init__(self, clock=time.monotonic, *, idle_mode="return", reset_timeout_seconds=3.0):
         self.mappings = []
         self.data_processor = DataProcessor()
         self.clock = clock
+        self.idle_mode = idle_mode
+        self.reset_timeout_seconds = reset_timeout_seconds
+        self._output = _neutral_output()
+        self._last_usable_input = clock()
+        self._missing = set()
+        self._recoveries = {}
+        self._adopt_recovery = None
+        self._float_origin = None
+        self._float_bob_start = 0.0
+        self._bob_offset = 0.0
+        self._bob_return = None
+        self._idle_active = False
 
     def add_mapping(self, mapping):
         self.mappings.append(mapping)
@@ -276,11 +336,131 @@ class ControlSystem:
 
     def process_input(self, pose_data):
         enriched = self._enrich_input_data(pose_data or {})
-        output = {"position": [0.0, 0.0, 0.0], "rotation": [0.0, 0.0, 0.0], "scale": 1.0}
         now = self.clock()
-        for mapping in self.mappings:
-            mapping.process(enriched, output, now=now)
+        enabled = [mapping for mapping in self.mappings if mapping.enabled]
+        usable = {mapping for mapping in enabled if _number(mapping.input_extractor(enriched)) is not None}
+        controls_vertical = any(mapping.output_key == ("position", 1) for mapping in usable)
+        if usable:
+            self._last_usable_input = now
+            if self._float_origin is not None:
+                self._bob_return = {"start": now, "from": self._bob_offset}
+            self._float_origin = None
+        elapsed = max(0.0, now - self._last_usable_input)
+        self._idle_active = not usable and (self.idle_mode == "hold" or elapsed >= self.reset_timeout_seconds)
+        if self.idle_mode == "return":
+            # Preserve the original per-mapping decay and delayed hybrid reset.
+            output = _neutral_output()
+            for mapping in enabled:
+                mapping.process(enriched, output, now=now)
+            if self._adopt_recovery:
+                self._blend_recovery(self._adopt_recovery, output, _OUTPUT_CHANNELS, now)
+                if self._adopt_recovery["finished"]:
+                    self._adopt_recovery = None
+        else:
+            output = _copy_output(self._output)
+            vertical_recovery = None
+            for mapping in enabled:
+                if mapping not in usable:
+                    mapping.hold(now)
+                    self._missing.add(mapping)
+                    self._recoveries.pop(mapping, None)
+                    continue
+                if mapping in self._missing:
+                    self._missing.remove(mapping)
+                    if isinstance(mapping, HybridRotationMapping):
+                        mapping.adopt_rotation(output, now)
+                    self._recoveries[mapping] = self._new_recovery(output, now)
+                    self._recoveries[mapping]["bob_offset"] = self._bob_offset
+                mapping.process(enriched, output, now=now)
+                recovery = self._recoveries.get(mapping)
+                if recovery:
+                    channels = [mapping.output_key] if mapping.output_key else _OUTPUT_CHANNELS
+                    self._blend_recovery(recovery, output, channels, now)
+                    if mapping.output_key == ("position", 1):
+                        vertical_recovery = recovery
+                    if recovery["finished"]:
+                        del self._recoveries[mapping]
+            if controls_vertical:
+                # The interpolated visible Y contains the starting decoration
+                # in proportion to (1-weight). Keep that part separate from
+                # genuine gesture movement if tracking disappears again early.
+                self._bob_offset = (vertical_recovery["bob_offset"] * (1 - vertical_recovery["weight"])
+                                    if vertical_recovery else 0.0)
+                self._bob_return = None
+            elif self._bob_offset and self._bob_return is None and self._float_origin is None:
+                self._bob_return = {"start": now, "from": self._bob_offset}
+            if self._bob_return is not None:
+                # Decoration is an offset, not a new gesture position. Remove
+                # it smoothly when tracking returns so repeated idle episodes
+                # cannot progressively move an unmapped axis off screen.
+                progress = _clamp((now - self._bob_return["start"]) / .6, 0.0, 1.0)
+                weight = progress * progress * (3 - 2 * progress)
+                baseline = output["position"][1] - self._bob_offset
+                self._bob_offset = self._bob_return["from"] * (1 - weight)
+                output["position"][1] = baseline + self._bob_offset
+                if progress >= 1:
+                    self._bob_return = None
+            if self.idle_mode == "float" and self._idle_active:
+                if self._float_origin is None:
+                    self._float_origin = _copy_output(output)
+                    self._float_origin["position"][1] -= self._bob_offset
+                    self._float_bob_start = self._bob_offset
+                    self._bob_return = None
+                phase = max(0.0, elapsed - self.reset_timeout_seconds)
+                # Ease in from rest. Angle and displacement stay bounded even
+                # after days of idle operation; no frame-rate integration.
+                turn = 7.0 * (phase - 1.0 + math.exp(-phase))
+                output["rotation"][2] = self._float_origin["rotation"][2] + turn % 360.0
+                self._bob_offset = (self._float_bob_start * math.exp(-phase)
+                                    + .12 * (1 - math.exp(-phase)) * math.sin(phase * .7))
+                output["position"][1] = self._float_origin["position"][1] + self._bob_offset
+        self._output = _copy_output(output)
         return output
+
+    @staticmethod
+    def _new_recovery(output, now):
+        return {"start": now, "output": _copy_output(output), "targets": {}, "duration": None, "finished": False}
+
+    @staticmethod
+    def _blend_recovery(recovery, output, channels, now):
+        targets = recovery["targets"]
+        longest_turn = 0.0
+        for channel in channels:
+            start = _component(recovery["output"], channel)
+            target = _component(output, channel)
+            if channel[0] == "rotation":
+                previous = targets.get(channel, start)
+                target = previous + _shortest_delta(target, previous, 360.0)
+                longest_turn = max(longest_turn, abs(target - start))
+            targets[channel] = target
+        if recovery["duration"] is None:
+            recovery["duration"] = max(.35, longest_turn / 90.0)
+        progress = _clamp((now - recovery["start"]) / recovery["duration"], 0.0, 1.0)
+        weight = progress * progress * (3.0 - 2.0 * progress)
+        recovery["weight"] = weight
+        for channel in channels:
+            start = _component(recovery["output"], channel)
+            _set_component(output, channel, start + (targets[channel] - start) * weight)
+        recovery["finished"] = progress >= 1.0
+
+    def adopt_output_state(self, previous):
+        """Carry the visible pose across a settings change without sharing filters."""
+        output = _copy_output(previous if isinstance(previous, dict) else previous._output)
+        now = self.clock()
+        self._output = output
+        self._last_usable_input = now
+        self._float_origin = None
+        self._bob_offset = 0.0
+        self._bob_return = None
+        self._missing = set(self.mappings)
+        self._recoveries.clear()
+        self._adopt_recovery = self._new_recovery(output, now) if self.idle_mode == "return" else None
+        for mapping in self.mappings:
+            if isinstance(mapping, HybridRotationMapping):
+                mapping.adopt_rotation(output, now)
+
+    def get_idle_status(self):
+        return {"mode": self.idle_mode, "active": self._idle_active}
 
     def _enrich_input_data(self, pose_data):
         enriched = pose_data.copy()
@@ -384,7 +564,8 @@ def create_control_system(config=None, clock=time.monotonic):
     from runtime_config import default_config, validate_config
     config = validate_config(default_config() if config is None else config)
     controls = config["controls"]
-    system = ControlSystem(clock=clock)
+    system = ControlSystem(clock=clock, idle_mode=controls.get("idle_mode", "return"),
+                           reset_timeout_seconds=controls["reset_timeout_seconds"])
     extractors = create_extractors()
     appliers = create_appliers(clock=clock)
     axes = {"rotation_yaw": 0, "rotation_pitch": 1, "rotation_roll": 2}
@@ -431,6 +612,9 @@ def create_control_system(config=None, clock=time.monotonic):
                     value = spec["center"] if value is None else value
                     output["scale"] = _clamp(1.0 + (value - spec["center"]) * spec["scale"] * (-1 if spec["invert"] else 1), 0.1, 5.0)
             mapping = ControlMapping(spec["id"], extractors[spec["input"]], apply, smoother, spec["enabled"])
+            mapping.output_key = (("rotation", axes[spec["output"]]) if spec["output"] in axes else
+                                  ("position", "xyz".index(spec["output"][-1])) if spec["output"].startswith("position_") else
+                                  ("scale", None))
         system.add_mapping(mapping)
     return system
 

@@ -204,12 +204,14 @@ test("runtime status reports stale/absent viewer without claiming active renderi
       selected_model: "capitell.obj",
       rendered_model: "capitell.obj",
       rendered_orientation: { x: 90, y: 0, z: 270 },
+      idle: { mode: "float", active: true },
       error: null,
     }),
   );
   const runtime = (await request("GET", "runtime")).json();
   assert.equal(runtime.online, true);
   assert.deepEqual(runtime.rendered_orientation, { x: 90, y: 0, z: 270 });
+  assert.deepEqual(runtime.idle, { mode: "float", active: true });
   await writeFile(
     path.join(folder, "runtime-status.json"),
     JSON.stringify({
@@ -472,5 +474,47 @@ test("pending imports prevent destructive model management until the import fini
   assert.equal(
     (await request("PATCH", "models", { id, name: "Ready" })).statusCode,
     200,
+  );
+});
+
+test("lighting and standby settings round-trip through API and legacy requests keep defaults", async (t) => {
+  const { request, folder } = await fixture(t);
+  const initial = (await request("GET", "config")).json();
+  assert.equal(initial.defaults.render.ambient_light, "none");
+  assert.equal(initial.defaults.controls.idle_mode, "return");
+  const config = initial.config;
+  config.controls.smoothing_ms = 123;
+  for (const light of ["none", "soft", "warm", "cool", "contrast"]) {
+    for (const mode of ["hold", "return", "float"]) {
+      config.render.ambient_light = light;
+      config.controls.idle_mode = mode;
+      const saved = await request("PUT", "config", config);
+      assert.equal(saved.statusCode, 200, saved.body);
+      assert.deepEqual(saved.json().config, config);
+      assert.deepEqual((await request("GET", "config")).json().config, config);
+    }
+  }
+  for (const [section, field] of [
+    ["render", "ambient_light"],
+    ["controls", "idle_mode"],
+  ]) {
+    for (const value of [null, "automatic", 1]) {
+      const invalid = structuredClone(config);
+      invalid[section][field] = value;
+      assert.equal((await request("PUT", "config", invalid)).statusCode, 400);
+      assert.deepEqual((await request("GET", "config")).json().config, config);
+    }
+  }
+  delete config.render.ambient_light;
+  delete config.controls.idle_mode;
+  const migrated = await request("PUT", "config", config);
+  assert.equal(migrated.statusCode, 200);
+  const expected = structuredClone(config);
+  expected.render.ambient_light = "none";
+  expected.controls.idle_mode = "return";
+  assert.deepEqual(migrated.json().config, expected);
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(folder, "config.json"), "utf8")),
+    expected,
   );
 });

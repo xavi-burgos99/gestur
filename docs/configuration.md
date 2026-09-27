@@ -17,8 +17,29 @@ corrección es independiente de las rotaciones asignadas a gestos.
 - Manos desactivadas de inicio para reducir el trabajo. Activarlas permite usar posición, orientación de la palma, apertura y pinza.
 - Renderizado: 60 FPS como objetivo, antialiasing MSAA de 2 muestras, pantalla completa y cursor oculto. Son objetivos configurables; el rendimiento real depende del modelo, la cámara y la Raspberry Pi.
 - Suavizado del seguimiento: 60 ms. Suavizado de los controles: 90 ms; el zoom usa un tercio para conservar su respuesta más rápida.
+- Luz ambiente: **Ninguna**. Modo de espera: **Volver a origen**.
 
 Los cambios de controles se aplican al recargar la configuración. Los ajustes de cámara y seguimiento reemplazan el tracker en segundo plano, manteniendo el visor disponible. Pantalla completa y MSAA recrean la ventana mediante reinicio. Un archivo inválido se rechaza y el proceso en marcha conserva la última configuración válida.
+
+## Luz ambiente y modo de espera
+
+`render.ambient_light` elige la iluminación del modelo: `none` (Ninguna),
+`soft` (Suave), `warm` (Cálida), `cool` (Fría) o `contrast` (Contraste).
+Ninguna conserva el aspecto original sin iluminación añadida. Los presets se
+aplican al guardar, sin recargar el modelo, modificar sus texturas ni añadir
+sombras. La iluminación de la pantalla de bienvenida es independiente.
+
+`controls.idle_mode` define qué ocurre cuando faltan los gestos activos:
+
+- `hold` — **Mantener posición**: conserva posición, rotación y tamaño.
+- `return` — **Volver a origen**: mantiene el comportamiento de retorno anterior.
+- `float` — **Flotante**: tras el tiempo de espera, gira y oscila suavemente;
+  al detectar de nuevo un gesto, recupera el control con una transición.
+
+`reset_timeout_seconds` controla el tiempo de espera; `reset_duration_seconds`
+conserva la duración del regreso a origen. La orientación fija guardada para el
+modelo se mantiene en todos los modos. Los archivos de configuración anteriores
+reciben Ninguna y Volver a origen sin alterar el resto de sus ajustes.
 
 ## Asignaciones de movimientos
 

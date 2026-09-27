@@ -175,3 +175,41 @@ def test_real_buffer_resize_wakes_an_idle_renderer(offscreen_viewer):
     shot = viewer.win.get_screenshot()
     assert (shot.get_x_size(), shot.get_y_size()) == (640, 360)
     assert len(set(bytes(shot.get_ram_image()))) > 10
+
+
+def test_floating_draws_thirty_fps_without_slowing_controls_and_wakes_immediately(offscreen_viewer):
+    viewer, step, _ = offscreen_viewer
+    viewer.set_idle_animation(True)
+    for frame in range(60):
+        viewer.update_model(rotation=[frame * .2, 0, 0])
+        step()
+    report = viewer.get_render_status()
+    assert report["control_ticks"] == 60
+    assert 30 <= report["frames"] <= 32
+    assert report["skipped_draws"] == 60 - report["frames"]
+    assert report["mode"] == "floating"
+    before = viewer.render_metrics.frames
+    viewer.set_idle_animation(False)
+    viewer.update_model(rotation=[40, 0, 0])
+    step()
+    assert viewer.win.is_active()
+    assert viewer.render_metrics.frames == before + 1
+    assert not viewer.get_render_status()["idle_animation"]
+
+
+def test_lighting_can_return_to_identical_unlit_framebuffer(offscreen_viewer):
+    viewer, step, _ = offscreen_viewer
+    step()
+    step()
+    unlit = framebuffer(viewer)
+    lit_frames = []
+    for preset in ("soft", "warm", "cool", "contrast"):
+        viewer.apply_settings(ambient_light=preset)
+        step()
+        step()
+        lit_frames.append(framebuffer(viewer))
+    assert any(image != unlit for image in lit_frames)
+    viewer.apply_settings(ambient_light="none")
+    step()
+    step()
+    assert framebuffer(viewer) == unlit

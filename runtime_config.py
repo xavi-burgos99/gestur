@@ -91,6 +91,14 @@ def validate_config(config):
     The extra relationships below are also enforced by the portal; JSON Schema
     alone cannot express comparisons between two property values.
     """
+    config = copy.deepcopy(config)
+    # Version 1 predates these optional behaviors. Only absent fields migrate;
+    # explicitly invalid values must still fail instead of silently resetting.
+    if isinstance(config, dict) and config.get("schema_version") == 1:
+        for section, key, value in (("render", "ambient_light", "none"),
+                                    ("controls", "idle_mode", "return")):
+            if isinstance(config.get(section), dict):
+                config[section].setdefault(key, value)
     schema = json.loads((CONFIG_DIR / "schema.json").read_text(encoding="utf-8"))
     _validate(config, schema)
     ids = set()
@@ -111,7 +119,7 @@ def validate_config(config):
                 raise ConfigurationError(f"{mapping['id']}: small_scale cannot exceed large_scale")
             if not 0 <= mapping["threshold"] - mapping["hysteresis"] <= mapping["threshold"] + mapping["hysteresis"] <= 1:
                 raise ConfigurationError(f"{mapping['id']}: threshold and hysteresis must stay within [0, 1]")
-    return copy.deepcopy(config)
+    return config
 
 
 def load_config(path=None):

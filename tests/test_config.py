@@ -16,6 +16,57 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(original["tracking"]["use_hands"])
         self.assertFalse(default_config()["tracking"]["use_hands"])
         self.assertIsNone(default_config()["active_model"])
+        self.assertEqual(default_config()["render"]["ambient_light"], "none")
+        self.assertEqual(default_config()["controls"]["idle_mode"], "return")
+
+    def test_legacy_v1_lighting_and_idle_defaults_preserve_user_parameters(self):
+        legacy = default_config()
+        del legacy["render"]["ambient_light"]
+        del legacy["controls"]["idle_mode"]
+        legacy["render"]["target_fps"] = 30
+        legacy["controls"]["smoothing_ms"] = 237
+        legacy["controls"]["mappings"][0]["scale"] = 44
+        legacy["tracking"]["use_hands"] = True
+        snapshot = json.loads(json.dumps(legacy))
+        migrated = validate_config(legacy)
+        expected = json.loads(json.dumps(legacy))
+        expected["render"]["ambient_light"] = "none"
+        expected["controls"]["idle_mode"] = "return"
+        self.assertEqual(migrated, expected)
+        self.assertEqual(legacy, snapshot)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(json.dumps(legacy), encoding="utf-8")
+            self.assertEqual(load_config(path), expected)
+            save_config(load_config(path), path)
+            self.assertEqual(json.loads(path.read_text()), expected)
+        # Partial migration must retain a deliberately selected preset/mode.
+        legacy["render"]["ambient_light"] = "warm"
+        self.assertEqual(validate_config(legacy)["render"]["ambient_light"], "warm")
+        del legacy["render"]["ambient_light"]
+        legacy["controls"]["idle_mode"] = "hold"
+        self.assertEqual(validate_config(legacy)["controls"]["idle_mode"], "hold")
+
+    def test_lighting_and_idle_modes_validate_and_round_trip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            for light in ("none", "soft", "warm", "cool", "contrast"):
+                for mode in ("hold", "return", "float"):
+                    with self.subTest(light=light, mode=mode):
+                        config = default_config()
+                        config["render"]["ambient_light"] = light
+                        config["controls"]["idle_mode"] = mode
+                        save_config(config, path)
+                        self.assertEqual(load_config(path), config)
+            valid_bytes = path.read_bytes()
+            for section, field in (("render", "ambient_light"), ("controls", "idle_mode")):
+                for value in (None, "", "automatic", 1, False, [], {}):
+                    with self.subTest(field=field, value=value):
+                        config = default_config()
+                        config[section][field] = value
+                        with self.assertRaises(ConfigurationError):
+                            save_config(config, path)
+                        self.assertEqual(path.read_bytes(), valid_bytes)
 
     def test_missing_file_uses_defaults(self):
         with tempfile.TemporaryDirectory() as directory:

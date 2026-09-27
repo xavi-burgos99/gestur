@@ -16,9 +16,11 @@
     "target_fps": 60,
     "antialias_samples": 2,
     "fullscreen": true,
-    "hide_cursor": true
+    "hide_cursor": true,
+    "ambient_light": "none"
   },
   "controls": {
+    "idle_mode": "return",
     "smoothing_ms": 90,
     "reset_timeout_seconds": 3,
     "reset_duration_seconds": 1,

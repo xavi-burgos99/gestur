@@ -62,6 +62,103 @@ def test_world_palm_rotation_survives_non_square_image(axis, field, angle):
     assert features[field] == pytest.approx(angle if axis == 'x' else -angle)
 
 
+def rigid_orientation(points, pitch, yaw, roll):
+    """Apply the documented Rz(roll) @ Ry(-yaw) @ Rx(pitch) convention."""
+    return rotate(rotate(rotate(points, 'x', pitch), 'y', -yaw), 'z', roll)
+
+
+@pytest.mark.parametrize('pitch,yaw,roll', [
+    (0, 0, 0), (40, 0, 0), (0, -50, 0), (0, 0, 120),
+    (35, 45, 60), (-45, 35, -100), (70, -55, 160),
+    (-120, 70, -175), (12, 89, 30), (-40, -89, -120),
+])
+@pytest.mark.parametrize('label', ['Left', 'Right'])
+def test_palm_frame_separates_all_three_axes_for_rigid_rotations(pitch, yaw, roll, label):
+    world = hand()
+    if label == 'Left':
+        world = [point(-p.x, p.y, p.z) for p in world]
+    world = rigid_orientation(world, pitch, yaw, roll)
+    normalized = [point(p.x / 2 + .5, p.y + .5, p.z) for p in world]
+    features = hand_features(normalized, world, label, aspect=2)
+    assert features['detected']
+    assert [features[name] for name in ('pitch', 'yaw', 'roll')] == pytest.approx([pitch, yaw, roll])
+    assert features['gesture'] == 'open'
+
+
+def test_mirror_and_model_handedness_have_consistent_orientation_signs():
+    world = rigid_orientation(hand(), 30, 45, 50)
+    original = hand_features(world, world, 'Right', aspect=1)
+    mirrored = [point(-p.x, p.y, p.z) for p in world]
+    changed = hand_features(mirrored, mirrored, 'Left', aspect=1)
+    assert changed['pitch'] == pytest.approx(original['pitch'])
+    for field in ('yaw', 'roll', 'rotation'):
+        assert changed[field] == pytest.approx(-original[field])
+    assert changed['pinch'] == pytest.approx(original['pinch'])
+
+
+def test_knuckle_skew_along_fingers_does_not_change_palm_frame():
+    world = hand()
+    world[17].y -= .01
+    world = rigid_orientation(world, 35, 40, -60)
+    features = hand_features(world, world, 'Right', aspect=1)
+    assert [features[name] for name in ('pitch', 'yaw', 'roll')] == pytest.approx([35, 40, -60])
+
+
+@pytest.mark.parametrize('yaw', [-90, 90])
+def test_edge_on_palm_uses_reproducible_euler_singularity_convention(yaw):
+    pitch, roll = 30, 20
+    world = rigid_orientation(hand(), pitch, yaw, roll)
+    features = hand_features(world, world, 'Right', aspect=1)
+    assert features['detected']
+    assert features['yaw'] == pytest.approx(yaw)
+    assert features['roll'] == 0
+    expected_pitch = pitch + (roll if yaw > 0 else -roll)
+    assert features['pitch'] == pytest.approx(expected_pitch)
+    recovered = rigid_orientation(hand(), features['pitch'], features['yaw'], features['roll'])
+    for actual, expected in zip(recovered, world):
+        assert (actual.x, actual.y, actual.z) == pytest.approx((expected.x, expected.y, expected.z))
+
+
+def test_fingers_toward_camera_only_invalidate_the_projected_rotation():
+    world = rigid_orientation(hand(), 90, 0, 0)
+    features = hand_features(world, world, 'Right', aspect=1)
+    assert features['detected']
+    assert features['pitch'] == pytest.approx(90)
+    assert features['yaw'] == pytest.approx(0)
+    assert features['roll'] == pytest.approx(0)
+    assert features['rotation'] is None
+    assert features['gesture'] == 'open'
+    assert features['pinch'] is not None
+
+
+def test_image_rotation_keeps_legacy_behavior_and_is_distinct_from_3d_roll():
+    world = rigid_orientation(hand(), 45, 50, 30)
+    features = hand_features(world, world, 'Right', aspect=1)
+    dx, dy = world[9].x - world[0].x, world[9].y - world[0].y
+    assert features['rotation'] == pytest.approx(math.degrees(math.atan2(dx, -dy)))
+    assert features['roll'] == pytest.approx(30)
+    assert abs(features['rotation'] - features['roll']) > 20
+
+
+def test_nearly_collinear_palm_and_unknown_handedness_are_rejected():
+    world = hand()
+    world[5], world[17] = point(0, -.03), point(1e-8, -.09)
+    assert not hand_features(world, world, 'Right', aspect=1)['detected']
+    assert not hand_features(hand(), hand(), 'Unknown', aspect=1)['detected']
+
+
+def test_3d_roll_smoothing_crosses_wrap_without_neutral_sample_then_clears_loss():
+    state = TrackingFilter(smoothing_time=.1)
+    first = rotate(hand(), 'z', 179)
+    second = rotate(hand(), 'z', -179)
+    state.update('right_hand', hand_features(first, first, 'Right', 1), 1)
+    state.update('right_hand', hand_features(second, second, 'Right', 1), 1.1)
+    assert abs(state.snapshot()['right_hand']['roll']) > 179
+    state.update('right_hand', empty_part(hand=True), 1.2)
+    assert state.snapshot()['right_hand']['roll'] is None
+    assert state.snapshot()['right_hand']['detected'] is False
+
+
 def test_pinch_is_scale_and_rotation_invariant():
     world = hand()
     world[4] = point(world[8].x+.001,world[8].y,world[8].z)

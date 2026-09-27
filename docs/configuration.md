@@ -13,7 +13,7 @@ La configuración completa contiene `active_model`, `tracking`, `render` y `cont
 - Renderizado: 60 FPS como objetivo, antialiasing MSAA de 2 muestras, pantalla completa y cursor oculto. Son objetivos configurables; el rendimiento real depende del modelo, la cámara y la Raspberry Pi.
 - Suavizado del seguimiento: 60 ms. Suavizado de los controles: 90 ms; el zoom usa un tercio para conservar su respuesta más rápida.
 
-Los cambios de controles se aplican al recargar la configuración. Los ajustes de cámara, seguimiento y creación de la ventana requieren reiniciar el visor; el controlador solicita el reinicio al servicio. Un archivo inválido se rechaza y el proceso en marcha conserva la última configuración válida.
+Los cambios de controles se aplican al recargar la configuración. Los ajustes de cámara y seguimiento reemplazan el tracker en segundo plano, manteniendo el visor disponible. Pantalla completa y MSAA recrean la ventana mediante reinicio. Un archivo inválido se rechaza y el proceso en marcha conserva la última configuración válida.
 
 ## Asignaciones de movimientos
 
@@ -28,6 +28,7 @@ Los cambios de controles se aplican al recargar la configuración. Los ajustes d
 | `left_hand_rotation`, `right_hand_rotation` | Orientación de la palma en la imagen; 0° hacia arriba, +90° hacia la derecha. Se normaliza internamente a 0–1 y se suaviza por el ángulo más corto |
 | `left_hand_pitch`, `right_hand_pitch` | Inclinación de la mano calculada con las coordenadas 3D del modelo; grados normalizados a 0–1, con suavizado angular |
 | `left_hand_yaw`, `right_hand_yaw` | Giro lateral de la mano calculado con las coordenadas 3D del modelo; grados normalizados a 0–1, con suavizado angular |
+| `left_hand_roll`, `right_hand_roll` | Tercer giro del marco 3D de la palma, separado del giro de imagen `rotation`; grados normalizados a 0–1 |
 | `left_hand_pinch`, `right_hand_pinch` | Distancia pulgar–índice dividida por el ancho de la palma: 0 es contacto, 1 es una apertura de al menos un ancho de palma |
 
 Las salidas `rotation_yaw`, `rotation_pitch` y `rotation_roll` corresponden a los tres canales de rotación que ya usaba el visor. `position_x`, `position_y` y `position_z` desplazan el objeto. `scale_uniform` cambia su escala.

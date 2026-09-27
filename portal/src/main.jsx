@@ -66,6 +66,8 @@ const inputs = {
   right_hand_yaw: "Mano derecha · giro lateral",
   left_hand_rotation: "Mano izquierda · giro",
   right_hand_rotation: "Mano derecha · giro",
+  left_hand_roll: "Mano izquierda · giro 3D",
+  right_hand_roll: "Mano derecha · giro 3D",
   left_hand_pinch: "Mano izquierda · pinza",
   right_hand_pinch: "Mano derecha · pinza",
 };

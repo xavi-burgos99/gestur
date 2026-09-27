@@ -90,6 +90,21 @@ class ConfigTests(unittest.TestCase):
                 save_config({}, path)
             self.assertEqual(json.loads(path.read_text()), default_config())
 
+    def test_true_hand_roll_can_be_saved_and_reloaded_independently_of_projection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            save_config(default_config(), path)
+            reloader = ConfigReloader(path)
+            config = default_config()
+            config["controls"]["mappings"] = [
+                {"id": side, "input": f"{side}_hand_roll", "output": output,
+                 "mode": "absolute", "enabled": True, "scale": 180, "center": .5, "invert": False}
+                for side, output in (("left", "rotation_roll"), ("right", "rotation_yaw"))
+            ]
+            save_config(config, path)
+            self.assertEqual(reloader.reload_if_changed(), config)
+            self.assertEqual(load_config(path), config)
+
 
 if __name__ == "__main__":
     unittest.main()

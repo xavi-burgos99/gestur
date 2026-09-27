@@ -140,40 +140,37 @@ def test_real_viewer_empty_model_empty_transitions_preserve_imported_texture(tmp
 
 def tracking_controller():
     from controller import PoseController
+    from runtime_config import default_config
+    from tracking_session import TrackingSession
     app = PoseController.__new__(PoseController)
+    app.config = default_config()
     app.no_camera = False
     app.rendered_model = None
-    app.pose_tracker = None
     app.mailbox = LatestPose()
+    app.tracking_session = TrackingSession(app.mailbox.publish,
+        factory=lambda settings: pytest.fail("empty viewer must not use camera"))
     app.model_error = None
     app.tracking_error = None
     app.config_error = None
-    app._next_camera_attempt = 0
     return app
 
 
 def test_no_model_never_initializes_camera_or_tracking(monkeypatch):
     app = tracking_controller()
-    app._init_pose_tracker = lambda: pytest.fail("empty viewer must not use camera")
     app._sync_tracking(100)
-    assert app.pose_tracker is None
+    assert app.tracking_session.snapshot()['state'] == 'stopped'
     assert app.last_error is None
 
 
-def test_camera_failure_keeps_viewer_available_and_retries_with_backoff():
+def test_controller_reports_async_camera_error_and_clears_it_when_model_removed():
     app = tracking_controller()
     app.rendered_model = "package/model.glb"
-    attempts = []
-    def fail_camera():
-        attempts.append(True)
-        raise RuntimeError("camera disconnected")
-    app._init_pose_tracker = fail_camera
+    errors = ['No se pudo iniciar el seguimiento: camera disconnected']
+    app.tracking_session = SimpleNamespace(
+        request=lambda settings: errors.__setitem__(0, errors[0] if settings else None),
+        snapshot=lambda: {'error': errors[0]})
     app._sync_tracking(100)
     assert app.last_error == "No se pudo iniciar el seguimiento: camera disconnected"
-    app._sync_tracking(101)
-    assert len(attempts) == 1
-    app._sync_tracking(115)
-    assert len(attempts) == 2
     app.rendered_model = None
     app._sync_tracking(116)
     assert app.last_error is None
@@ -246,13 +243,16 @@ def test_live_selection_missing_model_and_clear_return_to_welcome(tmp_path, monk
 
 def test_empty_scene_stops_camera_and_preserves_invalid_config_error():
     app = tracking_controller()
-    stopped = []
-    app.pose_tracker = SimpleNamespace(stop=lambda: stopped.append(True))
+    requests = []
+    def request(settings):
+        requests.append(settings)
+        app.mailbox.publish({})
+    app.tracking_session = SimpleNamespace(request=request, snapshot=lambda: {'error': None})
     app.mailbox.publish({"head": {"detected": True}})
     app.config_error = "Invalid JSON"
     app._sync_tracking(100)
-    assert stopped == [True]
-    assert app.pose_tracker is None and app.mailbox.read() == {}
+    assert requests == [None]
+    assert app.mailbox.read() == {}
     assert app.last_error == "Invalid JSON"
 
 
@@ -261,6 +261,7 @@ def test_config_restart_exits_without_starting_camera_during_shutdown():
     from control_system import create_default_control_system
     app = PoseController.__new__(PoseController)
     app.metrics = FrameMetrics()
+    app.device_metrics = SimpleNamespace(sample=lambda: {})
     app.mailbox = LatestPose()
     app.control_system = create_default_control_system()
     app.visualizer = SimpleNamespace(update_model=lambda **kwargs: None)
@@ -273,6 +274,25 @@ def test_config_restart_exits_without_starting_camera_during_shutdown():
     app._write_status = lambda: None
     assert app._render_tick(SimpleNamespace(cont="cont")) == "cont"
     assert app.exit_code == 42
+
+
+def test_cleanup_does_not_recreate_window_in_process_with_unreleased_camera():
+    from controller import PoseController, RESTART_REQUESTED
+    from runtime_config import default_config
+    app = PoseController.__new__(PoseController)
+    app._cleaned = False
+    app.exit_code = RESTART_REQUESTED
+    app.tracking_session = SimpleNamespace(close=lambda: False, snapshot=lambda: {'state': 'stopping'})
+    app.visualizer = SimpleNamespace(render_metrics=FrameMetrics(), model_path=None,
+        get_render_status=lambda: {}, destroy=lambda: None)
+    app.metrics = FrameMetrics()
+    app._hardware = {}
+    app.config = default_config()
+    app.no_camera = False
+    app.metrics_path = None
+    app.benchmark_seconds = 0
+    app.cleanup()
+    assert app.exit_code == 1  # Kiosk must restart the process, releasing driver state.
 
 
 def test_portal_url_prefers_access_point_over_lan(monkeypatch):

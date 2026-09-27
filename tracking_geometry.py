@@ -140,7 +140,9 @@ def pose_features(normalized, world, visibility_threshold=.5, aspect=4/3,
 
 def hand_features(normalized, world, label, aspect=4/3):
     result = empty_part(hand=True)
-    if not (landmarks_valid(normalized, range(21)) and landmarks_valid(world, range(21))):
+    if (label not in ('Left', 'Right') or not math.isfinite(aspect) or aspect <= 0
+            or not landmarks_valid(normalized, range(21))
+            or not landmarks_valid(world, range(21))):
         return result
     points = [xyz(p) for p in world]
     up = unit(sub(points[9], points[0]))
@@ -149,15 +151,41 @@ def hand_features(normalized, world, label, aspect=4/3):
     # this geometry describes the image passed to the network.
     if label == 'Left':
         across = tuple(-v for v in across)
-    normal = unit(cross(across, up)) if up else None
     palm_width = length(sub(points[5], points[17]))
-    if normal is None or palm_width < 1e-5:
+    if up is None or palm_width < 1e-5:
         return result
+    # Gram-Schmidt separates finger direction from the knuckle line. Simply
+    # taking two atan2 angles of the palm normal couples pitch and yaw when the
+    # wrist also rolls. A complete orthogonal frame retains that third axis.
+    along_fingers = dot(across, up)
+    orthogonal = tuple(across[i] - along_fingers * up[i] for i in range(3))
+    if length(orthogonal) / palm_width < 1e-3:
+        return result  # Nearly collinear landmarks cannot define a palm plane.
+    right = unit(orthogonal)
+    if right is None:
+        return result
+    down = tuple(-v for v in up)
+    away = cross(right, down)
+    # Columns [right, down, away] form a camera-space rotation matrix. Neutral
+    # means fingers up and palm facing the camera. Euler order is
+    # Rz(roll) @ Ry(-yaw) @ Rx(pitch), preserving the previous single-axis signs.
+    horizontal = math.hypot(right[0], right[1])
+    yaw = math.atan2(right[2], horizontal)
+    if horizontal > 1e-6:
+        pitch = math.atan2(down[2], away[2])
+        roll = math.atan2(right[1], right[0])
+    else:
+        # At yaw +/-90 degrees, pitch and roll are not independently observable
+        # in this Euler convention. Choose roll=0 while retaining the same frame.
+        pitch = math.atan2(-away[1], down[1])
+        roll = 0.0
     image_dx = (normalized[9].x - normalized[0].x) * aspect
     image_dy = normalized[9].y - normalized[0].y
-    if math.hypot(image_dx, image_dy) < 1e-6:
-        return result
-    rotation = wrap_angle(math.degrees(math.atan2(image_dx, -image_dy)))
+    # Existing *_hand_rotation controls use the on-screen wrist-to-middle line.
+    # Keep that contract separate from 3D roll. If fingers point into the camera,
+    # only this projected angle is undefined; pinch and 3D orientation remain valid.
+    rotation = (wrap_angle(math.degrees(math.atan2(image_dx, -image_dy)))
+                if math.hypot(image_dx, image_dy) >= 1e-6 else None)
     pinch = clamp(length(sub(points[4], points[8])) / palm_width)
     extended = 0
     for mcp, pip, dip, tip in ((5,6,7,8), (9,10,11,12), (13,14,15,16), (17,18,19,20)):
@@ -168,9 +196,9 @@ def hand_features(normalized, world, label, aspect=4/3):
     openness = extended / 4.0
     gesture = 'pinch' if pinch < .25 else 'open' if extended >= 3 else 'fist' if extended == 0 else 'unknown'
     result.update(detected=True, x=normalized[0].x, y=normalized[0].y,
-        pitch=wrap_angle(math.degrees(math.atan2(normal[1], -normal[2]))),
-        yaw=wrap_angle(math.degrees(math.atan2(normal[0], -normal[2]))),
-        roll=rotation, rotation=rotation, pinch=pinch, openness=openness, gesture=gesture)
+        pitch=wrap_angle(math.degrees(pitch)), yaw=wrap_angle(math.degrees(yaw)),
+        roll=wrap_angle(math.degrees(roll)), rotation=rotation,
+        pinch=pinch, openness=openness, gesture=gesture)
     return result
 
 

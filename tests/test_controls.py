@@ -164,6 +164,87 @@ class ControlTests(unittest.TestCase):
         result = system.process_input(head(x=float("nan"), y=float("inf")))
         self.assertTrue(all(math.isfinite(value) for value in result["rotation"]))
 
+    def test_angular_loss_returns_to_real_neutral_for_each_sensitivity(self):
+        for scale in (30, 70, 90, 180):
+            for invert in (False, True):
+                with self.subTest(scale=scale, invert=invert):
+                    clock = Clock()
+                    config = default_config()
+                    config["controls"]["mappings"] = [{"id": "palm", "input": "left_hand_rotation",
+                        "output": "rotation_roll", "mode": "absolute", "enabled": True,
+                        "scale": scale, "invert": invert, "center": .5}]
+                    system = create_control_system(config, clock)
+                    system.process_input({"left_hand": {"detected": True, "rotation": 179}})
+                    for _ in range(10):
+                        clock.advance(.05)
+                        previous = system.process_input({"left_hand": {"detected": True, "rotation": -179}})["rotation"][2]
+                    target = previous + (0 - previous + 180) % 360 - 180
+                    clock.advance(5)
+                    neutral = system.process_input({})["rotation"][2]
+                    self.assertAlmostEqual(neutral, target)
+                    clock.advance(.1)
+                    system.process_input({})
+                    clock.advance(.1)
+                    acquired = system.process_input({"left_hand": {"detected": True, "rotation": 0}})["rotation"][2]
+                    self.assertAlmostEqual(acquired, neutral)
+
+    def test_angular_reacquisition_preserves_completed_turns_with_nondivisor_sensitivity(self):
+        clock = Clock()
+        config = default_config()
+        config["controls"]["smoothing_ms"] = 0
+        config["controls"]["mappings"] = [{"id": "palm", "input": "right_hand_roll",
+            "output": "rotation_roll", "mode": "absolute", "enabled": True,
+            "scale": 70, "invert": False, "center": .5}]
+        system = create_control_system(config, clock)
+        for angle in [0, 90, 179, -90] * 8 + [0]:
+            clock.advance(.05)
+            previous = system.process_input({"right_hand": {"detected": True, "roll": angle}})["rotation"][2]
+        self.assertGreater(previous, 1000)
+        target = previous + (0 - previous + 180) % 360 - 180
+        clock.advance(5)
+        system.process_input({})
+        clock.advance(.1)
+        neutral = system.process_input({})["rotation"][2]
+        self.assertAlmostEqual(neutral, target)
+        clock.advance(.1)
+        acquired = system.process_input({"right_hand": {"detected": True, "roll": 0}})["rotation"][2]
+        self.assertAlmostEqual(acquired, neutral)
+        clock.advance(.1)
+        moved = system.process_input({"right_hand": {"detected": True, "roll": 10}})["rotation"][2]
+        self.assertAlmostEqual(moved, neutral + 10 * 70 / 180)
+
+    def test_missing_projected_rotation_preserves_other_valid_hand_channels(self):
+        clock = Clock()
+        config = default_config()
+        config["controls"]["smoothing_ms"] = 0
+        config["controls"]["mappings"] = [
+            {"id": input_name, "input": input_name, "output": output_name,
+             "mode": "absolute", "enabled": True, "scale": scale, "invert": False, "center": .5}
+            for input_name, output_name, scale in (
+                ("left_hand_rotation", "rotation_roll", 180),
+                ("left_hand_roll", "rotation_yaw", 180),
+                ("left_hand_pitch", "rotation_pitch", 180),
+                ("hands_center_x", "position_x", 2),
+                ("left_hand_yaw", "position_y", 360),
+                ("left_hand_pinch", "scale_uniform", 2),
+            )
+        ]
+        system = create_control_system(config, clock)
+        first = system.process_input({"left_hand": {"detected": True, "rotation": 45,
+            "roll": 30, "pitch": 10, "yaw": 20, "x": .2, "pinch": .5}})
+        for actual, expected in zip(first["rotation"], (30, 10, 45)):
+            self.assertAlmostEqual(actual, expected)
+        clock.advance(1/60)
+        result = system.process_input({"left_hand": {"detected": True, "rotation": None,
+            "roll": 60, "pitch": 80, "yaw": -35, "x": .8, "pinch": .8}})
+        self.assertGreater(result["rotation"][2], 0)
+        self.assertLess(result["rotation"][2], 45)
+        self.assertAlmostEqual(result["rotation"][0], 60)
+        self.assertAlmostEqual(result["rotation"][1], 80)
+        self.assertAlmostEqual(result["position"][0], .6)
+        self.assertAlmostEqual(result["position"][1], -35)
+        self.assertAlmostEqual(result["scale"], 1.6)
+
 
 if __name__ == "__main__":
     unittest.main()

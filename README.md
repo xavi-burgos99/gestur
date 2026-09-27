@@ -9,7 +9,7 @@ Requiere Raspberry Pi OS Lite/Debian **de 64 bits**, pantalla HDMI y cámara USB
 ```bash
 git clone https://github.com/xavi-burgos99/gestur.git
 cd gestur
-git switch web-portal
+git switch pi5-efficiency
 sudo bash gestur.sh install
 sudo reboot
 ```
@@ -73,9 +73,9 @@ El cursor queda oculto en el expositor. `Esc` cierra el visor. Con `--windowed` 
 
 ## Rendimiento y reconocimiento
 
-La captura guarda únicamente el fotograma más reciente. La inferencia de pose y manos tiene frecuencias limitadas e independientes; el renderizador procesa los controles en su propio hilo a la frecuencia de pantalla. No se acumulan fotogramas pendientes ni se modifica Panda3D desde el hilo de cámara.
+La captura guarda únicamente el fotograma más reciente. Se cargan sólo los detectores necesarios para los controles activos; las partes ausentes se buscan a menor frecuencia y las inferencias comparten un presupuesto de trabajo. Abrir, cambiar o recuperar la cámara se hace fuera del hilo de dibujo. El visor procesa controles a la frecuencia configurada, dibuja inmediatamente al cambiar la escena y reduce los redibujados en reposo. Conserva resolución, texturas, geometría y MSAA.
 
-Se usan **Pose Landmarker Lite** y, al activar manos, **Palm Detection Lite + Hand Landmark Lite**. El seguimiento de manos incorpora orientación de palma, pinza y gestos geométricos, sin otra red de clasificación. Las manos están desactivadas por defecto para ahorrar trabajo; pueden activarse desde configuración.
+Se usan **Pose Landmarker Lite** y, al activar y asignar controles de manos, **Palm Detection Lite + Hand Landmark Lite**. Los tres giros se calculan desde un marco ortogonal de palma; se conserva el giro de imagen anterior como entrada independiente. Pinza y apertura se calculan sin otra red de clasificación. La [comparación de alternativas](docs/performance-research.md) incluye velocidad, detecciones válidas y límites de las pruebas; no atribuye precisión a un modelo sólo por ser más nuevo.
 
 El objetivo de simplificación de **500.000 triángulos** toma como referencia los 491.038 del antiguo capitel. La reducción es opcional y solo se ofrece en mallas de más de un millón de triángulos; nunca se aplica sin aceptar la propuesta. El resultado conserva materiales y UV en la medida que permite el formato de origen; se informa del recuento final. Se agrupan nodos compatibles y se evitan transformaciones redundantes. MSAA 2× es el valor inicial; se puede elegir 0/2/4 muestras. El código anterior no activaba explícitamente el antialiasing, por lo que no se atribuye a él un coste medido.
 
@@ -90,7 +90,7 @@ El perfil predeterminado conserva:
 - Proximidad: escala 1 a 1,75 con transición suave.
 - Ausencia: parada del giro y retorno al reposo tras 3 segundos.
 
-El archivo [config/default.json](config/default.json) define captura, render y asignaciones de gestos. [docs/configuration.md](docs/configuration.md) explica las entradas, salidas, límites, suavizado y modos. Los controles, el modelo activo, el límite de FPS y el cursor se actualizan al cambiar el archivo. Cambiar cámara, frecuencia de inferencia, seguimiento de manos, pantalla completa o MSAA reinicia el visor automáticamente para recrear sus recursos.
+El archivo [config/default.json](config/default.json) define captura, render y asignaciones de gestos. [docs/configuration.md](docs/configuration.md) explica las entradas, salidas, límites, suavizado y modos. Los controles, el modelo activo, el límite de FPS y el cursor se actualizan al cambiar el archivo. Cambiar cámara o parámetros de seguimiento reemplaza el detector en segundo plano. Sólo pantalla completa y MSAA reinician el visor para recrear la ventana.
 
 ## Verificación
 

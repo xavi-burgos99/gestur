@@ -62,12 +62,17 @@ def summarize(metrics, elapsed, cpu_seconds, detections, sample_count,
                                     for part in PARTS},
         'sampled_inference_ms':timing_summary(inference_times),
         'sampled_frame_age_ms':timing_summary(frame_ages),
+        'scheduling':{name:metrics.get(name) for name in (
+            'inference_duty_limit','inference_wall_seconds','budget_pauses','budget_pause_seconds',
+            'pose_scheduled_fps','hand_scheduled_fps','pose_idle','hand_idle')},
         'notes':[
             'FPS uses completed model/capture counters, never callback counts.',
             'Validity is a 20 Hz observation of detected flags, not recognition accuracy.',
             'Latency statistics sample the latest completed inference at 20 Hz; they are not every frame.',
             'Timing excludes model/camera startup and resource shutdown. Peak RSS includes startup.',
             'This command measures tracking only, without the 3D renderer.',
+            'The duty limit budgets combined inference wall time, not CPU usage or recognition accuracy.',
+            'Scheduled FPS is the requested cadence after idle probing; the shared duty limit can lower observed FPS.',
         ],
     }
 

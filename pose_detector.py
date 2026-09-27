@@ -3,6 +3,8 @@
 Capture drains the camera independently from inference. There is exactly one
 pending frame: inference always uses the most recent frame and never queues old
 frames. The pose and hand models have separate cadence budgets.
+Their combined inference work shares a wall-time duty limit; absent parts use
+slower presence probes and resume their requested cadence when detected again.
 """
 import logging
 import math
@@ -75,33 +77,47 @@ class PoseHandTracker:
                  invert_hands=False, verbose=False, *, camera_index=0,
                  inference_fps=None, hand_fps=15, width=640, height=480,
                  model_dir=None, visibility_threshold=.5,
-                 detection_timeout_ms=250, head_scale_min=.02, head_scale_max=.20):
+                 detection_timeout_ms=250, head_scale_min=.02, head_scale_max=.20,
+                 inference_duty=.6, idle_fps=3, idle_after_seconds=2):
         """Keep the legacy callback schema, adding hand rotation/pinch/gesture.
 
         Construction opens no camera or models. ``run`` allocates resources and
         can be called again after ``stop``. Frame timestamps are monotonic seconds;
         MediaPipe receives strictly increasing integer milliseconds per session.
         ``response_time_ms`` remains a compatibility alias for pose cadence.
+        ``inference_duty`` reserves gaps between complete inference cycles; it
+        does not cap native CPU threads or promise an operating-system CPU rate.
+        After ``idle_after_seconds`` without a head/hand detection, each enabled
+        model independently probes at up to ``idle_fps`` until it detects again.
         """
         if inference_fps is None:
             inference_fps = 1000.0 / max(1.0, response_time_ms)
         if not all(math.isfinite(float(value)) and float(value) > 0
-                   for value in (inference_fps, hand_fps, width, height)):
+                   for value in (inference_fps, hand_fps, width, height, inference_duty, idle_fps)):
             raise ValueError('Frecuencias y resolución deben ser mayores que cero.')
         if not all(math.isfinite(float(value)) for value in
-                   (smoothing_time_ms, detection_timeout_ms, visibility_threshold, head_scale_min, head_scale_max)):
+                   (smoothing_time_ms, detection_timeout_ms, visibility_threshold, head_scale_min, head_scale_max,
+                    idle_after_seconds)):
             raise ValueError('Los parámetros del tracker deben ser finitos.')
         if not 0 <= visibility_threshold <= 1 or head_scale_max <= head_scale_min:
             raise ValueError('Confianza o rango de escala no válido.')
+        if inference_duty > 1 or idle_after_seconds < 0:
+            raise ValueError('El presupuesto de inferencia debe ser como máximo 1 y la espera no negativa.')
         self.use_pose, self.use_hands = bool(use_pose), bool(use_hands)
         self.mirror, self.invert_hands, self.verbose = bool(mirror), bool(invert_hands), bool(verbose)
         self.camera_index, self.width, self.height = camera_index, int(width), int(height)
         self.inference_fps, self.hand_fps = float(inference_fps), float(hand_fps)
         self.response_time = 1 / self.inference_fps
         self.smoothing_time = max(0, smoothing_time_ms / 1000)
+        self.inference_duty = float(inference_duty)
+        self.idle_fps, self.idle_after_seconds = float(idle_fps), float(idle_after_seconds)
+        self._base_detection_timeout = max(0, detection_timeout_ms / 1000)
+        self._rates = {name: rate for name, enabled, rate in
+                       (('pose', self.use_pose, self.inference_fps), ('hand', self.use_hands, self.hand_fps))
+                       if enabled}
         # A slow configured cadence must not expire between scheduled inferences.
-        self.detection_timeout = max(detection_timeout_ms / 1000,
-                                     2 / min(self.inference_fps, self.hand_fps))
+        self.detection_timeout = max(self._base_detection_timeout,
+                                     2 / min(self._rates.values(), default=math.inf))
         self.visibility_threshold = visibility_threshold
         self.head_scale_min, self.head_scale_max = head_scale_min, head_scale_max
         self.model_dir = Path(model_dir) if model_dir else _MODEL_DIR
@@ -118,6 +134,11 @@ class PoseHandTracker:
         self._lifecycle_lock = threading.RLock()
         self._latest_frame = None
         self._sequence = 0
+        self._waiting_for_frame = False
+        self._scheduled_rates = self._rates.copy()
+        self._model_capture_times = {}
+        self._expiry_timeouts = {name: max(self._base_detection_timeout, 2 / rate)
+                                 for name, rate in self._rates.items()}
         self._metrics = {}
         self._filter = TrackingFilter(self.smoothing_time, self.detection_timeout)
 
@@ -132,7 +153,7 @@ class PoseHandTracker:
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        cap.set(cv2.CAP_PROP_FPS, max(self.inference_fps, self.hand_fps))
+        cap.set(cv2.CAP_PROP_FPS, max(self._rates.values(), default=1))
         return cap
 
     def _build_backend(self):
@@ -148,16 +169,28 @@ class PoseHandTracker:
             self._stop_event.clear()
             self.last_error = None
             self._latest_frame, self._sequence = None, 0
+            self._waiting_for_frame = False
+            self._scheduled_rates = self._rates.copy()
+            self._model_capture_times = {}
+            self._expiry_timeouts = {name: max(self._base_detection_timeout, 2 / rate)
+                                     for name, rate in self._rates.items()}
             self._filter = TrackingFilter(self.smoothing_time, self.detection_timeout)
             self.current_data = empty_data()
             self._metrics = dict(captured_frames=0, pose_frames=0, hand_frames=0,
-                                 capture_failures=0, inference_ms=0.0, frame_age_ms=0.0)
+                                 capture_failures=0, inference_ms=0.0, frame_age_ms=0.0,
+                                 inference_wall_seconds=0.0, inference_duty_limit=self.inference_duty,
+                                 budget_pauses=0, budget_pause_seconds=0.0,
+                                 pose_scheduled_fps=self._rates.get('pose', 0),
+                                 hand_scheduled_fps=self._rates.get('hand', 0),
+                                 pose_idle=False, hand_idle=False)
             if not self.use_pose and not self.use_hands:
                 return
+            self.cap = None
             try:
+                # A missing camera must not load neural networks on every retry.
+                self.cap = self._open_camera()
                 self._backend = self._build_backend()
                 self.pose_model, self.hands_model = self._backend.pose, self._backend.hands
-                self.cap = self._open_camera()
                 self.running = True
                 self.capture_thread = threading.Thread(target=self._capture_loop,
                                                         name='gestur-camera', daemon=True)
@@ -193,7 +226,8 @@ class PoseHandTracker:
                 with self._condition:
                     self._sequence += 1
                     self._latest_frame = (self._sequence, timestamp, frame)
-                    self._condition.notify()
+                    if self._waiting_for_frame:
+                        self._condition.notify()
                 with self._state_lock:
                     self._metrics['captured_frames'] += 1
         except Exception as error:
@@ -207,30 +241,46 @@ class PoseHandTracker:
 
     def _process_loop(self):
         sequence, timestamp_ms = 0, -1
-        next_pose = next_hand = 0.0
+        next_due = dict.fromkeys(self._rates, 0.0)
+        last_detected = dict.fromkeys(self._rates, time.monotonic())
+        budget_ready = 0.0
         try:
             while not self._stop_event.is_set():
                 now = time.monotonic()
-                due_pose = self.use_pose and now >= next_pose
-                due_hand = self.use_hands and now >= next_hand
-                due_times = ([next_pose] if self.use_pose else []) + ([next_hand] if self.use_hands else [])
-                delay = max(0, min(due_times)-now)
+                if self._expire_tracking(now):
+                    self._publish()
+                if self._stop_event.is_set():
+                    break
+                cadence_ready = min(next_due.values())
+                ready = max(cadence_ready, budget_ready)
                 with self._condition:
                     latest = self._latest_frame
                     fresh = latest is not None and latest[0] != sequence
-                    if not fresh or not (due_pose or due_hand):
-                        self._condition.wait(timeout=min(.05, delay) if delay > 0 else .05)
+                    if now < ready or not fresh:
+                        # New frames cannot make a model ready before its budget.
+                        # Only wake on capture when a fresh frame is all we need.
+                        self._waiting_for_frame = now >= ready
+                        timeout = ready - now if now < ready else .5
+                        timeout = min(timeout, self._next_expiry_delay(now))
+                        self._condition.wait(timeout=max(.001, timeout))
+                        waited_until = time.monotonic()
+                        budget_wait = max(0, min(waited_until, budget_ready) - max(now, cadence_ready))
+                        if budget_wait:
+                            with self._state_lock:
+                                self._metrics['budget_pauses'] += 1
+                                self._metrics['budget_pause_seconds'] += budget_wait
                         latest = None
+                    self._waiting_for_frame = False
                 if latest is None:
-                    self._filter.expire(time.monotonic())
-                    self._publish()
                     continue
                 sequence, captured_at, frame = latest
                 now = time.monotonic()
+                if self._stop_event.is_set():
+                    break
                 if now-captured_at > self.detection_timeout:
-                    self._filter.expire(now)
-                    self._publish()
                     continue
+                due_pose = 'pose' in next_due and now >= next_due['pose']
+                due_hand = 'hand' in next_due and now >= next_due['hand']
                 started = now
                 timestamp_ms = max(timestamp_ms+1, int(captured_at*1000))
                 image = self._backend.image(frame, self.mirror)
@@ -243,20 +293,31 @@ class PoseHandTracker:
                                              self.head_scale_min, self.head_scale_max)
                     for key, sample in features.items():
                         self._filter.update(key, sample, captured_at)
-                    next_pose = max(started + 1 / self.inference_fps, time.monotonic())
+                    self._schedule_model('pose', features['head']['detected'], captured_at,
+                                         started, time.monotonic(), next_due, last_detected)
                     with self._state_lock:
                         self._metrics['pose_frames'] += 1
                 if due_hand:
                     hand_started = time.monotonic()
                     result = self.hands_model.detect_for_video(image, timestamp_ms)
                     self._update_hands(result, captured_at, aspect)
-                    next_hand = max(hand_started + 1 / self.hand_fps, time.monotonic())
+                    detected = any(self._filter.data[key]['detected'] for key in ('left_hand', 'right_hand'))
+                    self._schedule_model('hand', detected, captured_at,
+                                         hand_started, time.monotonic(), next_due, last_detected)
                     with self._state_lock:
                         self._metrics['hand_frames'] += 1
                 completed = time.monotonic()
-                self._filter.expire(completed)
+                elapsed = completed - started
+                # One combined duty budget covers conversion, geometry and both
+                # native models. It is wall time, not a claim about CPU usage.
+                pause = elapsed * (1 / self.inference_duty - 1)
+                budget_ready = completed + pause
+                inferred = (['pose'] if due_pose else []) + (['hand'] if due_hand else [])
+                self._update_expiry_limits(inferred, captured_at, elapsed)
+                self._expire_tracking(completed)
                 with self._state_lock:
-                    self._metrics['inference_ms'] = (completed-started)*1000
+                    self._metrics['inference_ms'] = elapsed*1000
+                    self._metrics['inference_wall_seconds'] += elapsed
                     self._metrics['frame_age_ms'] = (completed-captured_at)*1000
                 self._publish()
         except Exception as error:
@@ -270,6 +331,51 @@ class PoseHandTracker:
             self._filter = TrackingFilter(self.smoothing_time, self.detection_timeout)
             self._publish()
             self.running = False
+
+    def _schedule_model(self, name, detected, captured_at, started, completed, next_due, last_detected):
+        if detected:
+            last_detected[name] = captured_at
+        idle = not detected and completed - last_detected[name] >= self.idle_after_seconds
+        rate = min(self._rates[name], self.idle_fps) if idle else self._rates[name]
+        self._scheduled_rates[name] = rate
+        next_due[name] = max(started + 1 / rate, completed)
+        with self._state_lock:
+            self._metrics[f'{name}_scheduled_fps'] = rate
+            self._metrics[f'{name}_idle'] = idle
+
+    def _update_expiry_limits(self, inferred, captured_at, elapsed):
+        for name in inferred:
+            previous = self._model_capture_times.get(name, captured_at)
+            observed_period = max(0, captured_at - previous)
+            self._model_capture_times[name] = captured_at
+            period = max(1 / self._scheduled_rates[name], elapsed / self.inference_duty, observed_period)
+            self._expiry_timeouts[name] = max(self._base_detection_timeout, min(.8, 2 * period))
+        # Only a new inference from a model may shorten its expiry. A fast hand
+        # cycle must not invalidate a head held through a slower pose cadence.
+        self._filter.timeout = max(self._expiry_timeouts.values())
+
+    def _expire_tracking(self, now):
+        """Expire each model independently; idle hands cannot extend head holds."""
+        changed = False
+        for key, sample in self._filter.data.items():
+            if not sample['detected']:
+                continue
+            name = 'hand' if 'hand' in key else 'pose'
+            seen = self._filter.last_seen[key]
+            if seen is None or now - seen > self._expiry_timeouts.get(name, self.detection_timeout):
+                self._filter.data[key] = empty_part(hand=name == 'hand', head=key == 'head')
+                changed = True
+        return changed
+
+    def _next_expiry_delay(self, now):
+        deadlines = []
+        for key, sample in self._filter.data.items():
+            if sample['detected']:
+                name = 'hand' if 'hand' in key else 'pose'
+                seen = self._filter.last_seen[key]
+                if seen is not None:
+                    deadlines.append(seen + self._expiry_timeouts.get(name, self.detection_timeout))
+        return max(.001, min(deadlines) - now) if deadlines else math.inf
 
     def _update_hands(self, result, timestamp, aspect):
         samples = {'left_hand': empty_part(hand=True), 'right_hand': empty_part(hand=True)}

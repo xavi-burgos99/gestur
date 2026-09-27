@@ -11,6 +11,8 @@ import time
 from control_system import create_control_system
 from runtime_config import default_config, load_config, validate_config
 from runtime_state import FrameMetrics, LatestPose
+from tracking_session import TrackingSession, tracking_request
+from device_metrics import DeviceMetrics
 
 LOG = logging.getLogger("gestur")
 ROOT = Path(__file__).resolve().parent
@@ -40,8 +42,10 @@ class PoseController:
         self.config = self._read_config()
         self._config_stamp = self._stamp()
         self.control_system = control_system or create_control_system(self.config)
-        self.mailbox = LatestPose()
+        self.mailbox = LatestPose(max_age=.8)
         self.metrics = FrameMetrics()
+        self.device_metrics = DeviceMetrics()
+        self._hardware = {}
         self.benchmark_seconds = benchmark_seconds
         self.metrics_path = Path(metrics_path) if metrics_path else None
         self.no_camera = no_camera
@@ -53,12 +57,11 @@ class PoseController:
         self.requested_model = self.config["active_model"]
         self.rendered_model = None
         self.exit_code = 0
-        self.pose_tracker = None
+        self.tracking_session = TrackingSession(self._on_pose_update)
         self.visualizer = None
         self._cleaned = False
         self._last_config_check = 0.0
         self._last_log = 0.0
-        self._next_camera_attempt = 0.0
         self._running = False
         self._start = None
         from visualizer import ControlledObjViewer
@@ -91,58 +94,16 @@ class PoseController:
         except FileNotFoundError:
             return None
 
-    def _init_pose_tracker(self):
-        from pose_detector import PoseHandTracker
-        tracking = self.config["tracking"]
-        self.pose_tracker = PoseHandTracker(
-            smoothing_time_ms=tracking["smoothing_ms"],
-            use_pose=tracking["use_pose"], use_hands=tracking["use_hands"],
-            mirror=tracking["mirror"], camera_index=tracking["camera_index"],
-            inference_fps=tracking["inference_fps"], hand_fps=tracking["hand_fps"],
-            width=tracking["width"], height=tracking["height"], verbose=self.verbose,
-        )
-        self.pose_tracker.subscribe(self._on_pose_update)
-
     def _on_pose_update(self, pose_data):
         # Runs in the inference thread: copying to a bounded mailbox is all it does.
         self.mailbox.publish(pose_data)
 
     def _sync_tracking(self, now):
-        """Keep onboarding available without a camera or inference models.
-
-        Tracking is only useful after a model is selected. Camera failures keep
-        the viewer open, report an error, and retry at a low fixed cadence.
-        """
-        if self.no_camera or self.rendered_model is None:
-            if self.pose_tracker is not None:
-                self.pose_tracker.stop()
-                self.pose_tracker = None
-                self.mailbox.publish({})
-            self.tracking_error = None
-            self.last_error = self.model_error or self.config_error
-            return
-        if self.pose_tracker is not None:
-            error = getattr(self.pose_tracker, "last_error", None)
-            if not error:
-                return
-            self.tracking_error = f"Seguimiento detenido: {error}"
-            self.pose_tracker.stop()
-            self.pose_tracker = None
-            self.mailbox.publish({})
-            self._next_camera_attempt = now + 15
-            LOG.error(self.tracking_error)
-        elif now >= self._next_camera_attempt:
-            self._next_camera_attempt = now + 15
-            try:
-                self._init_pose_tracker()
-                self.pose_tracker.run()
-                self.tracking_error = None
-            except Exception as exc:
-                if self.pose_tracker is not None:
-                    self.pose_tracker.stop()
-                    self.pose_tracker = None
-                self.tracking_error = f"No se pudo iniciar el seguimiento: {exc}"
-                LOG.error(self.tracking_error)
+        """Request only needed detectors; camera/model start never blocks draw."""
+        request = tracking_request(self.config, has_model=self.rendered_model is not None,
+                                   no_camera=self.no_camera)
+        self.tracking_session.request(request)
+        self.tracking_error = self.tracking_session.snapshot()['error']
         self.last_error = self.model_error or self.tracking_error or self.config_error
 
     def _reload_config(self):
@@ -165,8 +126,7 @@ class PoseController:
                     self.model_error = f"No se pudo cargar el modelo seleccionado; el visor está vacío: {exc}"
                     LOG.error(self.model_error)
             restart_keys = ("antialias_samples", "fullscreen")
-            needs_restart = (candidate["tracking"] != self.config["tracking"] or
-                             any(candidate["render"][k] != self.config["render"][k] for k in restart_keys))
+            needs_restart = any(candidate["render"][k] != self.config["render"][k] for k in restart_keys)
             if candidate["controls"] != self.config["controls"]:
                 self.control_system = create_control_system(candidate)
             self.visualizer.apply_settings(target_fps=candidate["render"]["target_fps"],
@@ -175,7 +135,7 @@ class PoseController:
             self.config_error = None
             self.last_error = self.model_error or self.tracking_error
             if needs_restart:
-                LOG.info("Configuración guardada; reiniciando cámara/ventana")
+                LOG.info("Configuración guardada; recreando la ventana")
                 self.exit_code = RESTART_REQUESTED
                 self.request_stop()
         except (ValueError, OSError, RuntimeError) as exc:
@@ -188,7 +148,10 @@ class PoseController:
             return
         report = {"updated_at": time.time(), "selected_model": self.requested_model,
                   "rendered_model": self.rendered_model, "error": self.last_error,
-                  "render": self.metrics.summary()}
+                  "render": self.visualizer.render_metrics.summary(),
+                  "control_loop": self.metrics.summary(),
+                  "render_scheduler": self.visualizer.get_render_status(),
+                  "tracking": self.tracking_session.snapshot(), "hardware": self._hardware}
         temporary = self.status_path.with_suffix(".tmp")
         try:
             temporary.write_text(json.dumps(report) + "\n", encoding="utf-8")
@@ -206,10 +169,12 @@ class PoseController:
             self._reload_config()
             if self._running and self.exit_code != RESTART_REQUESTED:
                 self._sync_tracking(now)
+            self._hardware = self.device_metrics.sample()
             self._write_status()
         if self.verbose and now - self._last_log >= 2.0:
             self._last_log = now
-            LOG.info("Render: %s", self.metrics.summary())
+            LOG.info("Dibujo: %s; control: %s; hardware: %s",
+                     self.visualizer.render_metrics.summary(), self.metrics.summary(), self._hardware)
         if self.benchmark_seconds and self._start is not None and now - self._start >= self.benchmark_seconds:
             self.request_stop()
         return task.cont
@@ -240,16 +205,20 @@ class PoseController:
         if self._cleaned:
             return
         self._cleaned = True
-        if self.pose_tracker:
-            self.pose_tracker.stop()
-        report = self.metrics.summary()
+        if not self.tracking_session.close():
+            # Do not recreate a window/camera in this process while the old
+            # driver still owns resources. The kiosk restarts the process.
+            self.exit_code = 1
+        report = self.visualizer.render_metrics.summary() if self.visualizer else {}
+        report['control_loop'] = self.metrics.summary()
+        report['hardware'] = self._hardware
         report["model"] = self.visualizer.model_path if self.visualizer else None
         report["render_settings"] = self.config["render"]
         report["tracking_settings"] = self.config["tracking"]
         report["camera_enabled"] = not self.no_camera
-        if self.pose_tracker and hasattr(self.pose_tracker, "get_metrics"):
-            report["tracking"] = self.pose_tracker.get_metrics()
+        report["tracking"] = self.tracking_session.snapshot()
         if self.visualizer:
+            report['render_scheduler'] = self.visualizer.get_render_status()
             self.visualizer.destroy()
         if self.metrics_path:
             self.metrics_path.parent.mkdir(parents=True, exist_ok=True)

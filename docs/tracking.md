@@ -36,8 +36,11 @@ este directorio completo después de verificarlo. `--model-dir` permite preparar
 otra ubicación; pasar esa misma ruta a `PoseHandTracker(model_dir=...)` si no se
 usa la ubicación por defecto.
 
-Se fija MediaPipe 0.10.18 porque publica wheels Linux ARM64 para Python 3.11 y
-3.12; las versiones 0.10.20, 0.10.21, 0.10.31 y 0.10.35 consultadas no los publican.
+Se mantiene MediaPipe 0.10.18, validado con estos paquetes Lite y con ruedas
+Linux ARM64 para Python 3.11 y 3.12. MediaPipe 1.0.1 vuelve a publicar una rueda
+ARM64, pero cambia el runtime y la API usada para preparar los metadatos Lite;
+no es una actualización intercambiable. La comparación y los fallos observados
+en desarrollo están en [la investigación de modelos](performance-research.md).
 El instalador prepara Python 3.12 y un entorno virtual, incluso si el sistema
 utiliza Python 3.13. No instalar varios paquetes OpenCV en ese entorno: MediaPipe
 requiere `opencv-contrib-python`, que ya proporciona `cv2`.
@@ -53,23 +56,45 @@ entorno manualmente; la validación del hardware objetivo se hace en Linux ARM64
 - Un hilo drena la cámara a un único hueco de memoria. La inferencia toma siempre
   la imagen más reciente; no se acumula una cola de imágenes antiguas.
 - Pose y manos tienen frecuencias máximas independientes (`inference_fps` y
-  `hand_fps`). Las manos sólo se cargan si `use_hands` está activado. El render
-  continúa a su propia frecuencia.
+  `hand_fps`). El controlador carga sólo los detectores autorizados por
+  `use_pose`/`use_hands` que alguna asignación activa necesita. Sin modelo o
+  sin controles activos no abre la cámara. Cambiar estos parámetros reemplaza
+  el tracker fuera del hilo de dibujo y revoca sus callbacks antiguos.
+- Los dos modelos comparten un presupuesto del 60 % de tiempo de inferencia:
+  se dejan pausas entre ciclos aunque ambos estén atrasados. Es tiempo de pared,
+  no un límite del 60 % de CPU; las bibliotecas nativas pueden usar varios hilos.
+- Tras dos segundos sin detectar una parte, ese detector pasa a sondear a
+  3 FPS y recupera su frecuencia solicitada en cuanto la detecta. Los modelos
+  se gestionan por separado: unas manos ausentes no frenan la cabeza. Volver a
+  entrar en escena puede añadir hasta un intervalo de sondeo más la inferencia.
+- La cámara se comprueba antes de cargar redes. Una desconexión se reintenta
+  cada 15 segundos sin bloquear el visor. La captura no despierta a la
+  inferencia si todavía no corresponde procesar otra imagen.
 - Las marcas de captura usan reloj monotónico; Tasks recibe milisegundos
   estrictamente crecientes. `get_metrics()` permite observar imágenes capturadas,
   inferencias de cada modelo, errores de cámara, duración de inferencia y edad
   de la imagen al terminar. Los objetivos de FPS no son una garantía de FPS.
+  Sólo se publican inferencias nuevas, caducidades y cambios de estado.
 - El filtro exponencial utiliza el tiempo real transcurrido, admite cero
   suavizado y trata los ángulos circularmente. Una transición de 179° a −179°
   cruza 180°, sin girar por cero.
 - Las partes con landmarks de baja visibilidad/presencia no se consideran
   detectadas. Una detección vacía desactiva esa parte inmediatamente; una cámara
-  atascada caduca sus datos. No se inventan manos durante el arranque ni se
+  atascada caduca sus datos por detector según la cadencia observada, con
+  límite adaptativo de 0,8 segundos. No se inventan manos durante el arranque ni se
   mezclan ángulos cero en detecciones perdidas.
 - Las orientaciones de palma y las distancias de gestos utilizan landmarks
-  tridimensionales en metros. `rotation`/`roll` mide la dirección visible
-  muñeca→base del dedo medio: arriba = 0°, derecha = +90°, izquierda = −90°.
-  `pitch`/`yaw` describen la inclinación de la normal de la palma.
+  tridimensionales en metros. Se construye un marco ortogonal de la palma y
+  se extraen los giros con orden `Rz(roll) · Ry(-yaw) · Rx(pitch)`. Así, girar
+  la muñeca no mezcla los otros dos ejes como sucedía con la normal aislada.
+  `yaw` queda en ±90°; `pitch` y `roll` en ±180°. En yaw ±90°, pitch y roll
+  no se separan: se conserva el marco equivalente con roll cero. Los controles
+  escalares no proporcionan continuidad global de una orientación cuaternión.
+- `rotation` conserva el ángulo de imagen muñeca→base del dedo medio para
+  las asignaciones anteriores: arriba = 0°, derecha = +90°, izquierda = −90°.
+  Es distinto del nuevo `roll` tridimensional. Si esa línea desaparece por
+  perspectiva, sólo `rotation` pasa a `None`; posición, pinza y orientación
+  3D pueden seguir siendo válidas.
 - Tasks invierte la asignación de etiquetas respecto a la antigua API
   Solutions. Se corrige izquierda/derecha **al aplicar espejo**, y se respeta
   `invert_hands` como inversión adicional. No se debe aplicar la regla de

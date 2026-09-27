@@ -12,8 +12,11 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     AmbientLight, AntialiasAttrib, CardMaker, ClockObject, DirectionalLight,
     Filename, Geom, GeomNode, GeomTriangles, GeomVertexData, GeomVertexFormat,
-    GeomVertexWriter, TextNode, Texture, WindowProperties, loadPrcFileData,
+    GeomVertexWriter, PythonCallbackObject, TextNode, Texture, WindowProperties, loadPrcFileData,
 )
+
+from render_scheduler import RenderCadence
+from runtime_state import FrameMetrics
 
 
 def _usable_ipv4(address):
@@ -115,6 +118,16 @@ class ControlledObjViewer(ShowBase):
         # Configure before creating the context. Preserve geometry and textures.
         if antialias_samples not in (0, 2, 4):
             raise ValueError("antialias_samples debe ser 0, 2 o 4")
+        self._render_cadence = RenderCadence(target_fps)
+        self.render_metrics = FrameMetrics()
+        self._render_clock = time.monotonic
+        self._draw_region = None
+        self._draw_callback = None
+        self._last_draw_size = None
+        self._draw_meter = None
+        self._meter_time = self._render_clock()
+        self._meter_frames = 0
+        self._meter_ticks = 0
         loadPrcFileData("gestur", "\n".join((
             "load-file-type p3assimp",
             "win-size 1920 1080",
@@ -123,6 +136,9 @@ class ControlledObjViewer(ShowBase):
             f"framebuffer-multisample {'true' if antialias_samples else 'false'}",
             f"multisamples {antialias_samples}",
             "sync-video true",
+            # Panda otherwise busy-waits up to 10 ms on every limited tick.
+            # Keep a 4 ms margin: 1 ms overslept and reduced active FPS on macOS.
+            *(("sleep-precision 0.004",) if sys.platform in ("linux", "darwin") else ()),
             "audio-library-name null",
             "textures-power-2 none",
             "model-cache-models true",
@@ -145,9 +161,22 @@ class ControlledObjViewer(ShowBase):
         self.welcome_overlay = None
         self.welcome_url = None
         self._last_url_check = 0.0
-        self.taskMgr.add(self._animate_welcome, "gestur-welcome", sort=5)
+        # Leave ShowBase's input/event/igLoop tasks in place. GraphicsOutput's
+        # active flag skips cull/draw only, keeping control and events responsive.
+        self.taskMgr.add(self._prepare_draw, "gestur-render-cadence", sort=49)
+        if self.cam and self.cam.node().get_num_display_regions():
+            self._draw_region = self.cam.node().get_display_region(0)
+            self._draw_callback = PythonCallbackObject(self._record_draw)
+            self._draw_region.set_draw_callback(self._draw_callback)
         self.apply_settings(target_fps=target_fps, hide_cursor=hide_cursor)
-        self.setFrameRateMeter(show_fps)
+        # Panda's built-in FPS meter counts task ticks, including skipped draws.
+        self.setFrameRateMeter(False)
+        if show_fps:
+            self._draw_meter = TextNode("gestur-draw-meter")
+            self._draw_meter.set_text("Dibujo: -- fps | Control: -- fps")
+            meter = self.a2dTopLeft.attach_new_node(self._draw_meter)
+            meter.set_scale(.035)
+            meter.set_pos(.03, 0, -.06)
         try:
             self.load_model(obj_path)
         except Exception:
@@ -158,10 +187,67 @@ class ControlledObjViewer(ShowBase):
         clock = ClockObject.get_global_clock()
         clock.set_mode(ClockObject.MLimited)
         clock.set_frame_rate(target_fps)
+        self._render_cadence.target_fps = float(target_fps)
+        self.invalidate(frames=2)
         if self.win and hasattr(self.win, "request_properties"):
             properties = WindowProperties()
             properties.set_cursor_hidden(hide_cursor)
             self.win.request_properties(properties)
+
+    def invalidate(self, *, frames=1):
+        """Request a draw on the next control tick; call on the render thread."""
+        self._render_cadence.invalidate(frames)
+
+    def windowEvent(self, win):
+        super().windowEvent(win)
+        if win == self.win:
+            # Preserve ShowBase resize, close and foreground handling, including
+            # rebuilding both buffers after resize/restore on double buffering.
+            self.invalidate(frames=2)
+
+    def _record_draw(self, callback_data):
+        callback_data.upcall()
+        # Count the actual main-camera draw traversal, not a requested frame.
+        self.render_metrics.tick(self._render_clock())
+
+    def _prepare_draw(self, task):
+        now = self._render_clock()
+        if self._draw_meter is not None and now - self._meter_time >= 1.0:
+            duration = now - self._meter_time
+            draws = (self.render_metrics.frames - self._meter_frames) / duration
+            ticks = (self._render_cadence.ticks - self._meter_ticks) / duration
+            self._draw_meter.set_text(f"Dibujo: {draws:.1f} fps | Control: {ticks:.1f} fps")
+            self._meter_time = now
+            self._meter_frames = self.render_metrics.frames
+            self._meter_ticks = self._render_cadence.ticks
+            self.invalidate()
+        if self.win:
+            size = self.win.get_x_size(), self.win.get_y_size()
+            if size != self._last_draw_size:
+                self._last_draw_size = size
+                self.invalidate(frames=2)
+            draw = self._render_cadence.due(now, welcome=self.welcome is not None)
+            self.win.set_active(draw)
+            if draw:
+                self._animate_welcome(task)
+        return task.cont
+
+    def get_render_status(self):
+        return {**self.render_metrics.summary(),
+                "control_ticks": self._render_cadence.ticks,
+                "skipped_draws": self._render_cadence.skipped,
+                "mode": self._render_cadence.mode,
+                "idle_refresh_fps": min(self._render_cadence.target_fps, self._render_cadence.idle_fps),
+                "welcome_fps_limit": min(self._render_cadence.target_fps, self._render_cadence.welcome_fps)}
+
+    def destroy(self):
+        if getattr(self, "_draw_region", None) is not None:
+            self._draw_region.clear_draw_callback()
+            self._draw_region = None
+            self._draw_callback = None
+        if getattr(self, "taskMgr", None) is not None:
+            self.taskMgr.remove("gestur-render-cadence")
+        super().destroy()
 
     def load_model(self, obj_path):
         """Load before replacing the current scene; failed loads leave it intact."""
@@ -210,6 +296,7 @@ class ControlledObjViewer(ShowBase):
         self.setBackgroundColor(0, 0, 0, 1)
         # The scene owns its assets; avoid retaining previously selected models.
         self.loader.unloadModel(Filename.from_os_specific(str(path)))
+        self.invalidate(frames=2)
 
     def _set_model_camera(self):
         if self.cam:
@@ -225,6 +312,7 @@ class ControlledObjViewer(ShowBase):
         self.welcome_url = None
 
     def show_welcome(self):
+        self.invalidate(frames=2)
         if self.model is not None:
             self.model.remove_node()
         self.model = None
@@ -293,6 +381,7 @@ class ControlledObjViewer(ShowBase):
         qr_node.set_texture(texture)
         qr_node.set_pos(0, 0, .35)
         label("welcome-url", url, .027, min(.033, 1.5 / max(1, len(url))), (.64, .72, .73, 1))
+        self.invalidate(frames=2)
 
     def _animate_welcome(self, task):
         if self.welcome is not None:
@@ -304,7 +393,8 @@ class ControlledObjViewer(ShowBase):
 
     def update_model(self, **kwargs):
         if self.model is None:
-            return
+            return False
+        changed = False
         for key, setter in (("position", self.model.set_pos),
                             ("rotation", self.model.set_hpr),
                             ("scale", self.model.set_scale)):
@@ -319,6 +409,10 @@ class ControlledObjViewer(ShowBase):
             if value != self.current_state[key]:
                 setter(*value)
                 self.current_state[key] = value
+                changed = True
+        if changed:
+            self.invalidate()
+        return changed
 
     def get_current_state(self):
         return {key: list(value) for key, value in self.current_state.items()}

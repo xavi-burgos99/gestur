@@ -17,6 +17,20 @@ def test_summary_uses_model_counters_not_number_of_validity_samples():
     assert report['sampled_inference_ms'] == {'samples':3,'median':20,'p95':30,'maximum':30}
 
 
+def test_summary_distinguishes_wall_time_budget_from_measured_cpu():
+    report = benchmark_module.summarize(
+        {'pose_frames':30,'inference_duty_limit':.6,'inference_wall_seconds':1.2,
+         'budget_pauses':12,'budget_pause_seconds':.8,'pose_scheduled_fps':3,
+         'hand_scheduled_fps':0,'pose_idle':True,'hand_idle':False},
+        2,2.5,dict(head=0,torso=0,left_hand=0,right_hand=0),0,[],[],startup_seconds=0)
+    assert report['cpu_percent_one_core'] == 125
+    assert report['fps']['pose'] == 15
+    assert report['scheduling']['inference_duty_limit'] == .6
+    assert report['scheduling']['inference_wall_seconds'] == 1.2
+    assert report['scheduling']['pose_scheduled_fps'] == 3
+    assert report['scheduling']['pose_idle'] is True
+
+
 class FakeClock:
     def __init__(self):
         self.now = 0

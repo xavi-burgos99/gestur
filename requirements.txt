@@ -1,5 +1,5 @@
-# ARM64 wheel availability limits MediaPipe to Python 3.9–3.12; the installer
-# targets Python 3.11/3.12 on a 64-bit Raspberry Pi OS. See docs/tracking.md.
+# This validated MediaPipe runtime supports ARM64 Python <=3.12; the installer
+# provides Python 3.12. Newer runtimes need a separate migration; see docs/tracking.md.
 mediapipe==0.10.18
 numpy==1.26.4
 # MediaPipe depends on this package: do not install a second cv2 wheel alongside.

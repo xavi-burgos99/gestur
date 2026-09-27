@@ -72,6 +72,10 @@ printf '%s\n' 'gestur-portal ALL=(root) NOPASSWD: /usr/local/libexec/gestur-wifi
 visudo -cf "$TASK_SUDOERS"
 install -o root -g root -m 440 "$TASK_SUDOERS" /etc/sudoers.d/gestur-wifi
 # Build as an unprivileged account; application/helper files remain root-owned.
+# Retired illustrations are archived in docs; upgrades must not republish the
+# copies left by the previous installer in the public directory.
+rm -f "$INSTALL_ROOT/portal/public/motion-icons/head-base.png" \
+      "$INSTALL_ROOT/portal/public/motion-icons/hand-base.png"
 TASK_BUILD=$(mktemp -d)
 cp -a "$INSTALL_ROOT/portal/." "$TASK_BUILD/"
 chown -R gestur-portal:gestur-portal "$TASK_BUILD"

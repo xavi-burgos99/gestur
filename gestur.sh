@@ -81,6 +81,9 @@ install_gestur() {
 
     # Complete all downloads and portal checks before enabling the kiosk login.
     bash "$GESTUR_PREFIX/scripts/install-portal.sh" "$GESTUR_PREFIX"
+    # The display controller may be card0 or card1. Select vc4 by its DRM name,
+    # so Xorg does not make the separate v3d render-only device the primary GPU.
+    bash "$GESTUR_PREFIX/scripts/configure-xorg.sh" install
     install -o root -g root -m 755 "$GESTUR_PREFIX/scripts/kiosk-session.sh" /usr/local/bin/gestur-session
     install -d /etc/systemd/system/getty@tty1.service.d
     if [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf ]] && \
@@ -135,6 +138,7 @@ uninstall_gestur() {
         sed -i '/# Gestur autostart/,/^fi/d' /home/gestur/.bash_profile
     fi
     rm -f /usr/local/bin/gestur-session
+    bash "$GESTUR_SOURCE/scripts/configure-xorg.sh" uninstall
     systemctl daemon-reload
     echo "Arranque y portal retirados. Código, usuarios, Wi-Fi, modelos y configuración conservados."
 }

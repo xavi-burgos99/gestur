@@ -33,6 +33,10 @@ class SmokeError(Exception):
     pass
 
 
+class ConnectionFailure(SmokeError):
+    pass
+
+
 def require(condition, message):
     if not condition:
         raise SmokeError(message)
@@ -45,14 +49,14 @@ class Client:
             urllib.request.ProxyHandler({}),
             urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
-    def call(self, method, path, value=None, raw=None, content_type=None, expected=200):
+    def call(self, method, path, value=None, raw=None, content_type=None, expected=200, timeout=15):
         data = raw if raw is not None else json.dumps(value).encode() if value is not None else None
         headers = {'X-Gestur-Request': '1', 'Origin': self.base}
         if data is not None:
             headers['Content-Type'] = content_type or 'application/json'
         request = urllib.request.Request(self.base + path, data=data, headers=headers, method=method)
         try:
-            with self.opener.open(request, timeout=15) as response:
+            with self.opener.open(request, timeout=timeout) as response:
                 require(response.status == expected, f'HTTP inesperado en {method} {path}')
                 result = json.loads(response.read(2 * 1024 * 1024))
                 require(isinstance(result, dict), 'Respuesta API no válida')
@@ -60,8 +64,28 @@ class Client:
         except urllib.error.HTTPError as error:
             # Never print request bodies, cookie headers or the administrator token.
             raise SmokeError(f'HTTP {error.code} en {method} {path}') from None
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        except (urllib.error.URLError, TimeoutError):
+            raise ConnectionFailure(f'No se pudo conectar con {method} {path}') from None
+        except json.JSONDecodeError:
             raise SmokeError(f'No se pudo obtener una respuesta válida en {method} {path}') from None
+
+
+def wait_ready(client, timeout=15):
+    """Wait only before login; import/configuration calls are never retried here."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        try:
+            state = client.call('GET', '/api/session', timeout=min(2, max(.01, remaining)))
+        except ConnectionFailure:
+            pass
+        else:
+            require(type(state.get('authenticated')) is bool, 'Respuesta de disponibilidad no válida')
+            return
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(.25, remaining))
+    raise SmokeError('El portal no estuvo disponible durante los 15 segundos de espera inicial')
 
 
 def png_texture():
@@ -212,6 +236,7 @@ def run(args):
     logged_in = False
     upload_attempted = False
     try:
+        wait_ready(client)
         token = args.token_file.read_text().strip()
         require(len(token) >= 24, 'La clave local no es válida')
         session = client.call('POST', '/api/session', {'token': token})

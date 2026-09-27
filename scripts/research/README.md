@@ -30,6 +30,40 @@ como root para leer la clave local y verificar el GLB sin exponer credenciales.
 Sube un OBJ con textura, comprueba su conversión y elimina únicamente su paquete
 de prueba; no selecciona modelos ni cambia parámetros.
 
+## Repetir las comprobaciones del portal
+
+Estos ensayos usan exclusivamente el portal HTTP local, en el puerto 80 por
+defecto, y la biblioteca estándar de Python. La clave de administración se lee
+de `/etc/gestur/portal-token` y permanece en memoria. Ambos esperan hasta 15
+segundos a que `GET /api/session` responda antes de iniciar sesión; las llamadas
+posteriores conservan sus errores y límites propios.
+
+```sh
+sudo python3 scripts/check-portal-import.py > /tmp/portal-import-result.json
+sudo python3 scripts/research/smoke_portal_api.py > /tmp/portal-api-result.json
+```
+
+`check-portal-import.py` conserva el ensayo de importación ejecutado en la Pi,
+con la espera inicial añadida para repetirlo inmediatamente después de un
+reinicio del servicio. Comprueba dos triángulos, UV, material y los bytes de la
+textura PNG, incluida la reparación de su ruta. La limpieza solo elimina el
+paquete identificado como propio, nunca activa el modelo y comprueba que la
+configuración y la biblioteca vacía siguen iguales. Se mantiene en `scripts/`
+sin duplicarlo aquí.
+
+`smoke_portal_api.py` conserva el ensayo de sesión, biblioteca vacía, runtime,
+configuración y Wi-Fi. Obtiene el SSID únicamente del AP configurado que expone
+`/api/wifi`; exige formato `GESTUR-[A-F0-9]{4}`, red abierta y activa, y ausencia
+de otro cambio Wi-Fi pendiente antes de modificarlo. No busca otras redes ni
+adapta el ensayo a un AP personalizado. Añade, cambia y elimina una contraseña
+aleatoria, e intenta restaurar y verificar la red abierta original incluso
+cuando una comprobación falla; informa si no puede confirmarlo. Las contraseñas
+no se guardan y el JSON omite el SSID literal. Ejecutarlo desde Ethernet, porque
+los cambios reinician el AP.
+
+`--help` muestra las rutas y opciones locales disponibles. Son pruebas con
+efectos reales al ejecutarlas; la lectura de esta documentación no las inicia.
+
 ## MobRecon en ONNX
 
 `benchmark_mobrecon.py` era `benchmark_onnx.py` durante la medición. Necesita

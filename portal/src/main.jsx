@@ -15,6 +15,7 @@ import {
   SimpleGrid,
   NumberInput,
   Select,
+  Slider,
   Switch,
   TextInput,
   PasswordInput,
@@ -1034,7 +1035,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
     <>
       <SectionTitle
         title="Parámetros"
-        description="Configura los gestos y los movimientos del modelo."
+        description="Ajusta los controles y la visualización del modelo."
         action={
           <Button
             leftSection={<IconCheck size={18} />}
@@ -1093,21 +1094,50 @@ function Parameters({ config, setConfig, defaults, notify }) {
           <Title order={3} mb="lg">
             Luz ambiente
           </Title>
-          <Select
-            aria-label="Luz ambiente"
-            value={draft.render.ambient_light ?? "none"}
-            data={[
-              { value: "none", label: "Ninguna" },
-              { value: "soft", label: "Suave" },
-              { value: "warm", label: "Cálida" },
-              { value: "cool", label: "Fría" },
-              { value: "contrast", label: "Contraste" },
-            ]}
-            allowDeselect={false}
-            onChange={(value) =>
-              value !== null && update("render", "ambient_light", value)
-            }
-          />
+          <Stack gap="lg">
+            <Select
+              aria-label="Luz ambiente"
+              value={draft.render.ambient_light ?? "none"}
+              data={[
+                { value: "none", label: "Ninguna" },
+                { value: "studio", label: "Estudio" },
+                { value: "gallery", label: "Galería" },
+                { value: "sunset", label: "Atardecer" },
+                { value: "rim", label: "Contraluz" },
+              ]}
+              allowDeselect={false}
+              onChange={(value) =>
+                value !== null && update("render", "ambient_light", value)
+              }
+            />
+            <Box>
+              <Group justify="space-between" mb="xs">
+                <Text size="sm" fw={500}>
+                  Exposición
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {draft.render.exposure ?? 50} %
+                </Text>
+              </Group>
+              <Slider
+                min={10}
+                max={100}
+                step={1}
+                value={draft.render.exposure ?? 50}
+                onChange={(value) => update("render", "exposure", value)}
+                thumbLabel="Exposición"
+                thumbValueText={(value) => `${value} %`}
+                label={(value) => `${value} %`}
+                marks={[
+                  { value: 10, label: "10 %" },
+                  { value: 50, label: "50 %" },
+                  { value: 100, label: "100 %" },
+                ]}
+                mx={5}
+                mb="xl"
+              />
+            </Box>
+          </Stack>
         </Paper>
         <Paper p="xl" withBorder>
           <Title order={3} mb="lg">

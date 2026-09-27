@@ -26,7 +26,7 @@ def test_presets_preserve_assets_and_transforms_without_leaking_lights(tmp_path,
         state = viewer.get_current_state()
         monkeypatch.setattr(viewer.loader, "loadModel", lambda *a, **kw: pytest.fail("lights reloaded model"))
         for _ in range(4):
-            for preset in ("soft", "warm", "cool", "contrast", "none"):
+            for preset in ("studio", "gallery", "sunset", "rim", "none"):
                 viewer.apply_settings(ambient_light=preset)
                 assert viewer.model == model
                 assert viewer.get_current_state() == state
@@ -39,14 +39,17 @@ def test_presets_preserve_assets_and_transforms_without_leaking_lights(tmp_path,
                     assert viewer._model_light_root is None
                     assert viewer.render.find("**/gestur-model-lighting").is_empty()
                 else:
-                    assert model.get_attrib(core.LightAttrib).get_num_on_lights() == 2
+                    assert model.get_attrib(core.LightAttrib).get_num_on_lights() == 3
                     assert len(viewer.render.find_all_matches("**/gestur-model-lighting")) == 1
-                    key = viewer.render.find("**/model-key")
-                    assert not key.node().is_shadow_caster()
-                    assert list(key.node().get_specular_color()) == [0, 0, 0, 1]
-                    transform = key.get_transform(viewer.render)
+                    lamps = [node for node in model.get_attrib(core.LightAttrib).get_on_lights()
+                             if not isinstance(node.node(), core.AmbientLight)]
+                    assert len(lamps) == 2
+                    assert any(isinstance(node.node(), core.Spotlight) for node in lamps) == (preset == "gallery")
+                    assert all(not node.node().is_shadow_caster() for node in lamps)
+                    assert all(list(node.node().get_specular_color()) == [0, 0, 0, 1] for node in lamps)
+                    transforms = [node.get_transform(viewer.render) for node in lamps]
                     viewer.update_model(rotation=[35, 60, 90])
-                    assert key.get_transform(viewer.render) == transform
+                    assert [node.get_transform(viewer.render) for node in lamps] == transforms
                     viewer.update_model(**state)
     finally:
         viewer.destroy()
@@ -62,16 +65,20 @@ def test_welcome_is_unaffected_and_next_model_inherits_selected_lighting(tmp_pat
         welcome_lights = [list(light.node().get_color()) for light in
                           welcome_state.get_attrib(core.LightAttrib).get_on_lights()]
         overlay = viewer.welcome_overlay
-        for preset in ("warm", "cool", "contrast", "soft"):
-            viewer.apply_settings(ambient_light=preset)
+        for preset in ("gallery", "sunset", "rim", "studio"):
+            viewer.apply_settings(ambient_light=preset, exposure=75)
             assert viewer.welcome.get_state() == welcome_state
             assert viewer.welcome_overlay == overlay
             assert viewer._model_light_root is None
+            assert viewer._exposure_stage is None
+            assert viewer.render.get_attrib(core.ColorScaleAttrib) is None
         viewer.load_model(write_model(tmp_path))
-        assert viewer.model.get_attrib(core.LightAttrib).get_num_on_lights() == 2
-        assert viewer.get_render_status()["ambient_light"] == "soft"
+        assert viewer.model.get_attrib(core.LightAttrib).get_num_on_lights() == 3
+        assert viewer.get_render_status()["ambient_light"] == "studio"
+        assert viewer.get_render_status()["exposure"] == 75
+        assert viewer.model.has_texture(viewer._exposure_stage)
         viewer.apply_settings(target_fps=30)  # Older callers may omit lighting.
-        assert viewer.get_render_status()["ambient_light"] == "soft"
+        assert viewer.get_render_status()["ambient_light"] == "studio"
         viewer.load_model(None)
         assert viewer._model_light_root is None
         assert [list(light.node().get_color()) for light in
@@ -113,12 +120,21 @@ def test_controller_updates_lighting_without_reload_and_preserves_pose_on_contro
         visual_state = app.visualizer.get_current_state()
         model = app.visualizer.model
         monkeypatch.setattr(app.visualizer, "load_model", lambda *a, **kw: pytest.fail("settings reloaded model"))
-        config["render"]["ambient_light"] = "warm"
+        config["render"]["ambient_light"] = "sunset"
+        config["render"]["exposure"] = 75
         save_config(config, path)
         app._reload_config()
         assert app.control_system is controls
         assert app.visualizer.model == model
-        assert app.visualizer.get_render_status()["ambient_light"] == "warm"
+        assert app.visualizer.get_render_status()["ambient_light"] == "sunset"
+        assert app.visualizer.get_render_status()["exposure"] == 75
+        light_root = app.visualizer._model_light_root
+        config["render"]["exposure"] = 50
+        save_config(config, path)
+        app._reload_config()
+        assert app.visualizer._model_light_root == light_root
+        assert not app.visualizer.model.has_texture(app.visualizer._exposure_stage)
+        assert app.visualizer.get_render_status()["exposure"] == 50
         assert app.visualizer.get_current_state() == visual_state
         assert app.exit_code == 0
         config["controls"]["idle_mode"] = "hold"
@@ -131,6 +147,7 @@ def test_controller_updates_lighting_without_reload_and_preserves_pose_on_contro
         app._write_status()
         status = json.loads(app.status_path.read_text())
         assert status["idle"] == app.control_system.get_idle_status()
-        assert status["render_scheduler"]["ambient_light"] == "warm"
+        assert status["render_scheduler"]["ambient_light"] == "sunset"
+        assert status["render_scheduler"]["exposure"] == 50
     finally:
         app.cleanup()

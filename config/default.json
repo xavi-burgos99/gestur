@@ -17,7 +17,8 @@
     "antialias_samples": 2,
     "fullscreen": true,
     "hide_cursor": true,
-    "ambient_light": "none"
+    "ambient_light": "none",
+    "exposure": 50
   },
   "controls": {
     "idle_mode": "return",

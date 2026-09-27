@@ -72,6 +72,7 @@ export async function createStore({
     if (config?.schema_version === 1) {
       for (const [section, key, value] of [
         ["render", "ambient_light", "none"],
+        ["render", "exposure", 50],
         ["controls", "idle_mode", "return"],
       ]) {
         if (
@@ -82,6 +83,15 @@ export async function createStore({
         )
           config[section][key] = value;
       }
+      const presets = new Map([
+        ["soft", "studio"],
+        ["warm", "sunset"],
+        ["cool", "gallery"],
+        ["contrast", "rim"],
+      ]);
+      const preset = config.render?.ambient_light;
+      if (typeof preset === "string" && presets.has(preset))
+        config.render.ambient_light = presets.get(preset);
     }
     if (!validate(config))
       throw new ApiError(

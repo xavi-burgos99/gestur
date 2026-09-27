@@ -203,7 +203,7 @@ def test_lighting_can_return_to_identical_unlit_framebuffer(offscreen_viewer):
     step()
     unlit = framebuffer(viewer)
     lit_frames = []
-    for preset in ("soft", "warm", "cool", "contrast"):
+    for preset in ("studio", "gallery", "sunset", "rim"):
         viewer.apply_settings(ambient_light=preset)
         step()
         step()

@@ -12,7 +12,8 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     AmbientLight, AntialiasAttrib, CardMaker, ClockObject, DirectionalLight, DynamicTextFont,
     Filename, Geom, GeomNode, GeomTriangles, GeomVertexData, GeomVertexFormat,
-    GeomVertexWriter, PythonCallbackObject, TextNode, Texture, TransparencyAttrib, WindowProperties, loadPrcFileData,
+    GeomVertexWriter, PerspectiveLens, PythonCallbackObject, Spotlight, TextNode,
+    Texture, TextureStage, TransparencyAttrib, WindowProperties, loadPrcFileData,
 )
 
 from render_scheduler import RenderCadence
@@ -20,13 +21,46 @@ from runtime_state import FrameMetrics
 from runtime_config import validate_model_orientation
 
 
-# One ambient and one directional light per preset; no shadow buffers or extra passes.
+# Positions are in the fixed exhibition camera's frame: X right, Y away
+# from the viewer, Z up. These are distinct light rigs, not exposure filters.
+# Each rig uses at most three lights, without shadow maps or extra render passes.
 MODEL_LIGHT_PRESETS = {
-    "soft": ((.68, .68, .68, 1), (.42, .42, .42, 1), (-35, 55, 0)),
-    "warm": ((.56, .50, .42, 1), (.65, .52, .36, 1), (-35, 55, 0)),
-    "cool": ((.42, .51, .61, 1), (.38, .54, .72, 1), (-35, 55, 0)),
-    "contrast": ((.45, .45, .45, 1), (.85, .85, .85, 1), (-55, 35, 0)),
+    "studio": {
+        "ambient": (.4, .4, .4, 1),
+        "lights": (
+            {"role": "key", "type": "directional", "color": (1.6, 1.6, 1.6, 1), "position": (-8, -10, 10)},
+            {"role": "fill", "type": "directional", "color": (.8, .8, .8, 1), "position": (10, -7, 1)},
+        ),
+    },
+    "gallery": {
+        "ambient": (.25, .25, .25, 1),
+        "lights": (
+            {"role": "key", "type": "spot", "color": (3.2, 3.05, 2.83, 1), "position": (-3, -8, 16),
+             "fov": 40, "exponent": 6, "attenuation": (1, 0, .001)},
+            {"role": "fill", "type": "directional", "color": (.22, .25, .28, 1), "position": (8, -4, -2)},
+        ),
+    },
+    "sunset": {
+        "ambient": (.2, .24, .32, 1),
+        "lights": (
+            {"role": "key", "type": "directional", "color": (2.5, 1.25, .55, 1), "position": (-14, -4, 2)},
+            {"role": "fill", "type": "directional", "color": (.35, .45, .65, 1), "position": (7, -10, 7)},
+        ),
+    },
+    "rim": {
+        "ambient": (.2, .21, .23, 1),
+        "lights": (
+            {"role": "rim", "type": "directional", "color": (2.1, 2.2, 2.4, 1), "position": (12, 3, 5)},
+            {"role": "fill", "type": "directional", "color": (.5, .55, .65, 1), "position": (-2, -12, 0)},
+        ),
+    },
 }
+
+
+def _validate_exposure(value):
+    if type(value) is not int or not 10 <= value <= 100:
+        raise ValueError("La exposición debe ser un entero entre 10 y 100")
+    return value
 
 
 def _usable_ipv4(address):
@@ -115,13 +149,16 @@ def _welcome_geometry():
 class ControlledObjViewer(ShowBase):
     def __init__(self, obj_path=None, *, target_fps=60, antialias_samples=2,
                  fullscreen=True, hide_cursor=True, show_fps=False,
-                 window_type=None, model_orientation=None, ambient_light="none"):
+                 window_type=None, model_orientation=None, ambient_light="none", exposure=50):
         # Configure before creating the context. Preserve geometry and textures.
         if antialias_samples not in (0, 2, 4):
             raise ValueError("antialias_samples debe ser 0, 2 o 4")
         if ambient_light != "none" and ambient_light not in MODEL_LIGHT_PRESETS:
             raise ValueError("Iluminación ambiental no válida")
         self._ambient_light = ambient_light
+        self._exposure = _validate_exposure(exposure)
+        self._exposure_stage = None
+        self._exposure_texture = None
         self._model_light_root = None
         self._idle_animation = False
         self._render_cadence = RenderCadence(target_fps)
@@ -179,7 +216,7 @@ class ControlledObjViewer(ShowBase):
             self._draw_callback = PythonCallbackObject(self._record_draw)
             self._draw_region.set_draw_callback(self._draw_callback)
         self.apply_settings(target_fps=target_fps, hide_cursor=hide_cursor,
-                            ambient_light=ambient_light)
+                            ambient_light=ambient_light, exposure=exposure)
         # Panda's built-in FPS meter counts task ticks, including skipped draws.
         self.setFrameRateMeter(False)
         if show_fps:
@@ -194,13 +231,17 @@ class ControlledObjViewer(ShowBase):
             self.destroy()
             raise
 
-    def apply_settings(self, *, target_fps=60, hide_cursor=True, ambient_light=None):
-        if ambient_light is not None:
-            if ambient_light != "none" and ambient_light not in MODEL_LIGHT_PRESETS:
-                raise ValueError("Iluminación ambiental no válida")
-            if ambient_light != self._ambient_light:
-                self._ambient_light = ambient_light
-                self._apply_model_lighting()
+    def apply_settings(self, *, target_fps=60, hide_cursor=True, ambient_light=None, exposure=None):
+        if ambient_light is not None and ambient_light != "none" and ambient_light not in MODEL_LIGHT_PRESETS:
+            raise ValueError("Iluminación ambiental no válida")
+        if exposure is not None:
+            _validate_exposure(exposure)
+        if ambient_light is not None and ambient_light != self._ambient_light:
+            self._ambient_light = ambient_light
+            self._apply_model_lighting()
+        if exposure is not None and exposure != self._exposure:
+            self._exposure = exposure
+            self._apply_model_exposure()
         clock = ClockObject.get_global_clock()
         clock.set_mode(ClockObject.MLimited)
         clock.set_frame_rate(target_fps)
@@ -258,6 +299,7 @@ class ControlledObjViewer(ShowBase):
                 "mode": ("floating" if self._idle_animation and self._render_cadence.mode == "welcome"
                          else self._render_cadence.mode),
                 "ambient_light": self._ambient_light,
+                "exposure": self._exposure,
                 "idle_animation": self._idle_animation,
                 "floating_fps_limit": min(self._render_cadence.target_fps, self._render_cadence.welcome_fps),
                 "idle_refresh_fps": min(self._render_cadence.target_fps, self._render_cadence.idle_fps),
@@ -312,6 +354,7 @@ class ControlledObjViewer(ShowBase):
         self.model_orientation = orientation
         self.model_path = str(path)
         self._apply_model_lighting()
+        self._apply_model_exposure()
         if previous is not None:
             previous.remove_node()
         self._remove_welcome()
@@ -333,23 +376,65 @@ class ControlledObjViewer(ShowBase):
         self._clear_model_lighting()
         if self.model is None or self._ambient_light == "none":
             return
-        ambient_color, key_color, direction = MODEL_LIGHT_PRESETS[self._ambient_light]
-        # Keep light direction in exhibition space, independent of object gestures.
-        # Attach their state only to the displayed model, never the welcome scene.
+        preset = MODEL_LIGHT_PRESETS[self._ambient_light]
+        # The lamp rig uses the same camera frame as _set_model_camera, but
+        # remains at the object's exhibition origin and never follows gestures.
         self._model_light_root = self.render.attach_new_node("gestur-model-lighting")
+        self._model_light_root.set_pos(0, 1, -25)
+        self._model_light_root.look_at(0, 0, 0)
+        self._model_light_root.set_pos(0, 0, 0)
         ambient = AmbientLight("model-ambient")
-        ambient.set_color(ambient_color)
-        key = DirectionalLight("model-key")
-        key.set_color(key_color)
-        # Scan textures already contain highlights. Keep the display lights
-        # diffuse so imported zero-shininess materials do not produce white glare.
-        key.set_specular_color((0, 0, 0, 1))
-        key.set_shadow_caster(False)
-        ambient_node = self._model_light_root.attach_new_node(ambient)
-        key_node = self._model_light_root.attach_new_node(key)
-        key_node.set_hpr(*direction)
-        self.model.set_light(ambient_node)
-        self.model.set_light(key_node)
+        ambient.set_color(preset["ambient"])
+        self.model.set_light(self._model_light_root.attach_new_node(ambient))
+        for spec in preset["lights"]:
+            if spec["type"] == "spot":
+                light = Spotlight(f"model-{spec['role']}")
+                lens = PerspectiveLens()
+                lens.set_fov(spec["fov"])
+                lens.set_near_far(1, 100)
+                light.set_lens(lens)
+                light.set_exponent(spec["exponent"])
+                light.set_attenuation(spec["attenuation"])
+            else:
+                light = DirectionalLight(f"model-{spec['role']}")
+            light.set_color(spec["color"])
+            # Keep diffuse scan textures readable: some imports have zero
+            # shininess and otherwise produce a broad artificial white glare.
+            light.set_specular_color((0, 0, 0, 1))
+            light.set_shadow_caster(False)
+            node = self._model_light_root.attach_new_node(light)
+            node.set_pos(*spec["position"])
+            node.look_at(0, 0, 0)
+            self.model.set_light(node)
+        self.invalidate(frames=2)
+
+    def _apply_model_exposure(self):
+        if self.model is None:
+            return
+        if self._exposure_stage is not None:
+            self.model.clear_texture(self._exposure_stage)
+        if self._exposure != 50:
+            if self._exposure_stage is None:
+                self._exposure_stage = TextureStage("gestur-exposure")
+                self._exposure_stage.set_combine_rgb(
+                    TextureStage.CM_modulate, TextureStage.CS_previous, TextureStage.CO_src_color,
+                    TextureStage.CS_constant, TextureStage.CO_src_color)
+                self._exposure_stage.set_combine_alpha(
+                    TextureStage.CM_replace, TextureStage.CS_previous, TextureStage.CO_src_alpha)
+                self._exposure_texture = Texture("gestur-exposure-identity")
+                self._exposure_texture.setup_2d_texture(1, 1, Texture.T_unsigned_byte, Texture.F_rgba)
+                self._exposure_texture.set_ram_image(bytes((255, 255, 255, 255)))
+            gain = 2 ** ((self._exposure - 50) / 25)
+            rgb_scale = 4 if gain > 2 else 2 if gain > 1 else 1
+            self._exposure_stage.set_rgb_scale(rgb_scale)
+            self._exposure_stage.set_color((gain / rgb_scale,) * 3 + (1,))
+            stages = self.model.find_all_texture_stages()
+            self._exposure_stage.set_sort(max((stage.get_sort() for stage in stages), default=0) + 1)
+            # A last texture-combine stage scales the already textured RGB,
+            # avoiding fixed-function clamping of vertex colors above one.
+            # It preserves alpha and uses the existing draw, not a postprocess.
+            self.model.set_texture(self._exposure_stage, self._exposure_texture)
+        # At 50 the stage is absent, exactly restoring the original render state.
         self.invalidate(frames=2)
 
     def set_idle_animation(self, active):

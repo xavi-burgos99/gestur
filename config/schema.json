@@ -24,13 +24,14 @@
     },
     "render": {
       "type": "object", "additionalProperties": false,
-      "required": ["target_fps", "antialias_samples", "fullscreen", "hide_cursor", "ambient_light"],
+      "required": ["target_fps", "antialias_samples", "fullscreen", "hide_cursor", "ambient_light", "exposure"],
       "properties": {
         "target_fps": {"type": "integer", "minimum": 15, "maximum": 120},
         "antialias_samples": {"type": "integer", "enum": [0, 2, 4]},
         "fullscreen": {"type": "boolean"},
         "hide_cursor": {"type": "boolean"},
-        "ambient_light": {"type": "string", "enum": ["none", "soft", "warm", "cool", "contrast"]}
+        "ambient_light": {"type": "string", "enum": ["none", "studio", "gallery", "sunset", "rim"]},
+        "exposure": {"type": "integer", "minimum": 10, "maximum": 100}
       }
     },
     "controls": {

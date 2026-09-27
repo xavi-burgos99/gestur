@@ -92,13 +92,20 @@ def validate_config(config):
     alone cannot express comparisons between two property values.
     """
     config = copy.deepcopy(config)
-    # Version 1 predates these optional behaviors. Only absent fields migrate;
-    # explicitly invalid values must still fail instead of silently resetting.
+    # Version 1 predates these optional behaviors. Fill absent fields and
+    # recognized retired presets; reject explicitly invalid values as before.
     if isinstance(config, dict) and config.get("schema_version") == 1:
         for section, key, value in (("render", "ambient_light", "none"),
+                                    ("render", "exposure", 50),
                                     ("controls", "idle_mode", "return")):
             if isinstance(config.get(section), dict):
                 config[section].setdefault(key, value)
+        if isinstance(config.get("render"), dict):
+            preset = config["render"].get("ambient_light")
+            if isinstance(preset, str):
+                config["render"]["ambient_light"] = {
+                    "soft": "studio", "warm": "sunset", "cool": "gallery", "contrast": "rim"
+                }.get(preset, preset)
     schema = json.loads((CONFIG_DIR / "schema.json").read_text(encoding="utf-8"))
     _validate(config, schema)
     ids = set()

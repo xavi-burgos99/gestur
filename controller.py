@@ -159,7 +159,8 @@ class PoseController:
                 self.control_system = replacement
             self.visualizer.apply_settings(target_fps=candidate["render"]["target_fps"],
                                            hide_cursor=candidate["render"]["hide_cursor"],
-                                           ambient_light=candidate["render"]["ambient_light"])
+                                           ambient_light=candidate["render"]["ambient_light"],
+                                           exposure=candidate["render"]["exposure"])
             self.config = candidate
             self.config_error = None
             self.last_error = self.model_error or self.tracking_error

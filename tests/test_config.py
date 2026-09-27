@@ -17,11 +17,13 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(default_config()["tracking"]["use_hands"])
         self.assertIsNone(default_config()["active_model"])
         self.assertEqual(default_config()["render"]["ambient_light"], "none")
+        self.assertEqual(default_config()["render"]["exposure"], 50)
         self.assertEqual(default_config()["controls"]["idle_mode"], "return")
 
     def test_legacy_v1_lighting_and_idle_defaults_preserve_user_parameters(self):
         legacy = default_config()
         del legacy["render"]["ambient_light"]
+        del legacy["render"]["exposure"]
         del legacy["controls"]["idle_mode"]
         legacy["render"]["target_fps"] = 30
         legacy["controls"]["smoothing_ms"] = 237
@@ -31,6 +33,7 @@ class ConfigTests(unittest.TestCase):
         migrated = validate_config(legacy)
         expected = json.loads(json.dumps(legacy))
         expected["render"]["ambient_light"] = "none"
+        expected["render"]["exposure"] = 50
         expected["controls"]["idle_mode"] = "return"
         self.assertEqual(migrated, expected)
         self.assertEqual(legacy, snapshot)
@@ -41,8 +44,8 @@ class ConfigTests(unittest.TestCase):
             save_config(load_config(path), path)
             self.assertEqual(json.loads(path.read_text()), expected)
         # Partial migration must retain a deliberately selected preset/mode.
-        legacy["render"]["ambient_light"] = "warm"
-        self.assertEqual(validate_config(legacy)["render"]["ambient_light"], "warm")
+        legacy["render"]["ambient_light"] = "sunset"
+        self.assertEqual(validate_config(legacy)["render"]["ambient_light"], "sunset")
         del legacy["render"]["ambient_light"]
         legacy["controls"]["idle_mode"] = "hold"
         self.assertEqual(validate_config(legacy)["controls"]["idle_mode"], "hold")
@@ -50,7 +53,7 @@ class ConfigTests(unittest.TestCase):
     def test_lighting_and_idle_modes_validate_and_round_trip(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
-            for light in ("none", "soft", "warm", "cool", "contrast"):
+            for light in ("none", "studio", "gallery", "sunset", "rim"):
                 for mode in ("hold", "return", "float"):
                     with self.subTest(light=light, mode=mode):
                         config = default_config()
@@ -67,6 +70,45 @@ class ConfigTests(unittest.TestCase):
                         with self.assertRaises(ConfigurationError):
                             save_config(config, path)
                         self.assertEqual(path.read_bytes(), valid_bytes)
+
+    def test_legacy_lighting_presets_migrate_without_changing_user_exposure(self):
+        for old, new in (("soft", "studio"), ("warm", "sunset"),
+                         ("cool", "gallery"), ("contrast", "rim")):
+            with self.subTest(old=old):
+                legacy = default_config()
+                legacy["render"]["ambient_light"] = old
+                legacy["render"]["target_fps"] = 30
+                legacy["controls"]["idle_mode"] = "hold"
+                del legacy["render"]["exposure"]
+                expected = json.loads(json.dumps(legacy))
+                expected["render"].update(ambient_light=new, exposure=50)
+                self.assertEqual(validate_config(legacy), expected)
+                self.assertEqual(legacy["render"]["ambient_light"], old)
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "config.json"
+                    path.write_text(json.dumps(legacy), encoding="utf-8")
+                    self.assertEqual(load_config(path), expected)
+                    legacy["render"]["exposure"] = 73
+                    expected["render"]["exposure"] = 73
+                    self.assertEqual(save_config(legacy, path), expected)
+                    self.assertEqual(load_config(path), expected)
+
+    def test_exposure_bounds_and_integer_validation_preserve_saved_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            for exposure in (10, 37, 50, 100):
+                config = default_config()
+                config["render"].update(exposure=exposure, ambient_light="studio")
+                self.assertEqual(save_config(config, path), config)
+                self.assertEqual(load_config(path), config)
+            before = path.read_bytes()
+            for exposure in (None, 9, 101, 49.5, "50", True, False, [], {}):
+                with self.subTest(exposure=exposure):
+                    config = default_config()
+                    config["render"]["exposure"] = exposure
+                    with self.assertRaises(ConfigurationError):
+                        save_config(config, path)
+                    self.assertEqual(path.read_bytes(), before)
 
     def test_missing_file_uses_defaults(self):
         with tempfile.TemporaryDirectory() as directory:

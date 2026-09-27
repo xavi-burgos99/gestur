@@ -324,6 +324,7 @@ test("legacy v1 defaults migrate atomically once without changing user parameter
   const { store, configPath } = await fixture(t);
   const legacy = structuredClone(store.defaults);
   delete legacy.render.ambient_light;
+  delete legacy.render.exposure;
   delete legacy.controls.idle_mode;
   legacy.render.target_fps = 30;
   legacy.controls.smoothing_ms = 237;
@@ -333,6 +334,7 @@ test("legacy v1 defaults migrate atomically once without changing user parameter
   const originalInode = (await stat(configPath)).ino;
   const expected = structuredClone(legacy);
   expected.render.ambient_light = "none";
+  expected.render.exposure = 50;
   expected.controls.idle_mode = "return";
   assert.deepEqual(await store.read(), expected);
   assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")), expected);
@@ -341,9 +343,9 @@ test("legacy v1 defaults migrate atomically once without changing user parameter
   assert.deepEqual(await store.read(), expected);
   assert.equal((await stat(configPath)).ino, migratedInode);
   // An explicit setting survives even if only the other field needs migration.
-  legacy.render.ambient_light = "cool";
+  legacy.render.ambient_light = "gallery";
   await writeFile(configPath, JSON.stringify(legacy));
-  assert.equal((await store.read()).render.ambient_light, "cool");
+  assert.equal((await store.read()).render.ambient_light, "gallery");
   delete legacy.render.ambient_light;
   legacy.controls.idle_mode = "hold";
   await writeFile(configPath, JSON.stringify(legacy));
@@ -364,5 +366,47 @@ test("explicit invalid lighting or idle setting is never replaced with a default
       await assert.rejects(store.read(), /configuración guardada no es válida/);
       assert.equal(await readFile(configPath, "utf8"), bytes);
     }
+  }
+});
+
+test("retired lighting presets migrate atomically while preserving exposure and other settings", async (t) => {
+  const { store, configPath, modelsDir } = await fixture(t);
+  for (const [oldPreset, preset] of [
+    ["soft", "studio"],
+    ["warm", "sunset"],
+    ["cool", "gallery"],
+    ["contrast", "rim"],
+  ]) {
+    const legacy = structuredClone(store.defaults);
+    legacy.render.ambient_light = oldPreset;
+    legacy.render.target_fps = 30;
+    legacy.controls.idle_mode = "hold";
+    delete legacy.render.exposure;
+    await writeFile(configPath, JSON.stringify(legacy));
+    const expected = structuredClone(legacy);
+    expected.render.ambient_light = preset;
+    expected.render.exposure = 50;
+    const restarted = await createStore({ configPath, modelsDir });
+    assert.deepEqual(await restarted.read(), expected);
+    assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")), expected);
+    const migratedInode = (await stat(configPath)).ino;
+    await restarted.read();
+    assert.equal((await stat(configPath)).ino, migratedInode);
+    legacy.render.exposure = 73;
+    expected.render.exposure = 73;
+    await writeFile(configPath, JSON.stringify(legacy));
+    assert.deepEqual(await store.read(), expected);
+  }
+});
+
+test("explicit invalid exposure stays on disk and is reported instead of resetting brightness", async (t) => {
+  const { store, configPath } = await fixture(t);
+  for (const exposure of [null, 9, 101, 49.5, "50", true, [], {}]) {
+    const config = structuredClone(store.defaults);
+    config.render.exposure = exposure;
+    const bytes = JSON.stringify(config);
+    await writeFile(configPath, bytes);
+    await assert.rejects(store.read(), /configuración guardada no es válida/);
+    assert.equal(await readFile(configPath, "utf8"), bytes);
   }
 });

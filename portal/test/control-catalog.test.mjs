@@ -25,6 +25,35 @@ const displayOnlyInputs = [
   "right_hand_rotation",
 ];
 
+test("object movement labels follow the exhibition camera without changing saved axes or physical gestures", () => {
+  const expected = [
+    ["rotation_roll", "Giro horizontal", "yaw"],
+    ["rotation_pitch", "Giro vertical", "pitch"],
+    ["rotation_yaw", "Inclinación lateral", "roll"],
+    ["position_x", "Desplazamiento horizontal", "translate-x"],
+    ["position_y", "Desplazamiento vertical", "translate-y"],
+    ["position_z", "Desplazamiento en profundidad", "depth"],
+  ];
+  for (const [id, label, motion] of expected) {
+    const option = CONTROL_OPTIONS.find((item) => item.id === id);
+    assert.equal(option.label, label);
+    assert.deepEqual(option.icon, { subject: "model", motion });
+    assert.equal(createControlMapping("existing", id, "head_yaw").output, id);
+  }
+  // Body tracking angles keep their physical meaning; only object output
+  // presentation compensates for the viewer's camera orientation.
+  for (const body of ["head", "torso", "left_hand", "right_hand"]) {
+    const yaw = GESTURE_OPTIONS.find((item) => item.id === `${body}_yaw`);
+    const roll = GESTURE_OPTIONS.find((item) => item.id === `${body}_roll`);
+    assert.equal(yaw.label, "Giro horizontal");
+    assert.equal(yaw.icon.motion, "yaw");
+    assert.ok(roll.label.startsWith("Inclinación lateral"));
+    assert.equal(roll.icon.motion, "roll");
+    assert.equal(gestureFromSelection(selectionForGesture(yaw.id)), yaw.id);
+    assert.equal(gestureFromSelection(selectionForGesture(roll.id)), roll.id);
+  }
+});
+
 test("progressive choices expose the next step only after its parent, with an icon on every option", () => {
   let selection = emptyGestureSelection();
   const ids = () => gestureSteps(selection).map((step) => step.id);
@@ -186,11 +215,11 @@ test("the full display catalog covers the runtime schema including existing lega
     assert.equal(roll.icon.side, side);
   }
   assert.match(
-    CONTROL_OPTIONS.find((option) => option.id === "position_z").label,
+    CONTROL_OPTIONS.find((option) => option.id === "position_y").label,
     /vertical/,
   );
   assert.match(
-    CONTROL_OPTIONS.find((option) => option.id === "position_y").label,
+    CONTROL_OPTIONS.find((option) => option.id === "position_z").label,
     /profundidad/,
   );
 });

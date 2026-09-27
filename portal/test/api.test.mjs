@@ -481,10 +481,11 @@ test("lighting and standby settings round-trip through API and legacy requests k
   const { request, folder } = await fixture(t);
   const initial = (await request("GET", "config")).json();
   assert.equal(initial.defaults.render.ambient_light, "none");
+  assert.equal(initial.defaults.render.exposure, 50);
   assert.equal(initial.defaults.controls.idle_mode, "return");
   const config = initial.config;
   config.controls.smoothing_ms = 123;
-  for (const light of ["none", "soft", "warm", "cool", "contrast"]) {
+  for (const light of ["none", "studio", "gallery", "sunset", "rim"]) {
     for (const mode of ["hold", "return", "float"]) {
       config.render.ambient_light = light;
       config.controls.idle_mode = mode;
@@ -506,15 +507,56 @@ test("lighting and standby settings round-trip through API and legacy requests k
     }
   }
   delete config.render.ambient_light;
+  delete config.render.exposure;
   delete config.controls.idle_mode;
   const migrated = await request("PUT", "config", config);
   assert.equal(migrated.statusCode, 200);
   const expected = structuredClone(config);
   expected.render.ambient_light = "none";
+  expected.render.exposure = 50;
   expected.controls.idle_mode = "return";
   assert.deepEqual(migrated.json().config, expected);
   assert.deepEqual(
     JSON.parse(await readFile(path.join(folder, "config.json"), "utf8")),
     expected,
   );
+});
+
+test("exposure round-trips independently of lighting and legacy names resolve to scenarios", async (t) => {
+  const { request, folder } = await fixture(t);
+  const config = (await request("GET", "config")).json().config;
+  config.render.ambient_light = "gallery";
+  for (const exposure of [10, 37, 50, 100]) {
+    config.render.exposure = exposure;
+    const saved = await request("PUT", "config", config);
+    assert.equal(saved.statusCode, 200, saved.body);
+    assert.deepEqual(saved.json().config, config);
+    assert.deepEqual((await request("GET", "config")).json().config, config);
+  }
+  for (const exposure of [null, 9, 101, 49.5, "50", true, [], {}]) {
+    const invalid = structuredClone(config);
+    invalid.render.exposure = exposure;
+    assert.equal((await request("PUT", "config", invalid)).statusCode, 400);
+    assert.deepEqual((await request("GET", "config")).json().config, config);
+  }
+  for (const [oldPreset, preset] of [
+    ["soft", "studio"],
+    ["warm", "sunset"],
+    ["cool", "gallery"],
+    ["contrast", "rim"],
+  ]) {
+    const legacy = structuredClone(config);
+    legacy.render.ambient_light = oldPreset;
+    delete legacy.render.exposure;
+    const response = await request("PUT", "config", legacy);
+    assert.equal(response.statusCode, 200, response.body);
+    const expected = structuredClone(legacy);
+    expected.render.ambient_light = preset;
+    expected.render.exposure = 50;
+    assert.deepEqual(response.json().config, expected);
+    assert.deepEqual(
+      JSON.parse(await readFile(path.join(folder, "config.json"), "utf8")),
+      expected,
+    );
+  }
 });

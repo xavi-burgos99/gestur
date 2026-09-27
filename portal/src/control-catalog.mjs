@@ -1,6 +1,9 @@
+// These labels describe the object's motion from the exhibition camera, which
+// looks along world +Z with Y upright. Keep the saved Panda HPR channel names:
+// roll (Y) turns horizontally, while yaw (Z) tilts in the screen plane.
 export const CONTROL_OPTIONS = [
   {
-    id: "rotation_yaw",
+    id: "rotation_roll",
     label: "Giro horizontal",
     description: "Girar a izquierda y derecha.",
     icon: { subject: "model", motion: "yaw" },
@@ -12,7 +15,7 @@ export const CONTROL_OPTIONS = [
     icon: { subject: "model", motion: "pitch" },
   },
   {
-    id: "rotation_roll",
+    id: "rotation_yaw",
     label: "Inclinación lateral",
     description: "Inclinar a un lado y al otro.",
     icon: { subject: "model", motion: "roll" },
@@ -24,13 +27,13 @@ export const CONTROL_OPTIONS = [
     icon: { subject: "model", motion: "translate-x" },
   },
   {
-    id: "position_z",
+    id: "position_y",
     label: "Desplazamiento vertical",
     description: "Mover hacia arriba y abajo.",
     icon: { subject: "model", motion: "translate-y" },
   },
   {
-    id: "position_y",
+    id: "position_z",
     label: "Desplazamiento en profundidad",
     description: "Acercar y alejar el modelo.",
     icon: { subject: "model", motion: "depth" },

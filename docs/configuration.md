@@ -17,17 +17,28 @@ corrección es independiente de las rotaciones asignadas a gestos.
 - Manos desactivadas de inicio para reducir el trabajo. Activarlas permite usar posición, orientación de la palma, apertura y pinza.
 - Renderizado: 60 FPS como objetivo, antialiasing MSAA de 2 muestras, pantalla completa y cursor oculto. Son objetivos configurables; el rendimiento real depende del modelo, la cámara y la Raspberry Pi.
 - Suavizado del seguimiento: 60 ms. Suavizado de los controles: 90 ms; el zoom usa un tercio para conservar su respuesta más rápida.
-- Luz ambiente: **Ninguna**. Modo de espera: **Volver a origen**.
+- Luz ambiente: **Ninguna**, exposición **50 %**. Modo de espera: **Volver a origen**.
 
 Los cambios de controles se aplican al recargar la configuración. Los ajustes de cámara y seguimiento reemplazan el tracker en segundo plano, manteniendo el visor disponible. Pantalla completa y MSAA recrean la ventana mediante reinicio. Un archivo inválido se rechaza y el proceso en marcha conserva la última configuración válida.
 
 ## Luz ambiente y modo de espera
 
-`render.ambient_light` elige la iluminación del modelo: `none` (Ninguna),
-`soft` (Suave), `warm` (Cálida), `cool` (Fría) o `contrast` (Contraste).
-Ninguna conserva el aspecto original sin iluminación añadida. Los presets se
-aplican al guardar, sin recargar el modelo, modificar sus texturas ni añadir
-sombras. La iluminación de la pantalla de bienvenida es independiente.
+`render.ambient_light` elige un escenario de iluminación del modelo:
+
+- `none` — **Ninguna**: conserva el aspecto original sin luces añadidas.
+- `studio` — **Estudio**: luz principal elevada y relleno desde el lado opuesto.
+- `gallery` — **Galería**: iluminación desde arriba para destacar el relieve.
+- `sunset` — **Atardecer**: luz cálida lateral con relleno frío.
+- `rim` — **Contraluz**: luz trasera que destaca la silueta, con relleno frontal.
+
+Cada escenario cambia la disposición de las luces. `render.exposure` controla
+la exposición de forma independiente, con valores enteros del **10 % al 100 %**.
+El **50 %** conserva la exposición original y también se puede ajustar con
+Ninguna seleccionado. Ambos ajustes se aplican al guardar sin recargar el modelo
+ni modificar sus texturas. La bienvenida y el QR mantienen su propia iluminación.
+Los escenarios usan como máximo una luz ambiente y dos luces dirigidas, sin
+mapas de sombras ni pasadas adicionales de renderizado. La exposición se aplica
+al color del modelo: cada 25 puntos duplican la intensidad, con ganancia 1 al 50 %.
 
 `controls.idle_mode` define qué ocurre cuando faltan los gestos activos:
 
@@ -39,7 +50,9 @@ sombras. La iluminación de la pantalla de bienvenida es independiente.
 `reset_timeout_seconds` controla el tiempo de espera; `reset_duration_seconds`
 conserva la duración del regreso a origen. La orientación fija guardada para el
 modelo se mantiene en todos los modos. Los archivos de configuración anteriores
-reciben Ninguna y Volver a origen sin alterar el resto de sus ajustes.
+reciben Ninguna, exposición al 50 % y Volver a origen sin alterar el resto de sus
+ajustes. Los presets antiguos se actualizan al escenario equivalente:
+Suave → Estudio, Cálida → Atardecer, Fría → Galería y Contraste → Contraluz.
 
 ## Asignaciones de movimientos
 
@@ -74,7 +87,13 @@ La profundidad de cuerpo y manos es una aproximación monocular de tamaño apare
 
 Si una entrada angular controla un desplazamiento o el zoom, perder el seguimiento devuelve la entrada al centro numérico configurado, aunque antes hubiera cruzado su límite angular. Así, en modo absoluto el objeto recupera la posición cero o la escala uno.
 
-Las salidas `rotation_yaw`, `rotation_pitch` y `rotation_roll` corresponden a los tres canales de rotación que ya usaba el visor. `position_x`, `position_y` y `position_z` desplazan el objeto. `scale_uniform` cambia su escala.
+Las salidas de rotación conservan los identificadores históricos del visor.
+Con su cámara actual, `rotation_roll` corresponde al **giro horizontal** del
+objeto, `rotation_pitch` al **giro vertical** y `rotation_yaw` a la **inclinación
+lateral** en pantalla. Estos nombres de presentación no cambian las asignaciones
+guardadas ni los giros de entrada de cabeza, cuerpo o manos. Los desplazamientos
+`position_x`, `position_y` y `position_z` son horizontal, vertical y profundidad,
+respectivamente; `scale_uniform` cambia el tamaño del modelo.
 
 - `absolute`: las rotaciones usan `(entrada - center) × 2 × scale` grados; los desplazamientos usan `(entrada - center) × scale`. El zoom usa `1 + (entrada - center) × scale`, limitado a 0,1–5. `invert` invierte el movimiento alrededor de `center`. Las entradas angulares de cabeza y manos pueden cruzar su límite angular sin saltar al ángulo opuesto.
 - `hybrid`: sólo admite salidas de rotación. En la zona central conserva el giro proporcional. Más allá de `left_threshold` o `right_threshold` añade giro continuo hasta `continuous_speed` grados por segundo. Debe cumplirse `left_threshold < center < right_threshold`.

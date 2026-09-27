@@ -1,0 +1,179 @@
+{
+  "mode": "lite",
+  "host": "macOS-27.0-arm64-arm-64bit",
+  "machine": "arm64",
+  "python": "3.12.14",
+  "threads_requested": "default",
+  "frames": 180,
+  "warmup": 20,
+  "memory_peak_MB": {
+    "startup": 22.856,
+    "numpy_import": 39.649,
+    "opencv_import": 64.815,
+    "runtime_import": 70.681,
+    "both_models_allocated": 108.888,
+    "after_inference": 109.412
+  },
+  "scope": "synthetic_tensor_model_only",
+  "runtime_version": "2.2.0",
+  "import_ms": 508.371,
+  "models": [
+    {
+      "model": "palm_detection_lite",
+      "bytes": 1985440,
+      "sha256": "e9a4aaddf90dda56a87235303cf00e4c2d3fb28725f68fd88772997dac905c18",
+      "input_shape": [
+        1,
+        192,
+        192,
+        3
+      ],
+      "outputs": [
+        {
+          "name": "Identity",
+          "shape": [
+            1,
+            2016,
+            18
+          ]
+        },
+        {
+          "name": "Identity_1",
+          "shape": [
+            1,
+            2016,
+            1
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "name": "Identity",
+          "finite": true,
+          "first_values": [
+            4.258299350738525,
+            0.8080191016197205,
+            18.012554168701172
+          ],
+          "sum": 197792.484375
+        },
+        {
+          "name": "Identity_1",
+          "finite": true,
+          "first_values": [
+            -6.270566940307617,
+            -7.481668472290039,
+            -6.702168941497803
+          ],
+          "sum": -17171.265625
+        }
+      ]
+    },
+    {
+      "model": "hand_landmark_lite",
+      "bytes": 2071408,
+      "sha256": "d7fde8ac11f8ce03f8663775bfc323f4fc9f2a38062b4f4efa142874ef5b2a48",
+      "input_shape": [
+        1,
+        224,
+        224,
+        3
+      ],
+      "outputs": [
+        {
+          "name": "Identity",
+          "shape": [
+            1,
+            63
+          ]
+        },
+        {
+          "name": "Identity_1",
+          "shape": [
+            1,
+            1
+          ]
+        },
+        {
+          "name": "Identity_2",
+          "shape": [
+            1,
+            1
+          ]
+        },
+        {
+          "name": "Identity_3",
+          "shape": [
+            1,
+            63
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "name": "Identity",
+          "finite": true,
+          "first_values": [
+            111.93472290039062,
+            180.7248992919922,
+            -2.246656777060707e-06
+          ],
+          "sum": 4084.332275390625
+        },
+        {
+          "name": "Identity_1",
+          "finite": true,
+          "first_values": [
+            0.00511578656733036
+          ],
+          "sum": 0.00511578656733036
+        },
+        {
+          "name": "Identity_2",
+          "finite": true,
+          "first_values": [
+            0.08364617079496384
+          ],
+          "sum": 0.08364617079496384
+        },
+        {
+          "name": "Identity_3",
+          "finite": true,
+          "first_values": [
+            0.002856716513633728,
+            0.04075479507446289,
+            0.027582941576838493
+          ],
+          "sum": -0.11044329404830933
+        }
+      ]
+    }
+  ],
+  "benchmarks": {
+    "palm_detection_lite": {
+      "wall_ms": {
+        "median": 10.2642,
+        "p95": 10.6671,
+        "mean": 10.304
+      },
+      "cpu_ms": {
+        "median": 10.181,
+        "p95": 10.512,
+        "mean": 10.2179
+      }
+    },
+    "hand_landmark_lite": {
+      "wall_ms": {
+        "median": 4.868,
+        "p95": 5.1865,
+        "mean": 4.9057
+      },
+      "cpu_ms": {
+        "median": 4.839,
+        "p95": 5.025,
+        "mean": 4.8532
+      }
+    }
+  },
+  "pipeline_warning": "No image decode/preprocess, detector NMS, oriented crop, association, temporal tracking or gesture calculations; synthetic tensors are not accuracy evidence."
+}

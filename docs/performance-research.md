@@ -5,6 +5,10 @@ ARM64, Python 3.12.14, MediaPipe 0.10.18, NumPy 1.26.4 y OpenCV 4.11.0.
 La inferencia utiliza el delegado CPU. **Estos valores no son mediciones de
 Raspberry Pi 5 ni una evaluación de precisión con usuarios.**
 
+La investigación posterior de arquitecturas distintas, proyectos de Meta y
+motores de ejecución está en
+[Alternativas de seguimiento de manos](hand-tracking-alternatives.md).
+
 ## Corrección de orientación de la mano
 
 El cálculo anterior extraía pitch y yaw mediante dos `atan2` independientes sobre

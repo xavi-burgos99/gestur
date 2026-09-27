@@ -1,0 +1,132 @@
+{
+  "platform": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.41",
+  "mediapipe": "0.10.18",
+  "models": {
+    "pose": {
+      "path": "/opt/gestur/tracking_models/pose_landmarker_lite.task",
+      "bytes": 5777746,
+      "sha256": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a"
+    },
+    "face_landmarker": {
+      "path": "/home/gestur/gestur-bench/face_landmarker.task",
+      "bytes": 3758596,
+      "sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff"
+    }
+  },
+  "seconds": 45.00121701699999,
+  "paired_fps_limit": 3.0,
+  "warmup": 3,
+  "mirror": true,
+  "camera_requested_size": [
+    640,
+    480
+  ],
+  "camera_actual_size": [
+    640,
+    480
+  ],
+  "capture_frames": 885,
+  "capture_failures": 0,
+  "process_cpu_percent_one_core": 31.001048584374562,
+  "peak_rss_MB_combined_models": 302.874624,
+  "results": {
+    "pose_lite": {
+      "wall_ms": {
+        "samples": 135,
+        "median": 39.20157099997823,
+        "p95": 46.11526000002186
+      },
+      "cpu_ms": {
+        "samples": 135,
+        "median": 41.360965999999166,
+        "p95": 47.76120100000014
+      },
+      "valid_frames": 135,
+      "frames": 135,
+      "finite_rotation_matrix_frames": 0,
+      "valid_fraction": 1.0
+    },
+    "face_short_range": {
+      "wall_ms": {
+        "samples": 135,
+        "median": 5.848903999947197,
+        "p95": 8.317018000013832
+      },
+      "cpu_ms": {
+        "samples": 135,
+        "median": 5.983537999999733,
+        "p95": 9.198720999998855
+      },
+      "valid_frames": 131,
+      "frames": 135,
+      "finite_rotation_matrix_frames": 0,
+      "valid_fraction": 0.9703703703703703
+    },
+    "face_full_sparse": {
+      "wall_ms": {
+        "samples": 135,
+        "median": 18.932228000039686,
+        "p95": 22.06166299998813
+      },
+      "cpu_ms": {
+        "samples": 135,
+        "median": 19.996147999999714,
+        "p95": 23.565482000000415
+      },
+      "valid_frames": 0,
+      "frames": 135,
+      "finite_rotation_matrix_frames": 0,
+      "valid_fraction": 0.0
+    },
+    "face_landmarker": {
+      "wall_ms": {
+        "samples": 135,
+        "median": 27.832932999956483,
+        "p95": 33.01850100001502
+      },
+      "cpu_ms": {
+        "samples": 135,
+        "median": 29.46981400000004,
+        "p95": 35.5827599999996
+      },
+      "valid_frames": 113,
+      "frames": 135,
+      "finite_rotation_matrix_frames": 113,
+      "valid_fraction": 0.837037037037037
+    }
+  },
+  "agreement_with_pose_NOT_accuracy": {
+    "pose_lite": {
+      "both_detected": 135,
+      "pose_only": 0,
+      "candidate_only": 0,
+      "neither": 0
+    },
+    "face_short_range": {
+      "both_detected": 131,
+      "pose_only": 4,
+      "candidate_only": 0,
+      "neither": 0
+    },
+    "face_full_sparse": {
+      "both_detected": 0,
+      "pose_only": 135,
+      "candidate_only": 0,
+      "neither": 0
+    },
+    "face_landmarker": {
+      "both_detected": 113,
+      "pose_only": 22,
+      "candidate_only": 0,
+      "neither": 0
+    }
+  },
+  "error": null,
+  "limitations": [
+    "Only aggregate statistics saved; no photos/video/landmarks.",
+    "All candidate models resident: total CPU/RSS is not a production backend measurement.",
+    "Same image at capped cadence; no ground truth or 3D orientation error measurement.",
+    "FaceDetection provides 2D points only; it cannot replace three head rotation axes.",
+    "Camera acquisition and shared preprocessing excluded from individual model timings."
+  ]
+}

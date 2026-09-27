@@ -1,0 +1,40 @@
+{
+  "platform": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.41",
+  "python": "3.12.14",
+  "runtime": "1.30.0",
+  "model_sha256": "3c9af55cdb80b69decda8b29d77c405bbb90e3481ab5a9cd0045e0d96ab3f1b1",
+  "reference_sha256": "5f09f20f3e8d05f1e2bff96aff93b509617fdf73e6e457b78814b59fbfd12e33",
+  "threads": 2,
+  "allow_spinning": false,
+  "frames": 180,
+  "warmup": 20,
+  "wall_median_ms": 49.04783100005261,
+  "wall_p95_ms": 49.28351500007011,
+  "cpu_median_ms": 81.62845449999966,
+  "peak_rss_MB": 179.781632,
+  "outputs": {
+    "mesh_meters": {
+      "shape": [
+        1,
+        778,
+        3
+      ],
+      "finite": true,
+      "max_abs_error_vs_pytorch": 3.3527612686157227e-07
+    },
+    "uv_normalized": {
+      "shape": [
+        1,
+        21,
+        2
+      ],
+      "finite": true,
+      "max_abs_error_vs_pytorch": 2.384185791015625e-07
+    }
+  },
+  "providers": [
+    "CPUExecutionProvider"
+  ],
+  "scope": "Static prepared single-hand crop. Inference only, without preprocessing or detection.",
+  "reference": "Agreement with PyTorch is export parity, not pose accuracy."
+}

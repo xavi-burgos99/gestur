@@ -1,0 +1,62 @@
+{
+  "source": "camera",
+  "duration_requested_seconds": 60.0,
+  "platform": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.41",
+  "python": "3.12.14",
+  "versions": {
+    "mediapipe": "0.10.18",
+    "numpy": "1.26.4",
+    "opencv-contrib-python": "4.11.0.86",
+    "panda3d": "1.10.16"
+  },
+  "images": [],
+  "capture_requested_size": [
+    640,
+    480
+  ],
+  "replay_fps": null,
+  "motion": "controls",
+  "temperature_abort_above_c": 85.0,
+  "persistent_error_seconds": 15.0,
+  "startup_grace_seconds": 30.0,
+  "production_state_modified": false,
+  "scope": [
+    "Real installed PoseController, Pose Lite and Hand Lite inference; production scheduling/duty/idle retained.",
+    "Only real gesture controls move the model; render/inference idle policies may reduce workload.",
+    "Model triangle count and texture dimensions describe the loaded scene, not an assumed fixture.",
+    "No recognition accuracy, physical movement tracking accuracy or optical camera-to-display latency measurement.",
+    "Telemetry includes runtime startup/shutdown; fixture generation and window creation occur before trial timing.",
+    "Replay repeats letterboxed images at 24 fps; camera mode uses the real camera and driver.",
+    "Throttling since_boot bits may predate the trial. Missing sensors are null, never zero.",
+    "Final FPS averages span the run; frame-time percentiles retain the last 18000 intervals only."
+  ],
+  "framebuffer": [
+    1920,
+    1080
+  ],
+  "msaa_actual": 4,
+  "renderer": "V3D 7.1.7.0",
+  "offscreen": false,
+  "model": {
+    "source": "local_model",
+    "path": "/home/gestur/gestur-bench/capitel-original/capitell.obj",
+    "sha256": "dc6b46d861b0402a54041ffbed5ee7021dcc3f3872a7cd51599e9bd4b60d76d6",
+    "triangles": 491038,
+    "geom_batches": 1,
+    "textures": [
+      {
+        "name": "capitell",
+        "path": "/home/gestur/gestur-bench/capitel-original/capitell.jpg",
+        "loaded_size": [
+          2048,
+          2048
+        ],
+        "source_size": [
+          2048,
+          2048
+        ]
+      }
+    ]
+  },
+  "triangles": 491038
+}

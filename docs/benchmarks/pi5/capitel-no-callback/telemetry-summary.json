@@ -1,0 +1,50 @@
+{
+  "source_telemetry": {
+    "path": "artifacts/pi5/capitel-no-callback/telemetry.jsonl",
+    "bytes": 46345,
+    "sha256": "a583276791d3f2fe7f7415772053ad1ab47ea6c79f49b6bb7da8b67f934b896f",
+    "committed": false
+  },
+  "method": {
+    "cpu": "Arithmetic mean of non-null outer hardware samples at elapsed_seconds >= 5; one sample per approximately one second, not a time-weighted integral.",
+    "temperature_and_throttling": "All telemetry rows captured during the trial, including startup; monitoring may finish before resource cleanup completes.",
+    "cpu_process_unit": "Percent of one logical core; 100 means one core.",
+    "cpu_system_unit": "Percent of total system capacity across all logical cores; not obtained by dividing process CPU.",
+    "null": "Missing values excluded, never interpreted as zero."
+  },
+  "total_samples": 21,
+  "cpu_window": {
+    "start_at_or_after_seconds": 5,
+    "first_sample_seconds": 5.086,
+    "last_sample_seconds": 20.088,
+    "samples": 16
+  },
+  "process_cpu_percent_one_core": {
+    "samples": 16,
+    "mean": 72.299375
+  },
+  "system_cpu_percent": {
+    "samples": 16,
+    "mean": 20.53125
+  },
+  "temperature_c": {
+    "samples": 21,
+    "first": 55.65,
+    "last": 58.95,
+    "maximum": 58.95
+  },
+  "throttling": {
+    "samples": 21,
+    "missing_samples": 0,
+    "raw_values": [
+      "0x0"
+    ]
+  },
+  "sampler_errors": 0,
+  "runtime_errors": 0,
+  "capture_failure_counters": {
+    "maximum_during_telemetry": 0,
+    "after_cleanup": 1
+  },
+  "render_metric_scope": "No draw callback. All inherited render_fps/frames/frame_ms_* metrics in this trial are a main-thread submitted-frame proxy, not verified draw traversal or physical display presentation."
+}

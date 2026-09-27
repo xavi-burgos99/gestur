@@ -1,0 +1,97 @@
+{
+  "outcome": "completed",
+  "exit_code": 0,
+  "controller_loop_seconds": 20.011,
+  "duration_including_cleanup_seconds": 20.115,
+  "abort_reason": null,
+  "final_metrics": {
+    "frames": 788,
+    "seconds": 19.906,
+    "render_fps": 39.54,
+    "frame_ms_p50": 32.078,
+    "frame_ms_p95": 33.925,
+    "frame_ms_p99": 34.579,
+    "samples": 787,
+    "control_loop": {
+      "frames": 788,
+      "seconds": 20.01,
+      "render_fps": 39.33,
+      "frame_ms_p50": 31.628,
+      "frame_ms_p95": 34.177,
+      "frame_ms_p99": 35.218,
+      "samples": 787
+    },
+    "hardware": {
+      "process_cpu_percent_one_core": 71.34,
+      "system_cpu_percent": 20.69,
+      "logical_cpus": 4,
+      "cpu_temperature_c": 57.85,
+      "cpu_frequency_mhz": 2400.0,
+      "thermal_limit_near": false
+    },
+    "model": "/home/gestur/gestur-bench/capitel-original/capitell.obj",
+    "render_settings": {
+      "target_fps": 60,
+      "antialias_samples": 2,
+      "fullscreen": true,
+      "hide_cursor": true
+    },
+    "tracking_settings": {
+      "use_pose": true,
+      "use_hands": true,
+      "inference_fps": 24,
+      "hand_fps": 15,
+      "camera_index": 0,
+      "width": 640,
+      "height": 480,
+      "mirror": true,
+      "smoothing_ms": 60
+    },
+    "camera_enabled": true,
+    "tracking": {
+      "state": "stopped",
+      "error": null,
+      "requested": {
+        "use_pose": true,
+        "use_hands": true,
+        "smoothing_time_ms": 60,
+        "mirror": true,
+        "camera_index": 0,
+        "inference_fps": 24,
+        "hand_fps": 15,
+        "width": 640,
+        "height": 480
+      },
+      "metrics": {
+        "captured_frames": 445,
+        "pose_frames": 105,
+        "hand_frames": 105,
+        "capture_failures": 1,
+        "inference_ms": 126.32251299999098,
+        "frame_age_ms": 128.4086489999936,
+        "inference_wall_seconds": 11.287501034000343,
+        "inference_duty_limit": 0.6,
+        "budget_pauses": 105,
+        "budget_pause_seconds": 7.497423452666453,
+        "pose_scheduled_fps": 24.0,
+        "hand_scheduled_fps": 15.0,
+        "pose_idle": false,
+        "hand_idle": false
+      }
+    },
+    "render_scheduler": {
+      "frames": 788,
+      "seconds": 19.906,
+      "render_fps": 39.54,
+      "frame_ms_p50": 32.078,
+      "frame_ms_p95": 33.925,
+      "frame_ms_p99": 34.579,
+      "samples": 787,
+      "control_ticks": 788,
+      "skipped_draws": 0,
+      "mode": "refresh",
+      "idle_refresh_fps": 10.0,
+      "welcome_fps_limit": 30.0
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "case": "capitel-render-only-onscreen",
+  "seconds": 20.0002,
+  "process_cpu_seconds": 1.0697,
+  "cpu_percent_one_core": 5.35,
+  "draws": 911,
+  "control_ticks": 911,
+  "draw_fps": 45.549,
+  "control_fps": 45.549,
+  "control_ms_p95": 33.457,
+  "sleep_precision_seconds": 0.004,
+  "renderer": "V3D 7.1.7.0",
+  "framebuffer": [
+    1920,
+    1080
+  ],
+  "msaa": 4,
+  "triangles": 491038,
+  "model": {
+    "source": "local_model",
+    "path": "/home/gestur/gestur-bench/capitel-original/capitell.obj",
+    "sha256": "dc6b46d861b0402a54041ffbed5ee7021dcc3f3872a7cd51599e9bd4b60d76d6",
+    "triangles": 491038,
+    "geom_batches": 1,
+    "textures": [
+      {
+        "name": "capitell",
+        "path": "/home/gestur/gestur-bench/capitel-original/capitell.jpg",
+        "loaded_size": [
+          2048,
+          2048
+        ],
+        "source_size": [
+          2048,
+          2048
+        ]
+      }
+    ]
+  },
+  "sync_video_requested": true,
+  "threading_model": "",
+  "draw_intervals_including_half_second_warmup": {
+    "frames": 930,
+    "seconds": 20.393,
+    "render_fps": 45.56,
+    "frame_ms_p50": 16.794,
+    "frame_ms_p95": 33.522,
+    "frame_ms_p99": 33.642,
+    "samples": 929
+  },
+  "panda3d": "1.10.16",
+  "scope": {
+    "camera_or_inference_started": false,
+    "production_files_changed": false,
+    "onscreen": true,
+    "continuous_draw": true,
+    "clock_mode": "limited",
+    "clock_limit_fps": 60,
+    "motion": "Same three-axis formula as benchmark_pi_system; task-time phase includes 0.5 s warmup.",
+    "quality": "1920x1080, requested MSAA2/verified MSAA4, original model and textures.",
+    "cpu_and_fps_exclude_warmup": true,
+    "gpu_busy_percent_or_gpu_time_measured": false
+  }
+}

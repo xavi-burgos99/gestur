@@ -2,11 +2,16 @@
 
 Investigación del 27 de septiembre de 2026. Objetivo: una cámara RGB, dos manos,
 posición y orientación tridimensional, junto al visor de Gestur en Raspberry Pi
-OS Lite de 64 bits. No se ha utilizado una Raspberry física en estas pruebas.
+OS Lite de 64 bits. Se completaron pruebas de inferencia y cámara en una
+Raspberry Pi 5 física de 4 GB; los resultados están en
+[validación en Pi 5](pi5-validation.md). Las mediciones iniciales en Mac se
+mantienen identificadas por separado.
 
 **Hay arquitecturas alternativas reales, pero esta investigación no demuestra
 todavía que alguna reconozca mejor y consuma menos que el sistema actual en la
-Pi.** MobRecon merece una comparación como modelo distinto. LiteRT directo es
+Pi.** MobRecon ya se convirtió y midió como modelo distinto: su inferencia fue
+más lenta que la red Lite actual en las cargas probadas, sin una evaluación
+comparativa de precisión. LiteRT directo es
 la vía más concreta para reducir el entorno de ejecución, conservando por ahora
 las redes actuales. Son dos experimentos diferentes; cambiar el motor no equivale
 a cambiar el modelo.
@@ -26,7 +31,7 @@ Más parámetros o un archivo mayor tampoco prueban por sí solos mayor latencia
 
 | Alternativa | Evidencia comprobada | Encaje y decisión |
 | --- | --- | --- |
-| **MobRecon, DenseStack + DSConv** | Reconstrucción 3D monocular; código y checkpoint públicos. El artículo da 8,1 M parámetros y 439,9 M operaciones multiplicación-suma para esta variante completa. | Primer candidato experimental de arquitectura distinta. Falta convertir y medir el conjunto en Pi; no hay mejora demostrada frente a nuestro Lite. |
+| **MobRecon, DenseStack + DSConv** | Reconstrucción 3D monocular; checkpoint oficial convertido a ONNX y probado en Pi: 69,20 ms con un hilo; 49,05 ms con dos, por mano recortada. | Conversión comprobada, sin ventaja de velocidad observada frente a la red Lite actual. Faltan detector, asociación y comparación de calidad; no se integra como sustitución. |
 | **MobileHand** | Reconstrucción 3D monocular, pesos de unos 15,15 MB. El rendimiento anunciado de 75 FPS CPU corresponde a un Ryzen 7 3700X. | Candidato secundario. Necesita MANO y aclarar la licencia del código antes de incorporarlo al producto. Los 75 FPS no son de Raspberry. |
 | **UmeTrack, de Meta** | Pesos públicos de 17,13 MB y seguimiento temporal 3D, con una o varias vistas. | Interesante para investigación, menos directo para nuestra webcam: entrenamiento egocéntrico, calibración y regiones de mano proporcionadas al tracker. |
 | **SPLite Hand** | El artículo mide 15 FPS de inferencia en CPU de Pi 5 y un modelo INT8 de 18 MB. | Es evidencia específica de Pi, pero no he localizado código y pesos públicos para reproducirlo. No compara contra MediaPipe. |
@@ -42,9 +47,12 @@ Fuentes y condiciones de las comparaciones:
   [mobrecon_densestack_dsconv.pt](https://drive.google.com/file/d/1qqEstFnV3GClpGWNEAZmR0jnxrcZH-9y/view)
   ocupa 45.656.319 bytes, según el listado del almacenamiento oficial.
   No confundirlo con el SpiralConv recomendado por el
-  repositorio para imágenes reales. El código usa licencia MIT; su preparación
-  también requiere MANO, con condiciones propias. No se ha ejecutado ni convertido
-  este modelo durante la investigación.
+  repositorio para imágenes reales. Se ejecutó y exportó desde el código oficial
+  usando las plantillas públicas, sin descargar `MANO_RIGHT.pkl`. El ONNX pesa
+  33,63 MB y su salida en Pi coincide con PyTorch con error máximo de `3,35e-7`
+  en la malla de la muestra: paridad de exportación, no precisión de pose.
+  El código usa MIT; la distribución de las plantillas mantiene condiciones
+  que deben verificarse. [Procedencia y resultados](pi5-validation.md#mobrecon-arquitectura-3d-distinta).
 - **MobileHand:** [repositorio](https://github.com/gmntu/mobilehand) y artículo
   enlazado allí. Incluye demostración de webcam, pero no una comparación contra
   Gestur ni una validación de consumo térmico. No se ha encontrado una licencia
@@ -160,14 +168,31 @@ solo manos tampoco elimina toda esa dependencia del proyecto.
 Resultados originales: [mediciones JSON y procedimiento](benchmarks/hand-runtime-2026-09-27/README.md).
 Herramienta: [benchmark_hand_runtime.py](../scripts/benchmark_hand_runtime.py).
 
+### Mediciones posteriores en Pi 5
+
+Con 20 iteraciones de calentamiento y 180 medidas por proceso, la red de puntos
+de una mano mediante LiteRT necesitó 12,41 ms con un hilo y 7,16 ms con dos.
+La detección de palma requirió 26,25 y 14,90 ms respectivamente. Tasks VIDEO
+procesó la fotografía estática con dos manos en 28,94 ms, detectando ambas en
+180/180 iteraciones. Estos tiempos no son una comparación directa: LiteRT solo
+invoca redes sobre tensores sintéticos y Tasks incluye su cadena interna.
+
+Los picos RSS fueron 133,10 MB y 130,93 MB para los procesos LiteRT con ambas
+redes residentes, y 191,01 MB para Tasks. La diferencia no prueba un ahorro del
+producto equivalente. Dos hilos redujeron espera y aumentaron CPU por inferencia.
+Los registros breves no mostraron throttling en las lecturas antes/después.
+El ensayo posterior con capitel, cámara y visor a 1080p dio 38,62 FPS durante
+60 segundos y un máximo de 59,5 °C. La prueba térmica sostenida sigue pendiente.
+[Datos, temperaturas y alcance](pi5-validation.md#motores-de-manos-trabajos-diferentes).
+
 ## Decisión y prueba que falta
 
-1. **Probar MobRecon DenseStack + DSConv como alternativa 3D real.** Exportar
-   primero una inferencia CPU mínima, verificar sus puntos y recortes, y compararla
-   con Lite sobre las mismas secuencias. Sus operaciones de muestreo y malla
-   requieren comprobar compatibilidad y rendimiento al exportar; no se ha
-   localizado un ONNX oficial preparado. La promesa de eficiencia del artículo
-   justifica experimentar; no justifica sustituir ya el detector.
+1. **No sustituir por MobRecon basándose en las pruebas actuales.** La exportación
+   propia, con GridSample y ScatterElements, pasó ONNX checker y ejecutó en la Pi
+   con paridad frente a PyTorch. Necesitó 69,20/49,05 ms por mano con uno/dos hilos;
+   falta sumar detección y seguimiento. Conserva salida 3D, pero no demuestra
+   menor coste ni mayor precisión. Una comparación de calidad requeriría las
+   mismas secuencias anotadas, no tensores o recortes diferentes.
 2. **Probar LiteRT directo como reducción de dependencias y control de ejecución.**
    Portar detección, recortes, asociación y recuperación conservando los puntos
    tridimensionales; verificar equivalencia antes de medir. Es otra biblioteca,

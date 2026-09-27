@@ -18,7 +18,7 @@ from panda3d.core import (
 
 from render_scheduler import RenderCadence
 from runtime_state import FrameMetrics
-from runtime_config import validate_model_orientation
+from runtime_config import validate_model_orientation, validate_model_url
 
 
 # Positions are in the fixed exhibition camera's frame: X right, Y away
@@ -146,10 +146,26 @@ def _welcome_geometry():
     return node
 
 
+def _qr_texture(url, name):
+    import qrcode
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=1, border=4)
+    qr.add_data(url)
+    qr.make(fit=True)
+    matrix = qr.get_matrix()
+    texture = Texture(name)
+    texture.setup_2d_texture(len(matrix), len(matrix), Texture.T_unsigned_byte, Texture.F_rgba)
+    texture.set_ram_image(bytes(channel for row in reversed(matrix) for value in row
+                                for channel in (255, 255, 255, 255 if value else 0)))
+    texture.set_minfilter(Texture.FT_nearest)
+    texture.set_magfilter(Texture.FT_nearest)
+    return texture
+
+
 class ControlledObjViewer(ShowBase):
     def __init__(self, obj_path=None, *, target_fps=60, antialias_samples=2,
                  fullscreen=True, hide_cursor=True, show_fps=False,
-                 window_type=None, model_orientation=None, ambient_light="none", exposure=50):
+                 window_type=None, model_orientation=None, ambient_light="none", exposure=50,
+                 model_url=None):
         # Configure before creating the context. Preserve geometry and textures.
         if antialias_samples not in (0, 2, 4):
             raise ValueError("antialias_samples debe ser 0, 2 o 4")
@@ -203,6 +219,8 @@ class ControlledObjViewer(ShowBase):
         self.model_orientation = validate_model_orientation()
         self.model_fit = None
         self.model_basis = None
+        self.model_url = None
+        self.model_qr = None
         self.welcome = None
         self.welcome_overlay = None
         self.welcome_url = None
@@ -226,7 +244,7 @@ class ControlledObjViewer(ShowBase):
             meter.set_scale(.035)
             meter.set_pos(.03, 0, -.06)
         try:
-            self.load_model(obj_path, orientation=model_orientation)
+            self.load_model(obj_path, orientation=model_orientation, model_url=model_url)
         except Exception:
             self.destroy()
             raise
@@ -284,6 +302,7 @@ class ControlledObjViewer(ShowBase):
             if size != self._last_draw_size:
                 self._last_draw_size = size
                 self._layout_welcome()
+                self._layout_model_qr()
                 self.invalidate(frames=2)
             draw = self._render_cadence.due(
                 now, welcome=self.welcome is not None or self._idle_animation)
@@ -314,12 +333,13 @@ class ControlledObjViewer(ShowBase):
             self.taskMgr.remove("gestur-render-cadence")
         super().destroy()
 
-    def load_model(self, obj_path, *, orientation=None):
+    def load_model(self, obj_path, *, orientation=None, model_url=None):
         """Load before replacing the current scene; failed loads leave it intact."""
         if obj_path is None:
             self.show_welcome()
             return
         orientation = validate_model_orientation(orientation)
+        model_url = validate_model_url(model_url)
         path = Path(obj_path).expanduser().resolve(strict=True)
         try:
             candidate = self.loader.loadModel(Filename.from_os_specific(str(path)), okMissing=True)
@@ -359,11 +379,49 @@ class ControlledObjViewer(ShowBase):
             previous.remove_node()
         self._remove_welcome()
         self._remove_model_error()
+        self.set_model_url(model_url)
         self._set_model_camera()
         self.setBackgroundColor(0, 0, 0, 1)
         # The scene owns its assets; avoid retaining previously selected models.
         self.loader.unloadModel(Filename.from_os_specific(str(path)))
         self.invalidate(frames=2)
+
+    def set_model_url(self, url):
+        """Update a static screen overlay without reloading geometry or textures."""
+        url = validate_model_url(url) if self.model is not None else None
+        if url == self.model_url:
+            return False
+        # Build first so an invalid/unencodable value cannot erase a working QR.
+        texture = _qr_texture(url, "model-url-qr") if url else None
+        if self.model_qr is not None:
+            self.model_qr.remove_node()
+            self.model_qr = None
+        self.model_url = url
+        if texture is not None:
+            card = CardMaker("model-qr")
+            card.set_frame(-1, 0, 0, 1)
+            self.model_qr = self.a2dBottomRight.attach_new_node(card.generate())
+            self.model_qr.set_texture(texture)
+            self.model_qr.set_transparency(TransparencyAttrib.M_alpha)
+            self.model_qr.set_light_off()
+            self.model_qr.set_shader_off()
+            self.model_qr.set_depth_test(False)
+            self.model_qr.set_depth_write(False)
+            self.model_qr.set_bin("fixed", 40)
+            self._layout_model_qr()
+        self.invalidate(frames=2)
+        return True
+
+    def _layout_model_qr(self):
+        if self.model_qr is None:
+            return
+        short_side = min(self.win.get_x_size(), self.win.get_y_size()) if self.win else 1080
+        modules = self.model_qr.get_texture().get_x_size()
+        # Typical URLs use ~17% of the short edge; dense codes get more room,
+        # still below the welcome QR (36%). Anchor follows every window resize.
+        size = max(.32, min(.60, modules * 4 * 2 / max(1, short_side)))
+        self.model_qr.set_scale(size)
+        self.model_qr.set_pos(-.06, 0, .06)
 
     def _clear_model_lighting(self):
         if self.model is not None:
@@ -534,6 +592,7 @@ class ControlledObjViewer(ShowBase):
         if self.model is not None:
             self.model.remove_node()
         self.model = None
+        self.set_model_url(None)
         self.model_path = None
         self.model_fit = None
         self.model_basis = None
@@ -572,7 +631,6 @@ class ControlledObjViewer(ShowBase):
         # so this compact centered stack fits both portrait and landscape.
 
     def _refresh_welcome_overlay(self):
-        import qrcode
         self._last_url_check = time.monotonic()
         url = portal_url()
         if url == self.welcome_url and self.welcome_overlay is not None:
@@ -594,18 +652,7 @@ class ControlledObjViewer(ShowBase):
             self._layout_welcome()
             self.invalidate(frames=2)
             return
-        qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=1, border=4)
-        qr.add_data(url)
-        qr.make(fit=True)
-        matrix = qr.get_matrix()
-        size = len(matrix)
-        texture = Texture("local-portal-qr")
-        texture.setup_2d_texture(size, size, Texture.T_unsigned_byte, Texture.F_rgba)
-        # White modules and a transparent quiet zone: no opaque backing card.
-        texture.set_ram_image(bytes(channel for row in reversed(matrix) for value in row
-                                    for channel in (255, 255, 255, 255 if value else 0)))
-        texture.set_minfilter(Texture.FT_nearest)
-        texture.set_magfilter(Texture.FT_nearest)
+        texture = _qr_texture(url, "local-portal-qr")
         card = CardMaker("welcome-qr")
         card.set_frame(-.36, .36, -.36, .36)
         qr_node = self.welcome_overlay.attach_new_node(card.generate())

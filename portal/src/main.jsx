@@ -56,11 +56,28 @@ import {
 import "@mantine/core/styles.css";
 import "./styles.css";
 import ControlsEditor from "./ControlsEditor.jsx";
+import PresetsEditor from "./PresetsEditor.jsx";
+import { parametersEqual } from "./presets.mjs";
+import {
+  DeviceOperationModal,
+  DeviceSettings,
+  InitialSetup,
+} from "./DeviceManagement.jsx";
+import {
+  deviceJobActive,
+  forgetDeviceOperation,
+  rememberDeviceOperation,
+  restoreDeviceOperation,
+} from "./device-operation.mjs";
 
-async function api(url, { method = "GET", body } = {}) {
+async function api(
+  url,
+  { method = "GET", body, silentAuth = false, signal } = {},
+) {
   const form = body instanceof FormData;
   const response = await fetch(`/api/${url}`, {
     method,
+    signal,
     headers: {
       "X-Gestur-Request": "1",
       ...(!form && body ? { "Content-Type": "application/json" } : {}),
@@ -69,9 +86,13 @@ async function api(url, { method = "GET", body } = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401 && url !== "session")
+    if (response.status === 401 && url !== "session" && !silentAuth)
       window.dispatchEvent(new Event("gestur-expired"));
-    throw new Error(data.error || "No hay conexión con el dispositivo.");
+    const error = new Error(
+      data.error || "No hay conexión con el dispositivo.",
+    );
+    error.status = response.status;
+    throw error;
   }
   return data;
 }
@@ -198,6 +219,7 @@ function Models({ config, setConfig, notify }) {
   const [dragging, setDragging] = useState(false);
   const [modelDialog, setModelDialog] = useState(null);
   const [modelName, setModelName] = useState("");
+  const [modelUrl, setModelUrl] = useState("");
   const [orientation, setOrientation] = useState({ x: 0, y: 0, z: 0 });
   const [modelError, setModelError] = useState("");
   const importRevision = useRef(0);
@@ -342,6 +364,7 @@ function Models({ config, setConfig, notify }) {
     if (importDisabled || selectionMutating.current) return;
     setModelDialog({ kind, model });
     setModelName(model.name);
+    setModelUrl(model.url || "");
     setOrientation({ x: 0, y: 0, z: 0, ...model.orientation });
     setModelError("");
   }
@@ -356,7 +379,36 @@ function Models({ config, setConfig, notify }) {
       setModelError("Escribe un nombre de entre 1 y 100 caracteres.");
       return;
     }
-    await changeModel("PATCH", { id: modelDialog.model.id, name, orientation });
+    const url = modelUrl.trim();
+    if (new TextEncoder().encode(url).length > 2048) {
+      setModelError("La URL es demasiado larga.");
+      return;
+    }
+    if (url) {
+      try {
+        const parsed = new URL(url);
+        if (
+          !/^https?:\/\//i.test(url) ||
+          !["http:", "https:"].includes(parsed.protocol) ||
+          parsed.username ||
+          parsed.password ||
+          url.length > 2048 ||
+          /[\s\\\x00-\x1f\x7f]/u.test(url)
+        )
+          throw new Error();
+      } catch {
+        setModelError(
+          "Escribe una URL completa que empiece por http:// o https://, sin usuario ni contraseña.",
+        );
+        return;
+      }
+    }
+    await changeModel("PATCH", {
+      id: modelDialog.model.id,
+      name,
+      orientation,
+      url: url || null,
+    });
   }
   async function changeModel(method, body) {
     if (importDisabled || selectionMutating.current) return;
@@ -781,6 +833,18 @@ function Models({ config, setConfig, notify }) {
               disabled={busy || pending}
               data-autofocus
             />
+            <TextInput
+              label="URL"
+              description="Opcional. Enlace del QR que acompaña al modelo."
+              placeholder="https://..."
+              type="url"
+              value={modelUrl}
+              onChange={(event) => setModelUrl(event.currentTarget.value)}
+              maxLength={2048}
+              disabled={busy || pending}
+              autoComplete="url"
+              spellCheck={false}
+            />
             <div>
               <Text fw={600} size="sm">
                 Orientación inicial
@@ -992,13 +1056,12 @@ function Models({ config, setConfig, notify }) {
 function Parameters({ config, setConfig, defaults, notify }) {
   const [draft, setDraft] = useState(() => structuredClone(config));
   const [saving, setSaving] = useState(false);
+  const [presetBusy, setPresetBusy] = useState(false);
+  const locked = saving || presetBusy;
   const previousConfig = useRef(config);
   useEffect(() => {
     const previous = previousConfig.current;
-    const parametersUnchanged = ["tracking", "render", "controls"].every(
-      (group) =>
-        JSON.stringify(previous[group]) === JSON.stringify(config[group]),
-    );
+    const parametersUnchanged = parametersEqual(previous, config);
     setDraft((current) =>
       parametersUnchanged
         ? { ...current, active_model: config.active_model }
@@ -1006,10 +1069,12 @@ function Parameters({ config, setConfig, defaults, notify }) {
     );
     previousConfig.current = config;
   }, [config]);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(config);
+  const dirty = !parametersEqual(draft, config);
   const update = (group, key, value) =>
+    !locked &&
     setDraft((d) => ({ ...d, [group]: { ...d[group], [key]: value } }));
   const mapping = (i, changes) =>
+    !locked &&
     setDraft((d) => ({
       ...d,
       controls: {
@@ -1020,6 +1085,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
       },
     }));
   async function save() {
+    if (locked) return;
     setSaving(true);
     try {
       const d = await api("config", { method: "PUT", body: draft });
@@ -1039,7 +1105,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
         action={
           <Button
             leftSection={<IconCheck size={18} />}
-            disabled={!dirty}
+            disabled={!dirty || presetBusy}
             loading={saving}
             onClick={save}
           >
@@ -1047,265 +1113,285 @@ function Parameters({ config, setConfig, defaults, notify }) {
           </Button>
         }
       />
-      <SimpleGrid cols={{ base: 1, md: 2, xl: 4 }} mb="xl">
-        <Paper p="xl" withBorder>
-          <Title order={3} mb="lg">
-            Seguimiento
-          </Title>
-          <Stack>
-            <Switch
-              label="Seguir cabeza y cuerpo"
-              checked={draft.tracking.use_pose}
-              onChange={(e) =>
-                update("tracking", "use_pose", e.currentTarget.checked)
-              }
-            />
-            <Switch
-              label="Reconocer las manos"
-              checked={draft.tracking.use_hands}
-              onChange={(e) =>
-                update("tracking", "use_hands", e.currentTarget.checked)
-              }
-            />
-            <Switch
-              label="Movimiento en espejo"
-              checked={draft.tracking.mirror}
-              onChange={(e) =>
-                update("tracking", "mirror", e.currentTarget.checked)
-              }
-            />
-          </Stack>
-        </Paper>
-        <Paper p="xl" withBorder>
-          <Title order={3} mb="lg">
-            Suavidad del gesto
-          </Title>
-          <Numeric
-            label="Suavizado"
-            description="Más tiempo suaviza el movimiento y aumenta la latencia."
-            value={draft.controls.smoothing_ms}
-            onChange={(v) => update("controls", "smoothing_ms", v)}
-            max={1000}
-            step={10}
-            suffix=" ms"
-          />
-        </Paper>
-        <Paper p="xl" withBorder>
-          <Title order={3} mb="lg">
-            Luz ambiente
-          </Title>
-          <Stack gap="lg">
-            <Select
-              aria-label="Luz ambiente"
-              value={draft.render.ambient_light ?? "none"}
-              data={[
-                { value: "none", label: "Ninguna" },
-                { value: "studio", label: "Estudio" },
-                { value: "gallery", label: "Galería" },
-                { value: "sunset", label: "Atardecer" },
-                { value: "rim", label: "Contraluz" },
-              ]}
-              allowDeselect={false}
-              onChange={(value) =>
-                value !== null && update("render", "ambient_light", value)
-              }
-            />
-            <Box>
-              <Group justify="space-between" mb="xs">
-                <Text size="sm" fw={500}>
-                  Exposición
-                </Text>
-                <Text size="sm" c="dimmed">
-                  {draft.render.exposure ?? 50} %
-                </Text>
-              </Group>
-              <Slider
-                min={0}
-                max={100}
-                step={5}
-                value={draft.render.exposure ?? 50}
-                onChange={(value) =>
-                  update("render", "exposure", Math.round(value / 5) * 5)
+      <PresetsEditor
+        api={api}
+        draft={draft}
+        dirty={dirty}
+        disabled={saving}
+        onBusyChange={setPresetBusy}
+        onApply={(applied) => {
+          setDraft(structuredClone(applied));
+          setConfig(applied);
+        }}
+        notify={notify}
+      />
+      <fieldset className="parameter-fields" disabled={locked}>
+        <SimpleGrid cols={{ base: 1, md: 2, xl: 4 }} mb="xl">
+          <Paper p="xl" withBorder>
+            <Title order={3} mb="lg">
+              Seguimiento
+            </Title>
+            <Stack>
+              <Switch
+                label="Seguir cabeza y cuerpo"
+                checked={draft.tracking.use_pose}
+                onChange={(e) =>
+                  update("tracking", "use_pose", e.currentTarget.checked)
                 }
-                thumbLabel="Exposición"
-                thumbValueText={(value) => `${value} %`}
-                label={(value) => `${value} %`}
-                marks={[
-                  { value: 0, label: "0 %" },
-                  { value: 50, label: "50 %" },
-                  { value: 100, label: "100 %" },
-                ]}
-                mx={5}
-                mb="xl"
               />
-            </Box>
-          </Stack>
-        </Paper>
-        <Paper p="xl" withBorder>
-          <Title order={3} mb="lg">
-            Modo de espera
-          </Title>
-          <Stack gap="md">
-            <Select
-              aria-label="Modo de espera"
-              value={draft.controls.idle_mode ?? "return"}
-              data={[
-                { value: "hold", label: "Mantener posición" },
-                { value: "return", label: "Volver a origen" },
-                { value: "float", label: "Flotante" },
-              ]}
-              allowDeselect={false}
-              onChange={(value) =>
-                value !== null && update("controls", "idle_mode", value)
-              }
+              <Switch
+                label="Reconocer las manos"
+                checked={draft.tracking.use_hands}
+                onChange={(e) =>
+                  update("tracking", "use_hands", e.currentTarget.checked)
+                }
+              />
+              <Switch
+                label="Movimiento en espejo"
+                checked={draft.tracking.mirror}
+                onChange={(e) =>
+                  update("tracking", "mirror", e.currentTarget.checked)
+                }
+              />
+            </Stack>
+          </Paper>
+          <Paper p="xl" withBorder>
+            <Title order={3} mb="lg">
+              Suavidad del gesto
+            </Title>
+            <Numeric
+              label="Suavizado"
+              description="Más tiempo suaviza el movimiento y aumenta la latencia."
+              value={draft.controls.smoothing_ms}
+              onChange={(v) => update("controls", "smoothing_ms", v)}
+              max={1000}
+              step={10}
+              suffix=" ms"
             />
-            {draft.controls.idle_mode === "hold" ? (
-              <Text c="dimmed" size="sm">
-                Conserva la última posición al perder el gesto.
-              </Text>
-            ) : (
-              <Numeric
-                label="Tiempo de espera"
-                description="Sin detectar un gesto activo."
-                value={draft.controls.reset_timeout_seconds}
-                onChange={(v) => update("controls", "reset_timeout_seconds", v)}
-                max={30}
-                step={0.5}
-                suffix=" s"
+          </Paper>
+          <Paper p="xl" withBorder>
+            <Title order={3} mb="lg">
+              Luz ambiente
+            </Title>
+            <Stack gap="lg">
+              <Select
+                aria-label="Luz ambiente"
+                value={draft.render.ambient_light ?? "none"}
+                data={[
+                  { value: "none", label: "Ninguna" },
+                  { value: "studio", label: "Estudio" },
+                  { value: "gallery", label: "Galería" },
+                  { value: "sunset", label: "Atardecer" },
+                  { value: "rim", label: "Contraluz" },
+                ]}
+                allowDeselect={false}
+                onChange={(value) =>
+                  value !== null && update("render", "ambient_light", value)
+                }
               />
-            )}
-          </Stack>
-        </Paper>
-      </SimpleGrid>
-      <ControlsEditor draft={draft} update={update} mapping={mapping} />
-      <Accordion mt="xl" variant="separated">
-        <Accordion.Item value="advanced">
-          <Accordion.Control>Captura y renderizado</Accordion.Control>
-          <Accordion.Panel>
-            <SimpleGrid cols={{ base: 1, sm: 3 }}>
-              <Numeric
-                label="Reconocimiento de cabeza y cuerpo"
-                suffix=" fps"
-                value={draft.tracking.inference_fps}
-                onChange={(v) => update("tracking", "inference_fps", v)}
-                min={5}
-                max={60}
-              />
-              <Numeric
-                label="Reconocimiento de manos"
-                suffix=" fps"
-                value={draft.tracking.hand_fps}
-                onChange={(v) => update("tracking", "hand_fps", v)}
-                min={5}
-                max={30}
-              />
-              <Numeric
-                label="Fotogramas por segundo"
-                suffix=" fps"
-                value={draft.render.target_fps}
-                onChange={(v) => update("render", "target_fps", v)}
-                min={15}
-                max={120}
-              />
-              <Numeric
-                label="Índice de cámara"
-                value={draft.tracking.camera_index}
-                onChange={(v) => update("tracking", "camera_index", v)}
-                max={16}
-              />
-              <Numeric
-                label="Ancho de captura"
-                suffix=" px"
-                value={draft.tracking.width}
-                onChange={(v) => update("tracking", "width", v)}
-                min={160}
-                max={1920}
-              />
-              <Numeric
-                label="Alto de captura"
-                suffix=" px"
-                value={draft.tracking.height}
-                onChange={(v) => update("tracking", "height", v)}
-                min={120}
-                max={1080}
-              />
-              <Numeric
-                label="Suavizado del detector"
-                suffix=" ms"
-                value={draft.tracking.smoothing_ms}
-                onChange={(v) => update("tracking", "smoothing_ms", v)}
-                max={1000}
-              />
-              {(draft.controls.idle_mode ?? "return") === "return" && (
-                <Numeric
-                  label="Duración de regreso a origen"
-                  suffix=" s"
-                  value={draft.controls.reset_duration_seconds}
-                  onChange={(v) =>
-                    update("controls", "reset_duration_seconds", v)
+              <Box>
+                <Group justify="space-between" mb="xs">
+                  <Text size="sm" fw={500}>
+                    Exposición
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    {draft.render.exposure ?? 50} %
+                  </Text>
+                </Group>
+                <Slider
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={draft.render.exposure ?? 50}
+                  onChange={(value) =>
+                    update("render", "exposure", Math.round(value / 5) * 5)
                   }
-                  min={0.1}
-                  max={10}
-                  step={0.1}
+                  thumbLabel="Exposición"
+                  thumbValueText={(value) => `${value} %`}
+                  label={(value) => `${value} %`}
+                  marks={[
+                    { value: 0, label: "0 %" },
+                    { value: 50, label: "50 %" },
+                    { value: 100, label: "100 %" },
+                  ]}
+                  mx={5}
+                  mb="xl"
+                />
+              </Box>
+            </Stack>
+          </Paper>
+          <Paper p="xl" withBorder>
+            <Title order={3} mb="lg">
+              Modo de espera
+            </Title>
+            <Stack gap="md">
+              <Select
+                aria-label="Modo de espera"
+                value={draft.controls.idle_mode ?? "return"}
+                data={[
+                  { value: "hold", label: "Mantener posición" },
+                  { value: "return", label: "Volver a origen" },
+                  { value: "float", label: "Flotante" },
+                ]}
+                allowDeselect={false}
+                onChange={(value) =>
+                  value !== null && update("controls", "idle_mode", value)
+                }
+              />
+              {draft.controls.idle_mode === "hold" ? (
+                <Text c="dimmed" size="sm">
+                  Conserva la última posición al perder el gesto.
+                </Text>
+              ) : (
+                <Numeric
+                  label="Tiempo de espera"
+                  description="Sin detectar un gesto activo."
+                  value={draft.controls.reset_timeout_seconds}
+                  onChange={(v) =>
+                    update("controls", "reset_timeout_seconds", v)
+                  }
+                  max={30}
+                  step={0.5}
+                  suffix=" s"
                 />
               )}
-              <Select
-                label="Suavizado de bordes"
-                value={String(draft.render.antialias_samples)}
-                data={[
-                  { value: "0", label: "Desactivado" },
-                  { value: "2", label: "2× · Equilibrado" },
-                  { value: "4", label: "4× · Más calidad" },
-                ]}
-                onChange={(v) =>
-                  update("render", "antialias_samples", Number(v))
-                }
-              />
-            </SimpleGrid>
-            <Group mt="xl">
-              <Switch
-                label="Ocultar cursor"
-                checked={draft.render.hide_cursor}
-                onChange={(e) =>
-                  update("render", "hide_cursor", e.currentTarget.checked)
-                }
-              />
-              <Switch
-                label="Pantalla completa"
-                checked={draft.render.fullscreen}
-                onChange={(e) =>
-                  update("render", "fullscreen", e.currentTarget.checked)
-                }
-              />
-            </Group>
-            <Text size="xs" c="dimmed" mt="md">
-              Los cambios se aplican al guardar. El seguimiento puede pausarse
-              unos segundos al cambiar la cámara.
-            </Text>
-          </Accordion.Panel>
-        </Accordion.Item>
-      </Accordion>
-      <Group justify="space-between" mt="xl">
-        <Button
-          variant="subtle"
-          color="gray"
-          onClick={() =>
-            setDraft({
-              ...structuredClone(defaults),
-              active_model: config.active_model,
-            })
-          }
-        >
-          Restaurar valores predeterminados
-        </Button>
-        <Button disabled={!dirty} loading={saving} onClick={save}>
-          Guardar cambios
-        </Button>
-      </Group>
+            </Stack>
+          </Paper>
+        </SimpleGrid>
+        <ControlsEditor draft={draft} update={update} mapping={mapping} />
+        <Accordion mt="xl" variant="separated">
+          <Accordion.Item value="advanced">
+            <Accordion.Control>Captura y renderizado</Accordion.Control>
+            <Accordion.Panel>
+              <SimpleGrid cols={{ base: 1, sm: 3 }}>
+                <Numeric
+                  label="Reconocimiento de cabeza y cuerpo"
+                  suffix=" fps"
+                  value={draft.tracking.inference_fps}
+                  onChange={(v) => update("tracking", "inference_fps", v)}
+                  min={5}
+                  max={60}
+                />
+                <Numeric
+                  label="Reconocimiento de manos"
+                  suffix=" fps"
+                  value={draft.tracking.hand_fps}
+                  onChange={(v) => update("tracking", "hand_fps", v)}
+                  min={5}
+                  max={30}
+                />
+                <Numeric
+                  label="Fotogramas por segundo"
+                  suffix=" fps"
+                  value={draft.render.target_fps}
+                  onChange={(v) => update("render", "target_fps", v)}
+                  min={15}
+                  max={120}
+                />
+                <Numeric
+                  label="Índice de cámara"
+                  value={draft.tracking.camera_index}
+                  onChange={(v) => update("tracking", "camera_index", v)}
+                  max={16}
+                />
+                <Numeric
+                  label="Ancho de captura"
+                  suffix=" px"
+                  value={draft.tracking.width}
+                  onChange={(v) => update("tracking", "width", v)}
+                  min={160}
+                  max={1920}
+                />
+                <Numeric
+                  label="Alto de captura"
+                  suffix=" px"
+                  value={draft.tracking.height}
+                  onChange={(v) => update("tracking", "height", v)}
+                  min={120}
+                  max={1080}
+                />
+                <Numeric
+                  label="Suavizado del detector"
+                  suffix=" ms"
+                  value={draft.tracking.smoothing_ms}
+                  onChange={(v) => update("tracking", "smoothing_ms", v)}
+                  max={1000}
+                />
+                {(draft.controls.idle_mode ?? "return") === "return" && (
+                  <Numeric
+                    label="Duración de regreso a origen"
+                    suffix=" s"
+                    value={draft.controls.reset_duration_seconds}
+                    onChange={(v) =>
+                      update("controls", "reset_duration_seconds", v)
+                    }
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                  />
+                )}
+                <Select
+                  label="Suavizado de bordes"
+                  value={String(draft.render.antialias_samples)}
+                  data={[
+                    { value: "0", label: "Desactivado" },
+                    { value: "2", label: "2× · Equilibrado" },
+                    { value: "4", label: "4× · Más calidad" },
+                  ]}
+                  onChange={(v) =>
+                    update("render", "antialias_samples", Number(v))
+                  }
+                />
+              </SimpleGrid>
+              <Group mt="xl">
+                <Switch
+                  label="Ocultar cursor"
+                  checked={draft.render.hide_cursor}
+                  onChange={(e) =>
+                    update("render", "hide_cursor", e.currentTarget.checked)
+                  }
+                />
+                <Switch
+                  label="Pantalla completa"
+                  checked={draft.render.fullscreen}
+                  onChange={(e) =>
+                    update("render", "fullscreen", e.currentTarget.checked)
+                  }
+                />
+              </Group>
+              <Text size="xs" c="dimmed" mt="md">
+                Los cambios se aplican al guardar. El seguimiento puede pausarse
+                unos segundos al cambiar la cámara.
+              </Text>
+            </Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
+        <Group justify="space-between" mt="xl">
+          <Button
+            variant="subtle"
+            color="gray"
+            onClick={() =>
+              setDraft({
+                ...structuredClone(defaults),
+                active_model: config.active_model,
+              })
+            }
+          >
+            Restaurar valores predeterminados
+          </Button>
+          <Button
+            disabled={!dirty || presetBusy}
+            loading={saving}
+            onClick={save}
+          >
+            Guardar cambios
+          </Button>
+        </Group>
+      </fieldset>
     </>
   );
 }
-function Settings({ notify }) {
+function Settings({ notify, onOperation }) {
   const [wifi, setWifi] = useState(null);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -1355,146 +1441,152 @@ function Settings({ notify }) {
   return (
     <>
       <SectionTitle title="Configuración" />
-      <Paper withBorder p={{ base: "lg", sm: 32 }} maw={820}>
-        <Group justify="space-between" mb="xl">
-          <Group>
-            <ThemeIcon size={48} radius="md" variant="light">
-              <IconWifi size={25} />
-            </ThemeIcon>
-            <div>
-              <Title order={2}>Punto de acceso Wi-Fi</Title>
-              <Text c="dimmed" size="sm">
-                Red del dispositivo para acceder al portal.
-              </Text>
-            </div>
-          </Group>
-          {wifi && (
-            <Badge color={wifi.secured ? "teal" : "gray"} variant="light">
-              {wifi.secured ? "Con contraseña" : "Red abierta"}
-            </Badge>
-          )}
-        </Group>
-        {loading ? (
-          <Loader />
-        ) : error ? (
-          <Alert color="red" title="Wi-Fi no disponible">
-            {error}
-            <Button variant="light" mt="md" onClick={() => load()}>
-              Volver a comprobar
-            </Button>
-          </Alert>
-        ) : (
-          <Stack gap="xl">
-            {wifi?.job && (
-              <Alert
-                color={
-                  wifi.job.state === "failed"
-                    ? "red"
-                    : wifi.job.state === "completed"
-                      ? "teal"
-                      : "blue"
-                }
-                title={
-                  pending
-                    ? "Actualizando la red"
-                    : wifi.job.state === "completed"
-                      ? "Configuración aplicada"
-                      : "Cambio no completado"
-                }
-              >
-                {wifi.job.message}
-                {pending && (
-                  <Text size="sm" mt="sm">
-                    Espera unos segundos y vuelve a conectarte a «
-                    {wifi.job.ssid}». Si no aparece, prueba la red anterior y
-                    pulsa «Comprobar estado».
-                  </Text>
-                )}
-              </Alert>
+      <DeviceSettings
+        api={api}
+        onOperation={onOperation}
+        disabled={busy || pending}
+      >
+        <Paper withBorder p={{ base: "lg", sm: 32 }} maw={820}>
+          <Group justify="space-between" mb="xl">
+            <Group>
+              <ThemeIcon size={48} radius="md" variant="light">
+                <IconWifi size={25} />
+              </ThemeIcon>
+              <div>
+                <Title order={2}>Punto de acceso Wi-Fi</Title>
+                <Text c="dimmed" size="sm">
+                  Red del dispositivo para acceder al portal.
+                </Text>
+              </div>
+            </Group>
+            {wifi && (
+              <Badge color={wifi.secured ? "teal" : "gray"} variant="light">
+                {wifi.secured ? "Con contraseña" : "Red abierta"}
+              </Badge>
             )}
-            <TextInput
-              label="Nombre de la red"
-              value={name}
-              onChange={(e) => setName(e.currentTarget.value)}
-              maxLength={32}
-              disabled={pending}
-            />
-            <Group justify="space-between">
-              <Group gap="sm">
-                {wifi.secured ? (
-                  <IconLock size={21} />
-                ) : (
-                  <IconLockOpen size={21} />
-                )}
-                <div>
-                  <Text fw={600}>Contraseña de la red</Text>
-                  <Text size="sm" c="dimmed">
-                    {wifi.secured
-                      ? "La red requiere una contraseña."
-                      : "Cualquier persona cercana puede conectarse."}
-                  </Text>
-                </div>
-              </Group>
-              <Group>
-                {wifi.secured ? (
-                  <>
+          </Group>
+          {loading ? (
+            <Loader />
+          ) : error ? (
+            <Alert color="red" title="Wi-Fi no disponible">
+              {error}
+              <Button variant="light" mt="md" onClick={() => load()}>
+                Volver a comprobar
+              </Button>
+            </Alert>
+          ) : (
+            <Stack gap="xl">
+              {wifi?.job && (
+                <Alert
+                  color={
+                    wifi.job.state === "failed"
+                      ? "red"
+                      : wifi.job.state === "completed"
+                        ? "teal"
+                        : "blue"
+                  }
+                  title={
+                    pending
+                      ? "Actualizando la red"
+                      : wifi.job.state === "completed"
+                        ? "Configuración aplicada"
+                        : "Cambio no completado"
+                  }
+                >
+                  {wifi.job.message}
+                  {pending && (
+                    <Text size="sm" mt="sm">
+                      Espera unos segundos y vuelve a conectarte a «
+                      {wifi.job.ssid}». Si no aparece, prueba la red anterior y
+                      pulsa «Comprobar estado».
+                    </Text>
+                  )}
+                </Alert>
+              )}
+              <TextInput
+                label="Nombre de la red"
+                value={name}
+                onChange={(e) => setName(e.currentTarget.value)}
+                maxLength={32}
+                disabled={pending}
+              />
+              <Group justify="space-between">
+                <Group gap="sm">
+                  {wifi.secured ? (
+                    <IconLock size={21} />
+                  ) : (
+                    <IconLockOpen size={21} />
+                  )}
+                  <div>
+                    <Text fw={600}>Contraseña de la red</Text>
+                    <Text size="sm" c="dimmed">
+                      {wifi.secured
+                        ? "La red requiere una contraseña."
+                        : "Cualquier persona cercana puede conectarse."}
+                    </Text>
+                  </div>
+                </Group>
+                <Group>
+                  {wifi.secured ? (
+                    <>
+                      <Button
+                        variant="default"
+                        disabled={pending}
+                        onClick={() => setDialog("password")}
+                      >
+                        Cambiar contraseña
+                      </Button>
+                      <Button
+                        variant="subtle"
+                        color="red"
+                        disabled={pending}
+                        onClick={() => setDialog("remove")}
+                      >
+                        Eliminar contraseña
+                      </Button>
+                    </>
+                  ) : (
                     <Button
-                      variant="default"
+                      variant="light"
+                      leftSection={<IconPlus size={17} />}
                       disabled={pending}
                       onClick={() => setDialog("password")}
                     >
-                      Cambiar contraseña
+                      Añadir contraseña
                     </Button>
-                    <Button
-                      variant="subtle"
-                      color="red"
-                      disabled={pending}
-                      onClick={() => setDialog("remove")}
-                    >
-                      Eliminar contraseña
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    variant="light"
-                    leftSection={<IconPlus size={17} />}
-                    disabled={pending}
-                    onClick={() => setDialog("password")}
-                  >
-                    Añadir contraseña
-                  </Button>
-                )}
+                  )}
+                </Group>
               </Group>
-            </Group>
-            <Divider />
-            <Alert
-              variant="light"
-              color="gray"
-              icon={<IconAlertCircle size={18} />}
-            >
-              Al aplicar cambios, el punto de acceso se reinicia y puede
-              desconectarte. La clave de administración del portal es
-              independiente de la contraseña Wi-Fi.
-            </Alert>
-            <Group justify="space-between">
-              <Button
-                variant="subtle"
-                leftSection={<IconRefresh size={17} />}
-                onClick={() => load()}
+              <Divider />
+              <Alert
+                variant="light"
+                color="gray"
+                icon={<IconAlertCircle size={18} />}
               >
-                Comprobar estado
-              </Button>
-              <Button
-                disabled={pending || name === wifi.ssid || !name.trim()}
-                loading={busy}
-                onClick={() => save()}
-              >
-                Guardar nombre
-              </Button>
-            </Group>
-          </Stack>
-        )}
-      </Paper>
+                Al aplicar cambios, el punto de acceso se reinicia y puede
+                desconectarte. Estos cambios no modifican la contraseña del
+                portal.
+              </Alert>
+              <Group justify="space-between">
+                <Button
+                  variant="subtle"
+                  leftSection={<IconRefresh size={17} />}
+                  onClick={() => load()}
+                >
+                  Comprobar estado
+                </Button>
+                <Button
+                  disabled={pending || name === wifi.ssid || !name.trim()}
+                  loading={busy}
+                  onClick={() => save()}
+                >
+                  Guardar nombre
+                </Button>
+              </Group>
+            </Stack>
+          )}
+        </Paper>
+      </DeviceSettings>
       <Modal
         opened={!!dialog}
         onClose={() => {
@@ -1555,6 +1647,9 @@ function Settings({ notify }) {
 }
 function App() {
   const [auth, setAuth] = useState(null);
+  const [setup, setSetup] = useState(null);
+  const [entryError, setEntryError] = useState("");
+  const [operation, setOperation] = useState(restoreDeviceOperation);
   const [token, setToken] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1563,20 +1658,40 @@ function App() {
   const [tab, setTab] = useState("models");
   const [notice, setNotice] = useState(null);
   const notify = (message, error = false) => setNotice({ message, error });
-  useEffect(() => {
-    api("session")
-      .then((d) => setAuth(d.authenticated))
-      .catch((e) => {
+  const beginOperation = useCallback((value) => {
+    setOperation(rememberDeviceOperation(value));
+  }, []);
+  const loadEntry = useCallback(async () => {
+    setEntryError("");
+    try {
+      const initial = await api("setup", { silentAuth: true });
+      setSetup(initial);
+      if (deviceJobActive(initial.job)) {
+        beginOperation({ ...initial, kind: initial.job.kind });
+      }
+      if (initial.required) {
         setAuth(false);
-        setError(e.message);
-      });
+        setConfig(null);
+      } else {
+        const session = await api("session");
+        setAuth(session.authenticated);
+      }
+    } catch (e) {
+      setEntryError(e.message);
+    }
+  }, [beginOperation]);
+  useEffect(() => {
+    loadEntry();
     const expire = () => {
       setAuth(false);
       setConfig(null);
+      api("setup", { silentAuth: true })
+        .then(setSetup)
+        .catch(() => {});
     };
     window.addEventListener("gestur-expired", expire);
     return () => window.removeEventListener("gestur-expired", expire);
-  }, []);
+  }, [loadEntry]);
   async function loadConfig() {
     try {
       const d = await api("config");
@@ -1604,11 +1719,48 @@ function App() {
       setBusy(false);
     }
   }
-  if (auth === null)
+  if (operation)
+    return (
+      <div className="login-page">
+        <Paper p={40} withBorder radius="lg" className="login-card">
+          <Title order={1}>Gestur</Title>
+        </Paper>
+        <DeviceOperationModal
+          operation={operation}
+          api={api}
+          onClose={() => {
+            forgetDeviceOperation();
+            setOperation(null);
+            loadEntry();
+          }}
+        />
+      </div>
+    );
+  if (entryError)
+    return (
+      <div className="login-page">
+        <Paper p={40} withBorder radius="lg" className="login-card">
+          <Title order={1} mb="xl">
+            Gestur
+          </Title>
+          <Alert color="red" title="No se puede acceder al dispositivo">
+            {entryError}
+          </Alert>
+          <Button mt="lg" onClick={loadEntry}>
+            Volver a comprobar
+          </Button>
+        </Paper>
+      </div>
+    );
+  if (!setup || auth === null)
     return (
       <div className="centered">
         <Loader />
       </div>
+    );
+  if (setup.required)
+    return (
+      <InitialSetup setup={setup} api={api} onOperation={beginOperation} />
     );
   if (!auth)
     return (
@@ -1620,8 +1772,7 @@ function App() {
           <form onSubmit={login}>
             <Stack>
               <PasswordInput
-                label="Clave de administración"
-                description="La clave que aparece al instalar Gestur."
+                label="Contraseña"
                 value={token}
                 onChange={(e) => setToken(e.currentTarget.value)}
                 autoComplete="current-password"
@@ -1740,7 +1891,7 @@ function App() {
                   />
                 </Tabs.Panel>
                 <Tabs.Panel value="settings">
-                  <Settings notify={notify} />
+                  <Settings notify={notify} onOperation={beginOperation} />
                 </Tabs.Panel>
               </>
             )}

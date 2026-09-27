@@ -22,7 +22,7 @@ import {
   simplifyModel,
   verifyImporter,
 } from "../server/native-model.mjs";
-import { validateGlb } from "../server/store.mjs";
+import { atomicJson, validateGlb } from "../server/store.mjs";
 import { preflightModel } from "../server/model-check.mjs";
 async function zip(entries) {
   const archive = new yazl.ZipFile();
@@ -299,6 +299,61 @@ test("accepting reduction invokes worker once and records actual triangles", asy
   assert.equal(worker.current().model.triangles, 499998);
   assert.equal(worker.current().model.originalTriangles, 2000000);
 });
+for (const finalState of ["completed", "failed", "awaiting_decision"]) {
+  test(`import status remains processing until ${finalState} persistence releases the next action`, async (t) => {
+    let signalPersisted, release;
+    const persisted = new Promise((resolve) => {
+      signalPersisted = resolve;
+    });
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    let pause = true;
+    const { worker } = await importer(t, {
+      modelChecker: async () => {
+        if (finalState === "failed") throw new Error("Invalid geometry");
+        return {
+          triangles:
+            finalState === "awaiting_decision" ? HIGH_TRIANGLES + 1 : 100,
+        };
+      },
+      persistJob: async (filename, job) => {
+        await atomicJson(filename, job);
+        if (pause && job.state === finalState) {
+          pause = false;
+          signalPersisted();
+          await gate;
+        }
+      },
+    });
+    try {
+      const accepted = await worker.start(Buffer.from("obj"), "m.obj");
+      await persisted;
+      assert.equal(worker.current().state, "processing");
+      assert.equal(worker.get(accepted.id).state, "processing");
+      assert.equal(worker.current().model, null);
+      if (finalState === "awaiting_decision")
+        await assert.rejects(worker.decide(accepted.id, false), /decisión/);
+      else
+        await assert.rejects(
+          worker.start(Buffer.from("obj"), "next.obj"),
+          /curso/,
+        );
+      release();
+      await worker.idle();
+      assert.equal(worker.current().state, finalState);
+      // No delay or retry after the completed/decision state becomes public.
+      const next =
+        finalState === "awaiting_decision"
+          ? await worker.decide(accepted.id, false)
+          : await worker.start(Buffer.from("obj"), "next.obj");
+      assert.equal(next.state, "processing");
+      await worker.idle();
+    } finally {
+      release();
+    }
+  });
+}
 test("pending consent survives restart; interrupted processing fails and cleans staging", async (t) => {
   const { worker, modelsDir } = await importer(t, {
       modelChecker: async () => ({ triangles: 1500000 }),
@@ -345,18 +400,25 @@ test("Linux sandbox denies host/network access and bounds native converters", as
     );
   assert.equal(cmd.command, "/usr/bin/setpriv");
   assert.deepEqual(cmd.args.slice(0, 4), [
-    "--inh-caps=-all", "--ambient-caps=-all", "--", "/usr/bin/bwrap",
+    "--inh-caps=-all",
+    "--ambient-caps=-all",
+    "--",
+    "/usr/bin/bwrap",
   ]);
   assert.ok(cmd.args.includes("--unshare-all"));
   assert.ok(cmd.args.includes("--cap-drop"));
   assert.equal(cmd.args.includes("--proc"), false);
   assert.ok(
-    cmd.args.some((arg, index) => arg === "--dir" && cmd.args[index + 1] === "/proc"),
+    cmd.args.some(
+      (arg, index) => arg === "--dir" && cmd.args[index + 1] === "/proc",
+    ),
   );
   assert.equal(
-    cmd.args.some((arg, index) =>
-      ["--bind", "--ro-bind", "--ro-bind-try"].includes(arg) &&
-      cmd.args[index + 1] === "/proc"),
+    cmd.args.some(
+      (arg, index) =>
+        ["--bind", "--ro-bind", "--ro-bind-try"].includes(arg) &&
+        cmd.args[index + 1] === "/proc",
+    ),
     false,
   );
   assert.ok(cmd.args.includes("--as=3221225472"));

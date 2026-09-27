@@ -13,6 +13,7 @@ async function fixture(
   const folder = await mkdtemp(path.join(os.tmpdir(), "gestur-api-"));
   const app = await createApp({
     configPath: path.join(folder, "config.json"),
+    deviceStatePath: path.join(folder, "device.json"),
     modelsDir: path.join(folder, "models"),
     token,
     wifi,
@@ -446,6 +447,67 @@ test("model mutation validation rejects malformed ids, nulls, extra fields and i
   for (const body of [null, {}, { id: null }, { id, recursive: true }])
     assert.equal((await request("DELETE", "models", body)).statusCode, 400);
   assert.equal((await request("GET", "models")).json().active, id);
+});
+
+test("per-model URLs round-trip through the API and reject unsafe or oversized links", async (t) => {
+  const { request, upload } = await importedModelFixture(t);
+  const id = (await upload()).model.id;
+  assert.equal((await request("GET", "models")).json().models[0].url, null);
+  const valid = [
+    "https://example.org/capitel?q=1#detalle",
+    "http://10.42.0.1:8080/",
+    "https://[2001:db8::1]/",
+    "https://example.org/niño",
+    "https://example.org/" + "a".repeat(2048 - "https://example.org/".length),
+  ];
+  for (const url of valid) {
+    const edited = await request("PATCH", "models", { id, url });
+    assert.equal(edited.statusCode, 200, edited.body);
+    assert.equal(edited.json().model.url, url);
+    assert.equal(edited.json().config.active_model, id);
+    assert.equal((await request("GET", "models")).json().models[0].url, url);
+  }
+  const before = (await request("GET", "models")).json();
+  for (const url of [
+    42,
+    true,
+    [],
+    {},
+    "example.org",
+    "//example.org",
+    "ftp://example.org/file",
+    "javascript:alert(1)",
+    "data:text/plain,hello",
+    "file:///etc/passwd",
+    "http:///example.org",
+    "https://user:password@example.org/",
+    "https://user@example.org/",
+    "https://@example.org/",
+    "https://example.org:65536",
+    "https://example.org/a b",
+    "https://example.org/\\other",
+    "https://example.org/\nother",
+    " https://example.org/\t",
+    "https://example.org/\x00",
+    "https://example.org/\x7f",
+    "https://example.org/\x85",
+    "https://example.org/" + "a".repeat(2048),
+    "https://example.org/" + "ñ".repeat(1100),
+    "https://example.org/\ud800",
+  ]) {
+    assert.equal(
+      (await request("PATCH", "models", { id, url })).statusCode,
+      400,
+      JSON.stringify(url),
+    );
+    assert.deepEqual((await request("GET", "models")).json(), before);
+  }
+  for (const url of [null, "", "   "]) {
+    const removed = await request("PATCH", "models", { id, url });
+    assert.equal(removed.statusCode, 200, removed.body);
+    assert.equal(removed.json().model.url, null);
+    assert.equal((await request("GET", "models")).json().models[0].url, null);
+  }
 });
 
 test("pending imports prevent destructive model management until the import finishes", async (t) => {

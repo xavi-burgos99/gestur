@@ -1,8 +1,20 @@
 #!/bin/bash
-# Run as root after the base runtime installer: scripts/install-portal.sh /opt/gestur
+# Run as root after the base runtime installer: scripts/install-portal.sh /opt/gestur [--hostname name]
 set -euo pipefail
 umask 022
-INSTALL_ROOT=${1:-/opt/gestur}
+export DEBIAN_FRONTEND=noninteractive
+export PIP_NO_INPUT=1
+exec </dev/null
+INSTALL_ROOT=/opt/gestur
+if [[ $# -gt 0 && "$1" != --* ]]; then INSTALL_ROOT=$1; shift; fi
+TASK_HOSTNAME=''
+if [[ $# -gt 0 ]]; then
+    if [[ $# != 2 || "$1" != --hostname || ! "$2" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+        echo 'Usa --hostname con 1–63 letras minúsculas, números o guiones, sin .local ni guiones en los extremos.' >&2
+        exit 1
+    fi
+    TASK_HOSTNAME=$2
+fi
 if [[ $(id -u) != 0 ]]; then echo 'Ejecuta este instalador como root.' >&2; exit 1; fi
 if [[ "$INSTALL_ROOT" != /opt/gestur ]]; then echo 'La instalación del portal requiere /opt/gestur.' >&2; exit 1; fi
 if [[ $(uname -s) != Linux ]]; then echo 'El portal de dispositivo se instala en Raspberry Pi OS.' >&2; exit 1; fi
@@ -12,7 +24,8 @@ TASK_SUDOERS=''
 cleanup() { [[ -z "$TASK_NODE_TEMP" ]] || rm -rf "$TASK_NODE_TEMP"; [[ -z "$TASK_BUILD" ]] || rm -rf "$TASK_BUILD"; [[ -z "$TASK_SUDOERS" ]] || rm -f "$TASK_SUDOERS"; }
 trap cleanup EXIT
 apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o APT::Update::Error-Mode=any update
-apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 install -y --no-install-recommends network-manager dnsmasq-base avahi-daemon python3-dbus sudo ca-certificates curl xz-utils rfkill \
+apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends network-manager dnsmasq-base avahi-daemon python3-dbus sudo ca-certificates curl xz-utils rfkill \
     assimp-utils bubblewrap util-linux
 systemctl enable --now NetworkManager
 systemctl enable --now avahi-daemon
@@ -38,7 +51,10 @@ if [[ -x /opt/gestur-node/bin/node ]]; then
 else
     NODE_BIN=/usr/bin/node
     BUILD_PATH=/usr/local/bin:/usr/bin:/bin
-    if ! command -v npm >/dev/null; then apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 install -y npm; fi
+    if ! command -v npm >/dev/null; then
+        apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 \
+            -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y npm
+    fi
 fi
 getent group gestur >/dev/null || groupadd --system gestur
 getent group gestur-portal >/dev/null || groupadd --system gestur-portal
@@ -59,18 +75,25 @@ if [[ ! -f /var/lib/gestur/config.json ]]; then
     install -o gestur -g gestur -m 660 "$INSTALL_ROOT/config/default.json" "$TASK_CONFIG"
     mv -T "$TASK_CONFIG" /var/lib/gestur/config.json
 fi
-if [[ ! -s /etc/gestur/portal-token ]]; then
-    TASK_TOKEN=$(mktemp /etc/gestur/.portal-token.XXXXXX)
-    /usr/bin/python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > "$TASK_TOKEN"
-    mv -T "$TASK_TOKEN" /etc/gestur/portal-token
+# An old token identifies an existing installation, even after interrupted
+# upgrades. New installs create no token, so retries stay pending onboarding.
+TASK_FRESH=true
+if [[ -L /etc/gestur/portal-token ]]; then echo 'La clave anterior no puede ser un enlace.' >&2; exit 1; fi
+if [[ -e /etc/gestur/portal-token ]]; then
+    TASK_FRESH=false
+    chown root:gestur-portal /etc/gestur/portal-token
+    chmod 640 /etc/gestur/portal-token
 fi
-chown root:gestur-portal /etc/gestur/portal-token
-chmod 640 /etc/gestur/portal-token
+install -o root -g root -m 644 "$INSTALL_ROOT/config/default.json" /etc/gestur/default.json
 install -o root -g root -m 755 "$INSTALL_ROOT/scripts/gestur-wifi.py" /usr/local/libexec/gestur-wifi
+install -o root -g root -m 755 "$INSTALL_ROOT/scripts/gestur-device.py" /usr/local/libexec/gestur-device
 TASK_SUDOERS=$(mktemp)
 printf '%s\n' 'gestur-portal ALL=(root) NOPASSWD: /usr/local/libexec/gestur-wifi status, /usr/local/libexec/gestur-wifi apply' > "$TASK_SUDOERS"
 visudo -cf "$TASK_SUDOERS"
 install -o root -g root -m 440 "$TASK_SUDOERS" /etc/sudoers.d/gestur-wifi
+printf '%s\n' 'gestur-portal ALL=(root) NOPASSWD: /usr/local/libexec/gestur-device status, /usr/local/libexec/gestur-device hostname, /usr/local/libexec/gestur-device onboarding, /usr/local/libexec/gestur-device reset' > "$TASK_SUDOERS"
+visudo -cf "$TASK_SUDOERS"
+install -o root -g root -m 440 "$TASK_SUDOERS" /etc/sudoers.d/gestur-device
 # Build as an unprivileged account; application/helper files remain root-owned.
 # Retired illustrations are archived in docs; upgrades must not republish the
 # copies left by the previous installer in the public directory.
@@ -94,14 +117,11 @@ chmod 644 /etc/systemd/system/gestur-portal.service
 # Passwords and SSID of an existing AP are retained, including on reinstall.
 rfkill unblock wifi
 /usr/local/libexec/gestur-wifi bootstrap
+/usr/bin/python3 -c 'import json, sys; print(json.dumps({"fresh": sys.argv[1] == "true", **({"hostname": sys.argv[2]} if sys.argv[2] else {})}))' \
+    "$TASK_FRESH" "$TASK_HOSTNAME" | /usr/local/libexec/gestur-device bootstrap
 systemctl daemon-reload
 systemctl enable --now gestur-portal
 systemctl restart gestur-portal
 echo 'Portal instalado: http://10.42.0.1 (o IP actual del dispositivo, sin indicar puerto).'
 echo "También disponible por mDNS: http://$(hostname -s).local"
-if [[ ${GESTUR_UNATTENDED:-0} == 1 ]]; then
-    echo 'Consulta la clave de administración con: sudo cat /etc/gestur/portal-token'
-else
-    echo 'Clave de administración (guárdala):'
-    cat /etc/gestur/portal-token
-fi
+echo 'En una instalación nueva, abre el portal para completar la configuración inicial.'

@@ -30,6 +30,7 @@ def prepared(tmp_path, monkeypatch):
     state = tmp_path / 'state'
     marker = state / 'complete.json'
     events = []
+    commands_seen = []
     fail_once = set()
 
     def host_check(settings):
@@ -40,10 +41,13 @@ def prepared(tmp_path, monkeypatch):
 
     def run(args, **kwargs):
         # Only these commands may be requested, and none are executed.
+        commands_seen.append(args)
+        settings = json.loads(config.read_text())
+        hostname_args = ('--hostname', settings['hostname']) if 'hostname' in settings else ()
         commands = {
             ('/usr/bin/raspi-config', 'nonint', 'do_wifi_country', 'ES'): 'country',
             ('/usr/bin/dpkg', '--configure', '--pending'): 'packages',
-            ('/bin/bash', str(bootstrap / 'gestur.sh'), 'install'): 'install',
+            ('/bin/bash', str(bootstrap / 'gestur.sh'), 'install', *hostname_args): 'install',
             ('/usr/bin/systemctl', 'is-active', '--quiet', 'gestur-portal.service'): 'service',
             ('/usr/bin/systemctl', '--no-block', 'reboot'): 'reboot',
         }
@@ -93,7 +97,7 @@ def prepared(tmp_path, monkeypatch):
                    log_path=tmp_path / 'logs' / 'first-boot.log', run=run,
                    host_check=host_check, ready=ready, sync=sync)
     return SimpleNamespace(**options, options=options, revision=revision,
-                           marker=marker, events=events, fail_once=fail_once)
+                           marker=marker, events=events, fail_once=fail_once, commands_seen=commands_seen)
 
 
 def test_success_verifies_portal_and_durable_marker_before_reboot(prepared):
@@ -114,6 +118,17 @@ def test_second_boot_never_installs_or_reboots_again(prepared):
     first_boot.provision(**prepared.options)
     assert prepared.events == ['host']
     assert contents == (prepared.marker.read_bytes(), prepared.log_path.read_bytes())
+
+
+@pytest.mark.parametrize('hostname', ['a', 'sala-2', 'a' * 63])
+def test_hostname_is_passed_as_a_literal_installer_option(prepared, hostname):
+    settings = json.loads(prepared.config.read_text())
+    settings['hostname'] = hostname
+    prepared.config.write_text(json.dumps(settings))
+    first_boot.provision(**prepared.options)
+    assert ['/bin/bash', str(prepared.bootstrap / 'gestur.sh'), 'install',
+            '--hostname', hostname] in prepared.commands_seen
+    assert 'portal-token' not in prepared.log_path.read_text()
 
 
 @pytest.mark.parametrize('failure', ['country', 'packages', 'install', 'service', 'http'])
@@ -166,6 +181,8 @@ def test_source_revision_mismatch_does_not_install(prepared):
     ('admin_user', 'root'), ('admin_user', 'gestur'),
     ('admin_user', 'gestur-portal'), ('admin_user', 'bad/user'),
     ('admin_user', ''), ('wifi_country', ''), ('wifi_country', 'Spain'),
+    *(('hostname', value) for value in ('', 'Sala', 'sala.local', '-sala', 'sala-', 'a' * 64,
+                                      'sala;id', 'sala\n', None, 42)),
 ])
 def test_invalid_image_settings_are_rejected_before_commands(prepared, key, value):
     settings = json.loads(prepared.config.read_text())

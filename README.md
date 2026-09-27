@@ -16,6 +16,8 @@ sudo reboot
 
 El instalador despliega **la copia local de la rama elegida** en `/opt/gestur`; no hace `pull main`. Crea un Python 3.12.14 privado, instala versiones fijadas con ruedas ARM64, aprovisiona los modelos Lite verificados, instala Assimp y meshoptimizer y configura el arranque del controlador completo. No modifica el Python del sistema, el firmware ni la memoria GPU. La configuración y los modelos de usuario se conservan al reinstalar.
 
+La instalación es desatendida. En una instalación nueva asigna **gestur-xxxx.local**, donde `xxxx` son los últimos cuatro caracteres de la MAC permanente del Wi-Fi, en minúsculas. Para elegir otro nombre, usa `sudo bash gestur.sh install --hostname sala-1`, sin `.local`. Se aceptan de 1 a 63 letras minúsculas, números y guiones, sin guiones en los extremos. Reinstalar conserva el nombre existente salvo que se indique esta opción.
+
 - Configuración: `/var/lib/gestur/config.json`.
 - Modelos importados: `/var/lib/gestur/models`.
 - Registro del expositor: `/var/log/gestur/viewer.log`.
@@ -29,7 +31,7 @@ Esta rama incorpora las mejoras de rendimiento y añade un portal **React + Mant
 
 En instalaciones nuevas la red es **GESTUR-XXXX**, donde XXXX son los últimos cuatro caracteres de la MAC permanente de `wlan0`, sin separadores. Se crea **abierta**. Configura previamente el país Wi-Fi desde Raspberry Pi Imager o `raspi-config`; usa Ethernet para instalar, pues activar el punto de acceso puede interrumpir una conexión Wi-Fi existente.
 
-Conéctate a esa red y abre **http://10.42.0.1**. La clave de administración del portal aparece al terminar la instalación y puede recuperarse con `sudo cat /etc/gestur/portal-token`. Esta clave protege los cambios del dispositivo y es independiente de la contraseña opcional de la red Wi-Fi.
+Conéctate a esa red y abre **http://10.42.0.1** o **http://gestur-xxxx.local**. Una instalación nueva muestra la configuración inicial en el portal; el instalador no genera ni imprime una clave. Al actualizar una versión anterior se conserva su acceso, sin volver a abrir esa configuración inicial. La autenticación del portal es independiente de la contraseña opcional del Wi-Fi.
 
 - **Modelos 3D**: biblioteca vacía de inicio. Sube un archivo 3D o un ZIP con el modelo, materiales y texturas. Se admiten OBJ, glTF/GLB, FBX, STL, PLY, DAE, 3DS y otros formatos de malla; se reparan referencias a recursos que estén en el paquete y se convierte a GLB autocontenido. Solo por encima de 1.000.000 de triángulos aparece una propuesta fija de aproximadamente 500.000: puedes aceptarla o conservar el original. La Raspberry realiza el trabajo y el portal muestra su estado. Los modelos se centran y encuadran automáticamente.
 - **Parámetros**: ajusta sensibilidad, suavizado, umbrales y asignaciones de cabeza, pinza u orientación de manos a rotación, desplazamiento y escala. Las manos se pueden activar cuando hagan falta.

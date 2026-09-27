@@ -4,10 +4,14 @@ import multipart from "@fastify/multipart";
 import staticFiles from "@fastify/static";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import os from "node:os";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createStore, ApiError, atomicJson } from "./store.mjs";
 import { createImporter } from "./models.mjs";
 import { systemWifi, validateWifi } from "./wifi.mjs";
+import { createCredentials } from "./credentials.mjs";
+import { systemDevice, validateDeviceRequest } from "./device.mjs";
+import { createPresets } from "./presets.mjs";
 
 export async function createApp(options) {
   const {
@@ -17,17 +21,29 @@ export async function createApp(options) {
     staticRoot = path.resolve(import.meta.dirname, "../dist"),
     wifi = systemWifi(),
     wifiDelayMs = 5000,
+    device = systemDevice(),
+    deviceDelayMs = 5000,
+    deviceStatePath = process.env.GESTUR_DEVICE_STATE ||
+      "/etc/gestur/device.json",
   } = options;
-  if (typeof token !== "string" || token.length < 24)
-    throw new Error(
-      "GESTUR requires an administrator token of at least 24 characters.",
-    );
+  const credentials = createCredentials({ token, deviceStatePath });
+  await credentials.read();
   const store = await createStore(options);
+  const presets = createPresets({ configPath, store });
   const app = Fastify({ logger: false, bodyLimit: 128 * 1024 });
   const sessions = new Map();
   const attempts = new Map();
   const timers = new Set();
+  const deviceOperations = new Set();
   const jobFile = path.join(path.dirname(configPath), "wifi-job.json");
+  const deviceJobFile = path.join(path.dirname(configPath), "device-job.json");
+  let deviceJob = null,
+    schedulingDevice = false,
+    verifyingPasswords = 0,
+    activeMutations = 0;
+  const deviceBusy = () =>
+    schedulingDevice ||
+    ["pending", "applying", "rebooting"].includes(deviceJob?.state);
   let job = null;
   const importer = await createImporter({
     ...options,
@@ -35,6 +51,31 @@ export async function createApp(options) {
   });
   let receivingUpload = false;
   let mutatingModels = false;
+  try {
+    deviceJob = JSON.parse(await readFile(deviceJobFile, "utf8"));
+  } catch {}
+  if (["pending", "applying", "rebooting"].includes(deviceJob?.state)) {
+    let completed = false;
+    if (deviceJob.state === "rebooting") {
+      try {
+        const state = await device("status");
+        completed =
+          state.hostname === deviceJob.hostname &&
+          (deviceJob.kind === "reset"
+            ? !state.setup_complete
+            : state.setup_complete);
+      } catch {}
+    }
+    deviceJob = {
+      ...deviceJob,
+      state: completed ? "completed" : "failed",
+      updated: Date.now(),
+      message: completed
+        ? "Configuración aplicada."
+        : "El servicio se reinició antes de confirmar el cambio. Comprueba la configuración del dispositivo.",
+    };
+    await atomicJson(deviceJobFile, deviceJob);
+  }
   try {
     job = JSON.parse(await readFile(jobFile, "utf8"));
   } catch {}
@@ -71,12 +112,22 @@ export async function createApp(options) {
       )
         throw new ApiError(403, "La solicitud debe hacerse desde este panel.");
     }
-    if (request.url.split("?")[0] === "/api/session") return;
+    const endpoint = request.url.split("?")[0];
+    const credential = await credentials.read();
+    request.gesturCredential = credential;
+    if (endpoint === "/api/session" || endpoint === "/api/setup") return;
     const session = sessions.get(request.cookies.gestur_session);
-    if (!session || session < Date.now())
+    if (
+      credential.required ||
+      !session ||
+      session.expires < Date.now() ||
+      session.revision !== credential.revision
+    )
+      throw new ApiError(401, "Introduce la contraseña para continuar.");
+    if (!["GET", "HEAD"].includes(request.method) && deviceBusy())
       throw new ApiError(
-        401,
-        "Introduce la clave de administración para continuar.",
+        409,
+        "Espera a que termine la configuración del dispositivo.",
       );
   });
   app.setErrorHandler((error, request, reply) => {
@@ -88,11 +139,45 @@ export async function createApp(options) {
           : "No se ha podido completar la operación.",
     });
   });
+  app.addHook("preHandler", async (request) => {
+    const endpoint = request.url.split("?")[0];
+    if (
+      !endpoint.startsWith("/api/") ||
+      ["GET", "HEAD"].includes(request.method) ||
+      [
+        "/api/session",
+        "/api/setup",
+        "/api/device/hostname",
+        "/api/device/reset",
+      ].includes(endpoint)
+    )
+      return;
+    if (deviceBusy())
+      throw new ApiError(
+        409,
+        "Espera a que termine la configuración del dispositivo.",
+      );
+    request.gesturMutation = true;
+    activeMutations++;
+  });
+  app.addHook("onResponse", async (request) => {
+    if (request.gesturMutation) {
+      request.gesturMutation = false;
+      activeMutations--;
+    }
+  });
   app.get("/api/session", async (request) => ({
     authenticated:
-      (sessions.get(request.cookies.gestur_session) || 0) > Date.now(),
+      !request.gesturCredential.required &&
+      (sessions.get(request.cookies.gestur_session)?.expires || 0) >
+        Date.now() &&
+      sessions.get(request.cookies.gestur_session)?.revision ===
+        request.gesturCredential.revision,
+    setup_required: request.gesturCredential.required,
   }));
   app.post("/api/session", async (request, reply) => {
+    if (request.gesturCredential.required)
+      throw new ApiError(409, "Completa la configuración inicial.");
     const now = Date.now();
     for (const [key, value] of attempts)
       if (value.until < now) attempts.delete(key);
@@ -102,25 +187,33 @@ export async function createApp(options) {
     };
     if (attempt.count >= 5)
       throw new ApiError(429, "Demasiados intentos. Espera un minuto.");
-    const supplied = Buffer.from(
-      typeof request.body?.token === "string" ? request.body.token : "",
-    );
-    const expected = Buffer.from(token);
-    if (
-      supplied.length !== expected.length ||
-      !timingSafeEqual(supplied, expected)
-    ) {
-      attempt.count++;
-      if (attempts.size > 1000) attempts.clear();
-      attempts.set(request.ip, attempt);
-      throw new ApiError(401, "La clave de administración no es correcta.");
+    if (verifyingPasswords >= 4)
+      throw new ApiError(
+        429,
+        "Espera unos segundos antes de volver a intentarlo.",
+      );
+    attempt.count++;
+    if (attempts.size > 1000) attempts.clear();
+    attempts.set(request.ip, attempt);
+    verifyingPasswords++;
+    let valid;
+    try {
+      valid = await request.gesturCredential.verify(request.body?.token);
+    } finally {
+      verifyingPasswords--;
+    }
+    if (!valid) {
+      throw new ApiError(401, "La contraseña no es correcta.");
     }
     attempts.delete(request.ip);
-    for (const [key, expiry] of sessions)
-      if (expiry < now) sessions.delete(key);
+    for (const [key, value] of sessions)
+      if (value.expires < now) sessions.delete(key);
     if (sessions.size >= 64) sessions.delete(sessions.keys().next().value);
     const session = randomBytes(32).toString("hex");
-    sessions.set(session, now + 8 * 60 * 60 * 1000);
+    sessions.set(session, {
+      expires: now + 8 * 60 * 60 * 1000,
+      revision: request.gesturCredential.revision,
+    });
     reply.setCookie("gestur_session", session, {
       httpOnly: true,
       sameSite: "strict",
@@ -135,6 +228,147 @@ export async function createApp(options) {
     reply.clearCookie("gestur_session", { path: "/" });
     return { authenticated: false };
   });
+  function publicDevice(state = {}) {
+    return {
+      hostname: state.hostname || os.hostname(),
+      default_hostname: state.default_hostname ?? null,
+      ssid: state.ssid ?? state.wifi?.ssid ?? null,
+      portal_url: state.portal_url ?? null,
+      setup_complete: state.setup_complete,
+    };
+  }
+  app.get("/api/setup", async (request) => {
+    let state = {},
+      available = true;
+    try {
+      state = await device("status");
+    } catch {
+      available = false;
+    }
+    return {
+      ...publicDevice(state),
+      required: request.gesturCredential.required,
+      device_available: available,
+      job: deviceJob,
+    };
+  });
+  app.get("/api/device", async () => ({
+    ...publicDevice(await device("status")),
+    job: deviceJob,
+  }));
+  app.get("/api/device/job", async () => ({ job: deviceJob }));
+
+  async function scheduleDevice(kind, body, reply) {
+    const settings = validateDeviceRequest(kind, body);
+    const blocked = () =>
+      activeMutations > 0 ||
+      ["pending", "applying"].includes(job?.state) ||
+      receivingUpload ||
+      mutatingModels ||
+      ["processing", "awaiting_decision"].includes(importer.current()?.state);
+    if (deviceBusy() || blocked())
+      throw new ApiError(
+        409,
+        "Espera a que terminen los cambios o la importación en curso.",
+      );
+    // Reserve before the asynchronous preflight; otherwise two requests could
+    // both pass the check and race password, hostname or reset transactions.
+    schedulingDevice = true;
+    try {
+      const current = publicDevice(await device("status"));
+      if (blocked()) throw new ApiError(409, "Hay otro cambio en curso.");
+      const hostname =
+        kind === "reset"
+          ? current.default_hostname
+          : settings.hostname || current.hostname;
+      if (!hostname)
+        throw new ApiError(
+          503,
+          "No se pudo obtener el nombre del dispositivo.",
+        );
+      deviceJob = {
+        id: randomUUID(),
+        kind,
+        state: "pending",
+        created_at: Date.now(),
+        updated: Date.now(),
+        hostname,
+        ssid:
+          kind === "reset"
+            ? `GESTUR-${hostname.slice(-4).toUpperCase()}`
+            : current.ssid,
+        portal_url: current.portal_url,
+        message: "Guardando la configuración. El dispositivo se reiniciará.",
+      };
+      await atomicJson(deviceJobFile, deviceJob);
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        const operation = (async () => {
+          try {
+            deviceJob = {
+              ...deviceJob,
+              state: "applying",
+              updated: Date.now(),
+            };
+            await atomicJson(deviceJobFile, deviceJob);
+            const state = await device(
+              kind === "setup" ? "onboarding" : kind,
+              settings,
+            );
+            deviceJob = {
+              ...deviceJob,
+              ...publicDevice(state),
+              state: "rebooting",
+              updated: Date.now(),
+              message: "Configuración guardada. Reiniciando el dispositivo.",
+            };
+            sessions.clear();
+            attempts.clear();
+          } catch {
+            deviceJob = {
+              ...deviceJob,
+              state: "failed",
+              updated: Date.now(),
+              message:
+                "No se pudo completar el cambio. Comprueba la configuración del dispositivo antes de volver a intentarlo.",
+            };
+          } finally {
+            delete settings.password;
+            delete settings.confirmation;
+            await atomicJson(deviceJobFile, deviceJob).catch(() => {});
+          }
+        })().finally(() => deviceOperations.delete(operation));
+        deviceOperations.add(operation);
+      }, deviceDelayMs);
+      timers.add(timer);
+      return reply
+        .code(202)
+        .send({
+          job: deviceJob,
+          hostname: deviceJob.hostname,
+          ssid: deviceJob.ssid,
+          portal_url: deviceJob.portal_url,
+          reboot: true,
+        });
+    } catch (error) {
+      // A failed preflight/persist must not leave the portal locked forever.
+      if (deviceJob?.state === "pending") deviceJob = null;
+      throw error;
+    } finally {
+      schedulingDevice = false;
+    }
+  }
+  app.post("/api/setup", async (request, reply) => {
+    if (!request.gesturCredential.required)
+      throw new ApiError(409, "La configuración inicial ya está completada.");
+    return scheduleDevice("setup", request.body, reply);
+  });
+  app.put("/api/device/hostname", async (request, reply) =>
+    scheduleDevice("hostname", request.body, reply),
+  );
+  app.post("/api/device/reset", async (request, reply) =>
+    scheduleDevice("reset", request.body, reply),
+  );
   app.get("/api/config", async () => ({
     config: await store.read(),
     defaults: store.defaults,
@@ -148,6 +382,12 @@ export async function createApp(options) {
         );
       return request.body;
     }),
+  }));
+  app.get("/api/presets", async () => presets.list());
+  app.put("/api/presets", async (request) => presets.save(request.body));
+  app.delete("/api/presets", async (request) => presets.delete(request.body));
+  app.post("/api/presets/apply", async (request) => ({
+    config: await presets.apply(request.body),
   }));
   app.get("/api/runtime", async () => {
     try {
@@ -294,6 +534,7 @@ export async function createApp(options) {
   });
   app.addHook("onClose", async () => {
     for (const timer of timers) clearTimeout(timer);
+    await Promise.allSettled([...deviceOperations]);
     await importer.close();
   });
   return app;

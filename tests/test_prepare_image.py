@@ -35,7 +35,7 @@ def source(tmp_path):
     git('config', 'user.name', 'Image test')
     # Real entrypoints/units, minimal other source. All work occurs in a temp repo.
     files = ['gestur.sh', 'requirements.txt', 'scripts/first-boot.py', 'scripts/install-portal.sh',
-             'config/default.json', 'portal/package-lock.json',
+             'scripts/gestur-device.py', 'config/default.json', 'portal/package-lock.json',
              *(f'deployment/{name}' for name in prepare_image.UNITS)]
     for name in files:
         path = repo / name
@@ -57,7 +57,8 @@ def source(tmp_path):
 
 
 def prepare(image, source, **kwargs):
-    return prepare_image.prepare(image, source, kwargs.get('country', 'ES'), kwargs.get('admin', 'expositor'))
+    return prepare_image.prepare(image, source, kwargs.get('country', 'ES'), kwargs.get('admin', 'expositor'),
+                                 kwargs.get('hostname'))
 
 
 def test_prepares_only_committed_code_and_enables_timer_offline(image, source):
@@ -81,7 +82,7 @@ def test_prepares_only_committed_code_and_enables_timer_offline(image, source):
     assert prepare(image, source) == (revision, False)
 
 
-@pytest.mark.parametrize('existing', ['opt/gestur', 'etc/gestur/portal-token',
+@pytest.mark.parametrize('existing', ['opt/gestur', 'etc/gestur/device.json', 'etc/gestur/portal-token',
                                     'var/lib/gestur/config.json', 'var/lib/gestur-first-boot/complete.json'])
 def test_rejects_already_provisioned_images(image, source, existing):
     path = image / existing
@@ -98,6 +99,18 @@ def test_different_settings_do_not_overwrite_image(image, source):
     with pytest.raises(ValueError, match='otra configuración'):
         prepare(image, source, country='FR')
     assert json.loads((image / 'etc/gestur/first-boot.json').read_text())['wifi_country'] == 'ES'
+
+
+def test_hostname_is_staged_explicitly_and_never_overwrites_another_image_identity(image, source):
+    revision, changed = prepare(image, source, hostname='sala-2')
+    assert changed
+    settings = json.loads((image / 'etc/gestur/first-boot.json').read_text())
+    assert settings['hostname'] == 'sala-2'
+    assert (image / 'opt/gestur-bootstrap/scripts/gestur-device.py').is_file()
+    assert prepare(image, source, hostname='sala-2') == (revision, False)
+    with pytest.raises(ValueError, match='otra configuración'):
+        prepare(image, source, hostname='sala-3')
+    assert json.loads((image / 'etc/gestur/first-boot.json').read_text()) == settings
 
 
 def test_refuses_host_root_and_32bit_image(image, source):
@@ -144,7 +157,9 @@ def test_requires_committed_source(image, source, dirty):
     assert not (image / 'opt').exists()
 
 
-@pytest.mark.parametrize('kwargs', [{'country': 'ES;reboot'}, {'admin': 'gestur'}, {'admin': '../root'}, {'admin': 'root'}])
+@pytest.mark.parametrize('kwargs', [{'country': 'ES;reboot'}, {'admin': 'gestur'}, {'admin': '../root'}, {'admin': 'root'},
+                                  *({'hostname': value} for value in ('', 'Sala', 'sala.local', '-sala',
+                                                                    'sala-', 'a' * 64, 'sala;id', 'sala\n', 42))])
 def test_rejects_invalid_parameters(image, source, kwargs):
     with pytest.raises(ValueError):
         prepare(image, source, **kwargs)

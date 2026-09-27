@@ -197,10 +197,10 @@ def validate_model_orientation(orientation=None):
     return dict(orientation)
 
 
-def load_model_orientation(model_id, models_dir):
+def _load_model_metadata(model_id, models_dir):
     """Read a package's small metadata file only after the catalog has changed."""
     if model_id is None:
-        return validate_model_orientation()
+        return {}
     root = Path(models_dir).resolve()
     package = (root / model_id.split("/", 1)[0]).resolve(strict=True)
     if package == root or not package.is_relative_to(root):
@@ -215,7 +215,45 @@ def load_model_orientation(model_id, models_dir):
     metadata = json.loads(serialized)
     if not isinstance(metadata, dict):
         raise ConfigurationError("Los metadatos del modelo no son válidos")
-    return validate_model_orientation(metadata.get("orientation"))
+    return metadata
+
+
+def load_model_orientation(model_id, models_dir):
+    return validate_model_orientation(_load_model_metadata(model_id, models_dir).get("orientation"))
+
+
+def validate_model_url(value):
+    """Validate a QR destination without resolving it or making a request."""
+    from urllib.parse import urlsplit
+    if value is None:
+        return None
+    message = "La URL debe ser HTTP o HTTPS, sin credenciales, y ocupar como máximo 2048 bytes"
+    if not isinstance(value, str) or re.search(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff]", value):
+        raise ConfigurationError(message)
+    value = value.strip()
+    if not value:
+        return None
+    if (len(value) > 2048 or len(value.encode("utf-8")) > 2048
+            or re.search(r"\s|\\", value) or not re.match(r"https?://", value, re.I)):
+        raise ConfigurationError(message)
+    try:
+        parsed = urlsplit(value)
+        if not parsed.hostname or "@" in parsed.netloc:
+            raise ValueError("Missing host or userinfo")
+        # Accessing .port rejects malformed or out-of-range ports.
+        parsed.port
+    except ValueError as error:
+        raise ConfigurationError(message) from error
+    return value
+
+
+def load_model_url(model_id, models_dir):
+    metadata = _load_model_metadata(model_id, models_dir)
+    try:
+        return validate_model_url(metadata.get("url"))
+    except ConfigurationError:
+        # An invalid old link must not prevent the object from being displayed.
+        return None
 
 
 def reconcile_model_selection(config, models_dir, *, preferred_model=None):

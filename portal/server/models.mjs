@@ -154,6 +154,7 @@ export async function createImporter({
   modelConverter = convertModel,
   modelSimplifier = simplifyModel,
   onPublished = async () => {},
+  persistJob = atomicJson,
 }) {
   await mkdir(modelsDir, { recursive: true, mode: 0o2770 });
   const stateFile = path.join(modelsDir, ".import-job.json");
@@ -162,8 +163,25 @@ export async function createImporter({
     closed = false;
   const abort = new AbortController();
   const workspaceFor = (id) => path.join(modelsDir, `.import-${id}`);
-  const snapshot = () => (job ? structuredClone(job) : null);
-  const persist = async () => atomicJson(stateFile, job);
+  const snapshot = () => {
+    if (!job) return null;
+    const visible = structuredClone(job);
+    // Persisting the final result (or cleaning up a failure) is still work.
+    // Exposing a terminal/decision state earlier lets clients immediately ask
+    // for the next action while start/decide and model mutations remain locked.
+    if (
+      running &&
+      ["completed", "failed", "awaiting_decision"].includes(visible.state)
+    ) {
+      visible.state = "processing";
+      visible.stage = "finishing";
+      visible.message = "Finalizando la importación…";
+      visible.model = null;
+      delete visible.error;
+    }
+    return visible;
+  };
+  const persist = async () => persistJob(stateFile, job);
   try {
     job = JSON.parse(await readFile(stateFile, "utf8"));
   } catch {}

@@ -234,6 +234,82 @@ test("model name and fixed orientation persist independently from selection and 
   );
 });
 
+test("model URLs persist separately, notify the viewer, preserve concurrent edits and can be removed", async (t) => {
+  const { store, configPath, modelsDir } = await fixture(t);
+  const id = await addModel(modelsDir);
+  const metadataPath = path.join(
+    modelsDir,
+    id.split("/")[0],
+    ".gestur-model.json",
+  );
+  const beforeMetadata = JSON.parse(await readFile(metadataPath, "utf8"));
+  await store.read();
+  const beforeConfig = await readFile(configPath);
+  const geometry = await readFile(path.join(modelsDir, id));
+  assert.equal((await store.catalog()).models[0].url, null);
+  const changed = await store.updateModel({
+    id,
+    url: "  https://example.org/capitel?q=1#detalle  ",
+  });
+  assert.equal(changed.model.url, "https://example.org/capitel?q=1#detalle");
+  const firstRevision = await readFile(
+    path.join(modelsDir, ".catalog-revision.json"),
+    "utf8",
+  );
+  assert.deepEqual(JSON.parse(await readFile(metadataPath, "utf8")), {
+    ...beforeMetadata,
+    url: changed.model.url,
+  });
+  const restarted = await createStore({ configPath, modelsDir });
+  assert.equal((await restarted.catalog()).models[0].url, changed.model.url);
+  await Promise.all([
+    restarted.updateModel({ id, name: "Nombre nuevo" }),
+    restarted.updateModel({ id, url: "http://10.42.0.1:8080/otra" }),
+  ]);
+  let model = (await restarted.catalog()).models[0];
+  assert.equal(model.name, "Nombre nuevo");
+  assert.equal(model.url, "http://10.42.0.1:8080/otra");
+  assert.notEqual(
+    await readFile(path.join(modelsDir, ".catalog-revision.json"), "utf8"),
+    firstRevision,
+  );
+  for (const url of [null, "", "   "]) {
+    await restarted.updateModel({ id, url });
+    model = (await restarted.catalog()).models[0];
+    assert.equal(model.url, null);
+    assert.equal(model.name, "Nombre nuevo");
+  }
+  assert.deepEqual(await readFile(configPath), beforeConfig);
+  assert.deepEqual(await readFile(path.join(modelsDir, id)), geometry);
+});
+
+test("invalid old URL metadata suppresses only its link while a rejected edit changes no files", async (t) => {
+  const { store, modelsDir } = await fixture(t);
+  const id = await addModel(modelsDir);
+  const metadataPath = path.join(
+    modelsDir,
+    id.split("/")[0],
+    ".gestur-model.json",
+  );
+  const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
+  await writeFile(
+    metadataPath,
+    JSON.stringify({ ...metadata, url: "javascript:alert(1)" }),
+  );
+  assert.equal((await store.catalog()).models[0].url, null);
+  const before = await readFile(metadataPath);
+  await assert.rejects(
+    async () =>
+      store.updateModel({
+        id,
+        name: "No guardar",
+        url: "https://user:password@example.org/",
+      }),
+    /URL/,
+  );
+  assert.deepEqual(await readFile(metadataPath), before);
+});
+
 test("delete keeps another selection, falls back deterministically and shows empty only after last model", async (t) => {
   const { store, configPath, modelsDir } = await fixture(t);
   const first = await addModel(

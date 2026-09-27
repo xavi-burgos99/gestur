@@ -51,7 +51,9 @@ def test_native_preflight_keeps_service_credentials_and_compatible_mounts():
     assert service.getboolean('PrivateTmp')
     assert service.getboolean('ProtectKernelModules')
     assert service.getboolean('ProtectControlGroups')
-    assert service['ReadWritePaths'] == '/var/lib/gestur'
-    # The Wi-Fi helper still requires its explicitly scoped sudo elevation.
+    assert service['ReadWritePaths'].split() == ['/var/lib/gestur', '/etc/gestur', '/etc/hosts']
+    assert 'Environment=GESTUR_DEVICE_STATE=/etc/gestur/device.json' in (
+        ROOT / 'deployment/gestur-portal.service').read_text()
+    # The helpers still require their explicitly scoped sudo elevation.
     assert not service.getboolean('NoNewPrivileges', fallback=False)
     assert 'CapabilityBoundingSet' not in service

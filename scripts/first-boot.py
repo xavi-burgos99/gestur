@@ -27,6 +27,9 @@ def read_settings(path):
         raise ValueError('Indica el usuario administrador creado con Raspberry Pi Imager.')
     if not re.fullmatch(r'[0-9a-f]{40,64}', settings.get('revision', '')):
         raise ValueError('La revisión del paquete no es válida.')
+    if 'hostname' in settings and (not isinstance(settings['hostname'], str)
+            or not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', settings['hostname'])):
+        raise ValueError('El hostname debe tener 1–63 letras minúsculas, números o guiones, sin .local ni guiones en los extremos.')
     return settings
 
 
@@ -113,7 +116,8 @@ def provision(*, bootstrap=BOOTSTRAP, config=CONFIG, state=STATE, log_path=LOG,
                 # keeps its own lock; if another updater owns it we retry later.
                 command(['/usr/bin/dpkg', '--configure', '--pending'])
                 command(['/usr/bin/raspi-config', 'nonint', 'do_wifi_country', settings['wifi_country']])
-                command(['/bin/bash', str(bootstrap / 'gestur.sh'), 'install'])
+                hostname_args = ['--hostname', settings['hostname']] if 'hostname' in settings else []
+                command(['/bin/bash', str(bootstrap / 'gestur.sh'), 'install', *hostname_args])
                 command(['/usr/bin/systemctl', 'is-active', '--quiet', 'gestur-portal.service'])
                 ready()
                 # Persist the runtime before publishing the durable completion
@@ -124,7 +128,7 @@ def provision(*, bootstrap=BOOTSTRAP, config=CONFIG, state=STATE, log_path=LOG,
             except Exception as error:
                 log.write(f'Instalación pendiente: {error}\n')
                 raise
-            log.write('Instalación completada. Clave del portal: sudo cat /etc/gestur/portal-token\n')
+            log.write('Instalación completada. Abre el portal para completar la configuración inicial.\n')
             print('Gestur instalado. Reiniciando para iniciar el expositor.', flush=True)
             try:
                 command(['/usr/bin/systemctl', '--no-block', 'reboot'])

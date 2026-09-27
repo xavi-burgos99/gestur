@@ -54,7 +54,7 @@ def validate_root(root):
     # An enabled display manager owns the screen needed by our kiosk.
     if os.path.lexists(root / 'etc/systemd/system/display-manager.service'):
         raise ValueError('Usa la imagen Lite, sin gestor de escritorio habilitado.')
-    for existing in ('opt/gestur', 'etc/gestur/portal-token', 'etc/gestur/wifi-profile.json',
+    for existing in ('opt/gestur', 'etc/gestur/device.json', 'etc/gestur/portal-token', 'etc/gestur/wifi-profile.json',
                      'var/lib/gestur/config.json', 'var/lib/gestur-first-boot/complete.json'):
         if os.path.lexists(root / existing):
             raise ValueError(f'La imagen ya contiene una instalación o datos: {existing}. Usa una imagen limpia.')
@@ -68,7 +68,7 @@ def include(name):
                 or path.name.endswith(('.local.json', '.task', '.tflite', '.pem', '.key')))
 
 
-def prepare(root, source, country, admin):
+def prepare(root, source, country, admin, hostname=None):
     root, source = root.resolve(), source.resolve()
     if root.is_relative_to(source) or source.is_relative_to(root):
         raise ValueError('El código y la raíz de la imagen deben estar en carpetas separadas.')
@@ -76,6 +76,9 @@ def prepare(root, source, country, admin):
         raise ValueError('Indica el código de país Wi-Fi de dos letras, por ejemplo ES.')
     if not re.fullmatch(r'[a-z_][a-z0-9_-]{0,31}', admin) or admin in ('root', 'gestur', 'gestur-portal'):
         raise ValueError('Elige el usuario administrador de Imager; root y las cuentas gestur están reservadas.')
+    if hostname is not None and (not isinstance(hostname, str)
+            or not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', hostname)):
+        raise ValueError('El hostname debe tener 1–63 letras minúsculas, números o guiones, sin .local ni guiones en los extremos.')
     validate_root(root)
     # Export a reproducible snapshot; ignored files, local models and dev tokens
     # cannot enter the image. Never clone/pull a moving branch during first boot.
@@ -83,6 +86,8 @@ def prepare(root, source, country, admin):
         raise ValueError('Guarda los cambios del código en un commit antes de preparar la imagen.')
     revision = git(source, 'rev-parse', 'HEAD').decode().strip()
     settings = {'revision': revision, 'wifi_country': country, 'admin_user': admin}
+    if hostname is not None:
+        settings['hostname'] = hostname
     payload = image_path(root, 'opt/gestur-bootstrap')
     config = image_path(root, 'etc/gestur/first-boot.json')
     unit_dir = image_path(root, 'etc/systemd/system')
@@ -97,7 +102,8 @@ def prepare(root, source, country, admin):
             raise ValueError('El paquete no puede contener enlaces ni archivos especiales.')
         names = {member.name for member in members}
         required = {'gestur.sh', 'requirements.txt', 'scripts/first-boot.py',
-                    'scripts/install-portal.sh', 'config/default.json', 'portal/package-lock.json',
+                    'scripts/install-portal.sh', 'scripts/gestur-device.py',
+                    'config/default.json', 'portal/package-lock.json',
                     *(f'deployment/{name}' for name in UNITS)}
         if not required <= names:
             raise ValueError('La revisión no incluye todos los archivos del primer arranque.')
@@ -150,12 +156,13 @@ def main():
     parser.add_argument('--source', type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument('--wifi-country', required=True, help='País donde se usará la Raspberry, por ejemplo ES')
     parser.add_argument('--admin-user', required=True, help='Usuario administrador configurado en Raspberry Pi Imager')
+    parser.add_argument('--hostname', help='Nombre del dispositivo sin .local; por defecto gestur-XXXX según su MAC Wi-Fi')
     args = parser.parse_args()
     try:
         if os.geteuid() != 0:
             raise ValueError('Ejecuta con sudo para que el código de la imagen pertenezca a root.')
         os.umask(0o022)
-        revision, changed = prepare(args.root, args.source, args.wifi_country, args.admin_user)
+        revision, changed = prepare(args.root, args.source, args.wifi_country, args.admin_user, args.hostname)
         print(f'Imagen {"preparada" if changed else "ya preparada"}: {revision}')
         print('Desmonta la tarjeta. El primer arranque requiere el usuario de Imager y Ethernet con Internet.')
     except (ValueError, OSError, subprocess.CalledProcessError) as error:

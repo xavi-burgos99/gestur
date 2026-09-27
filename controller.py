@@ -10,7 +10,7 @@ import time
 
 from control_system import create_control_system
 from runtime_config import (default_config, load_config, validate_config, reconcile_model_selection,
-                            load_model_orientation, validate_model_orientation)
+                            load_model_orientation, validate_model_orientation, load_model_url)
 from runtime_state import FrameMetrics, LatestPose
 from tracking_session import TrackingSession, tracking_request
 from device_metrics import DeviceMetrics
@@ -58,6 +58,7 @@ class PoseController:
         self.requested_model = self.config["active_model"]
         self.rendered_model = None
         self.rendered_orientation = validate_model_orientation()
+        self.rendered_url = None
         self.exit_code = 0
         self.tracking_session = TrackingSession(self._on_pose_update)
         self.visualizer = None
@@ -71,10 +72,12 @@ class PoseController:
             model_path = self.obj_override or resolve_model(self.config["active_model"], self.models_dir)
             orientation = (validate_model_orientation() if self.obj_override else
                            load_model_orientation(self.requested_model, self.models_dir))
+            url = None if self.obj_override else load_model_url(self.requested_model, self.models_dir)
             self.visualizer = ControlledObjViewer(model_path, **self.config["render"],
-                                                 model_orientation=orientation, show_fps=show_fps)
+                                                 model_orientation=orientation, model_url=url, show_fps=show_fps)
             self.rendered_model = str(self.obj_override) if self.obj_override else self.requested_model
             self.rendered_orientation = orientation
+            self.rendered_url = url
         except (ValueError, OSError, RuntimeError) as exc:
             if self.obj_override:
                 raise
@@ -133,13 +136,17 @@ class PoseController:
             if not self.obj_override:
                 try:
                     orientation = load_model_orientation(candidate["active_model"], self.models_dir)
+                    url = load_model_url(candidate["active_model"], self.models_dir)
                     if candidate["active_model"] != self.rendered_model or self.model_error:
                         self.visualizer.load_model(resolve_model(candidate["active_model"], self.models_dir),
-                                                   orientation=orientation)
+                                                   orientation=orientation, model_url=url)
                         self.rendered_model = candidate["active_model"]
                     elif orientation != self.rendered_orientation:
                         self.visualizer.set_model_orientation(orientation)
+                    if url != self.rendered_url:
+                        self.visualizer.set_model_url(url)
                     self.rendered_orientation = orientation
+                    self.rendered_url = url
                     self.model_error = None
                 except (ValueError, OSError, RuntimeError) as exc:
                     self.model_error = f"No se pudo cargar el modelo seleccionado: {exc}"

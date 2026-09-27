@@ -21,14 +21,12 @@ sudo python3 scripts/prepare-image.py \
 
 Sustituye `expositor` por **el mismo usuario configurado en Imager**, `ES` por el país de uso y la ruta por tu montaje real. La herramienta requiere Python 3.9+ y Git en el ordenador que prepara la tarjeta. El repositorio debe tener sus cambios guardados en un commit: se exporta exactamente `HEAD`, sin descargar otra rama durante el primer arranque.
 
+Puedes añadir `--hostname sala-1` para fijar el nombre del dispositivo, sin `.local`. Admite de 1 a 63 letras minúsculas, números y guiones, sin guiones en los extremos. Sin esta opción, la propia Pi asigna `gestur-xxxx.local` a partir de los últimos cuatro caracteres de la MAC permanente de su Wi-Fi. Preparar varias tarjetas sin hostname explícito permite que cada una obtenga su nombre al instalarse.
+
 4. Desmonta la tarjeta de forma segura. Colócala en la Pi 5, conecta pantalla HDMI, alimentación adecuada y Ethernet con Internet, y enciéndela. No hace falta ejecutar el instalador por SSH: comienza automáticamente después de la personalización inicial de Pi OS. La duración depende de la tarjeta y la conexión.
-5. Tras completarse, la Pi reinicia e inicia la bienvenida con la figura 3D y el QR. La red abierta será **GESTUR-XXXX**, según la MAC de esa Raspberry. Conéctate y abre el QR o `http://10.42.0.1`.
+5. Tras completarse, la Pi reinicia e inicia la bienvenida con la figura 3D y el QR. La red abierta será **GESTUR-XXXX**, según la MAC de esa Raspberry. Conéctate y abre el QR, `http://10.42.0.1` o `http://gestur-xxxx.local` para completar la configuración inicial del portal.
 
-La clave de administración es distinta en cada dispositivo y se obtiene con el usuario administrador, por SSH o consola:
-
-```bash
-sudo cat /etc/gestur/portal-token
-```
+No se piden datos durante la instalación ni se genera o imprime una clave del portal. La configuración inicial queda pendiente hasta abrir la web. Una reinstalación posterior conserva el acceso y el nombre del dispositivo; solo `--hostname` cambia explícitamente este último.
 
 ## Incorporarlo a una imagen propia
 
@@ -36,7 +34,7 @@ La misma herramienta acepta la raíz montada de un `.img` o el directorio raíz 
 
 Configura también el usuario inicial en el proceso de creación de la imagen. Copiar un `firstrun.sh` suelto a la partición de arranque no garantiza que Pi OS lo ejecute. Los mecanismos de personalización varían entre versiones y una imagen local seleccionada como personalizada en Imager puede no aceptar las mismas opciones que la imagen oficial. La ruta de tarjeta descrita arriba evita esa diferencia, personalizando primero la imagen oficial. Consulta los [formatos oficiales de Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager/blob/main/doc/os_customisation_formats.md) y la [guía de instalación de Raspberry Pi](https://www.raspberrypi.com/documentation/computers/getting-started.html).
 
-Prepara la imagen **antes de su primera instalación de Gestur**, para que cada Pi genere su propia clave y su SSID a partir de su MAC. La herramienta no convierte en plantilla un sistema ya instalado ni elimina datos para hacerlo.
+Prepara la imagen **antes de su primera instalación de Gestur**, para que cada Pi empiece sin credenciales y obtenga su nombre y SSID a partir de su MAC. La herramienta rechaza también un `device.json` anterior; no convierte en plantilla un sistema ya instalado ni elimina datos para hacerlo.
 
 ## Estado y recuperación
 
@@ -64,7 +62,7 @@ sudo systemctl stop gestur-first-boot.timer gestur-first-boot.service
 sudo systemctl start gestur-first-boot.timer
 ```
 
-El estado y el registro del primer arranque son privados de root; la clave del portal no se imprime en el journal. La instalación sigue usando las cuentas sin privilegios del visor y del portal. El usuario administrador debe existir y pertenecer a `sudo` antes de empezar. Si no coincide con `--admin-user`, corrige `/etc/gestur/first-boot.json` como root y vuelve a iniciar el servicio.
+El estado y el registro del primer arranque son privados de root. La instalación sigue usando las cuentas sin privilegios del visor y del portal. El usuario administrador debe existir y pertenecer a `sudo` antes de empezar. Si no coincide con `--admin-user`, corrige `/etc/gestur/first-boot.json` como root y vuelve a iniciar el servicio.
 
 ## Verificación
 

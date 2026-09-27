@@ -53,6 +53,51 @@ function modelOrientation(value) {
     ? { x: value.x, y: value.y, z: value.z }
     : zeroOrientation();
 }
+function validateModelUrl(value) {
+  if (value === null) return null;
+  const invalid = () =>
+    new ApiError(
+      400,
+      "La URL debe ser HTTP o HTTPS, sin credenciales, y ocupar como máximo 2048 bytes.",
+    );
+  if (
+    typeof value !== "string" ||
+    /[\u0000-\u001f\u007f-\u009f\ud800-\udfff]/u.test(value)
+  )
+    throw invalid();
+  const url = value.trim();
+  if (!url) return null;
+  if (
+    url.length > 2048 ||
+    Buffer.byteLength(url, "utf8") > 2048 ||
+    /\s|\\/.test(url) ||
+    !/^https?:\/\//i.test(url)
+  )
+    throw invalid();
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw invalid();
+  }
+  const authority = url.split("://", 2)[1].split(/[/?#]/, 1)[0];
+  if (
+    !authority ||
+    !parsed.hostname ||
+    parsed.username ||
+    parsed.password ||
+    authority.includes("@")
+  )
+    throw invalid();
+  return url;
+}
+function modelUrl(value) {
+  try {
+    return validateModelUrl(value ?? null);
+  } catch {
+    return null;
+  }
+}
 
 export async function createStore({
   configPath,
@@ -162,6 +207,7 @@ export async function createStore({
           id: `${directory}/${metadata.entrypoint}`,
           name: metadata.name,
           orientation: modelOrientation(metadata.orientation),
+          url: modelUrl(metadata.url),
           builtin: false,
           format: path.extname(metadata.entrypoint).slice(1).toUpperCase(),
           sourceFormat: metadata.sourceFormat,
@@ -176,6 +222,22 @@ export async function createStore({
       }
     }
     return entries;
+  }
+  function validateParameters(parameters) {
+    const sections = ["tracking", "render", "controls"];
+    if (
+      !parameters ||
+      typeof parameters !== "object" ||
+      Array.isArray(parameters) ||
+      Object.keys(parameters).length !== sections.length ||
+      !sections.every((key) => Object.hasOwn(parameters, key))
+    )
+      throw new ApiError(
+        400,
+        "El preset debe contener seguimiento, renderizado y controles completos.",
+      );
+    const checked = check({ ...defaults, ...parameters });
+    return Object.fromEntries(sections.map((key) => [key, checked[key]]));
   }
   // Reconciliation and explicit changes share one queue. A read must never
   // restore an older selection while an import or a user's change is saving.
@@ -266,7 +328,7 @@ export async function createStore({
     return { packagePath, packageName, metadataPath, metadata };
   }
   function validateMutation(body, editing) {
-    const allowed = editing ? ["id", "name", "orientation"] : ["id"];
+    const allowed = editing ? ["id", "name", "orientation", "url"] : ["id"];
     if (
       !body ||
       typeof body !== "object" ||
@@ -276,7 +338,8 @@ export async function createStore({
       Object.keys(body).some((key) => !allowed.includes(key)) ||
       (editing &&
         !Object.hasOwn(body, "name") &&
-        !Object.hasOwn(body, "orientation"))
+        !Object.hasOwn(body, "orientation") &&
+        !Object.hasOwn(body, "url"))
     )
       throw new ApiError(
         400,
@@ -301,6 +364,7 @@ export async function createStore({
         400,
         "La orientación debe indicar X, Y y Z con giros de 0, 90, 180 o 270 grados.",
       );
+    if (Object.hasOwn(body, "url")) validateModelUrl(body.url);
   }
   function updateModel(body) {
     validateMutation(body, true);
@@ -312,6 +376,7 @@ export async function createStore({
       if (Object.hasOwn(body, "name")) metadata.name = body.name.trim();
       if (Object.hasOwn(body, "orientation"))
         metadata.orientation = modelOrientation(body.orientation);
+      if (Object.hasOwn(body, "url")) metadata.url = validateModelUrl(body.url);
       await atomicJson(located.metadataPath, metadata);
       // The renderer stats this directory once a second instead of reading all
       // metadata every frame. A rename within a package does not change it.
@@ -327,6 +392,7 @@ export async function createStore({
         ...models.find((entry) => entry.id === body.id),
         name: metadata.name,
         orientation: modelOrientation(metadata.orientation),
+        url: modelUrl(metadata.url),
       };
       return { model, config };
     });
@@ -375,6 +441,7 @@ export async function createStore({
     catalog,
     updateModel,
     deleteModel,
+    validateParameters,
     defaults,
     schema,
   };

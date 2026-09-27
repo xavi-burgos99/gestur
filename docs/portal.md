@@ -6,13 +6,43 @@ El portal utiliza React 19, Mantine 9 (componentes accesibles), Vite y Fastify 5
 
 En la rama del portal, `sudo ./gestur.sh install` instala también el servicio. El hook separado es `sudo bash /opt/gestur/scripts/install-portal.sh /opt/gestur`; requiere que el instalador principal haya creado el usuario `gestur`, su entorno Python y los modelos de reconocimiento. Raspberry Pi OS de 64 bits con NetworkManager; configura el país WLAN con Raspberry Pi Imager o `sudo raspi-config` antes de instalar.
 
+La instalación no pide datos por consola. Ambos comandos aceptan `--hostname sala-1` para fijar el nombre sin `.local`: entre 1 y 63 letras minúsculas, números o guiones, sin guiones en los extremos. Si se omite, una instalación nueva usa `gestur-xxxx`, con los últimos cuatro caracteres de la MAC permanente de Wi-Fi en minúsculas. Al reinstalar se conserva el nombre actual salvo que se pase esa opción.
+
 El hook instala Assimp y bubblewrap desde la distribución, y comprueba el aislamiento del conversor con el usuario del servicio. Después de la compilación y la poda de dependencias, `scripts/check-importer.mjs` verifica el motor de simplificación, la conversión de imágenes y un modelo real con Assimp/Panda3D. También habilita mDNS para el enlace de respaldo `<hostname>.local`. También instala Node 22.23.3 ARM64/x64 desde nodejs.org y verifica su archivo con el manifiesto SHA-256 oficial si no hay Node >=22.12. El runtime privado vive en `/opt/gestur-node`, sin sustituir archivos de paquetes del sistema. `npm ci`, compilación y poda de dependencias se ejecutan como usuario sin privilegios. El código y el helper privilegiado quedan propiedad de root. Los datos permanecen en `/var/lib/gestur` al reinstalar.
 
-El servicio `gestur-portal` escucha en el puerto HTTP 80 como usuario `gestur-portal`, con `CAP_NET_BIND_SERVICE` concedida solo a esa unidad. Se abre por IP o por `http://gestur.local` (o `<hostname>.local` si cambiaste el nombre), sin indicar puerto. Para una instalación nueva, conéctate a **GESTUR-XXXX**, donde XXXX son los últimos cuatro dígitos de la MAC permanente de `wlan0`, y abre **http://10.42.0.1**. La red es abierta por defecto. Si ya había un único perfil AP en `wlan0`, se conserva su SSID, contraseña y configuración IP; utiliza la IP de ese perfil. Si hay varios, el instalador se detiene para que el administrador elija el UUID en `/etc/gestur/wifi-profile.json` (objeto `{"uuid":"UUID","interface":"wlan0"}` propiedad root y modo 0600).
+El servicio `gestur-portal` escucha en el puerto HTTP 80 como usuario `gestur-portal`, con `CAP_NET_BIND_SERVICE` concedida solo a esa unidad. Se abre por IP o por `http://gestur-xxxx.local` (o `<hostname>.local` si cambiaste el nombre), sin indicar puerto. Para una instalación nueva, conéctate a **GESTUR-XXXX**, donde XXXX son los últimos cuatro dígitos de la MAC permanente de `wlan0`, y abre **http://10.42.0.1**. La red es abierta por defecto. Al reinstalar se conserva el SSID, la contraseña y la configuración IP del AP existente; utiliza la IP de ese perfil. Si hay varios perfiles de AP y ninguno seleccionado, el instalador se detiene para que el administrador elija el UUID en `/etc/gestur/wifi-profile.json` (objeto `{"uuid":"UUID","interface":"wlan0"}` propiedad root y modo 0600).
 
-La clave de administración independiente se genera una sola vez y se muestra al instalar. Se puede consultar físicamente/por SSH con `sudo cat /etc/gestur/portal-token`. No hay una clave predeterminada compartida. Las sesiones expiran a las ocho horas y se invalidan al reiniciar el servicio. El portal está pensado para una red local de confianza: su HTTP local no cifra el tráfico; no debe publicarse en Internet sin un proxy HTTPS y controles de acceso.
+Una instalación nueva queda pendiente de la configuración inicial en el portal. El instalador no crea ni imprime una clave. El estado de acceso vive en `/etc/gestur/device.json`, propiedad de `root:gestur-portal` y modo 0640: el servicio puede leerlo y solo el helper privilegiado puede modificarlo. Al actualizar una versión con `/etc/gestur/portal-token`, se conserva esa clave y su acceso sin reabrir la configuración inicial; esa clave anterior sigue siendo recuperable con `sudo cat /etc/gestur/portal-token`. El portal está pensado para una red local de confianza: su HTTP local no cifra el tráfico; no debe publicarse en Internet sin un proxy HTTPS y controles de acceso.
+
+## Configuración inicial y restablecimiento
+
+El primer acceso tiene dos pasos: nombre opcional del dispositivo (vacío conserva
+el actual) y contraseña con confirmación. La contraseña elegida protege tanto el
+portal como el punto de acceso; debe tener entre 8 y 63 caracteres ASCII para ser
+compatible con WPA2. El portal conserva un hash scrypt, nunca la contraseña en
+claro. NetworkManager conserva la credencial necesaria para el Wi-Fi.
+
+Al guardar aparece el aviso de reinicio y reconexión. Las operaciones se confirman
+antes de modificar la red y su estado público persiste sin secretos. El portal
+no da por terminado un cambio solo porque haya perdido la conexión. Desde
+**Configuración → Dispositivo** se puede cambiar posteriormente el hostname.
+
+**Borrar contenido y ajustes** exige escribir `BORRAR`: elimina los modelos y
+los ajustes de Gestur, invalida el acceso anterior, restaura `gestur-xxxx` y la
+red abierta `GESTUR-XXXX`, y vuelve a mostrar el asistente tras reiniciar.
+No reinstala el sistema operativo ni modifica usuarios o credenciales SSH.
+Las modificaciones de Wi-Fi posteriores al asistente son independientes de la
+contraseña de acceso al portal. Actualizar una instalación anterior conserva su
+acceso, sus modelos y su configuración; no equivale a restablecerla.
 
 ## Modelos 3D
+
+En **Ajustar modelo** puedes guardar o quitar una **URL** opcional. Se admiten
+enlaces HTTP/HTTPS de hasta 2048 bytes UTF-8, sin credenciales. Si hay una URL,
+el visor muestra un QR blanco con fondo transparente en la esquina inferior
+derecha, separado de ambos bordes y más pequeño que el de bienvenida. Vaciar
+el campo elimina el QR. Se aplica al guardar, sin recargar la geometría, y se
+conserva al reiniciar; Gestur no visita ni descarga el enlace.
 
 La biblioteca está **vacía** en instalaciones nuevas. El [capitel original](../examples/capitel/README.md) está disponible en el repositorio para importarlo, pero no se instala como modelo predeterminado. El primer modelo importado se selecciona automáticamente; las siguientes importaciones conservan el último elegido. La selección se guarda y se recupera al reiniciar. Si falta el archivo elegido, se selecciona otro modelo disponible.
 
@@ -54,6 +84,15 @@ Los paquetes terminados se guardan en `/var/lib/gestur/models/<uuid>/` con metad
 
 ## Parámetros
 
+Los **presets** guardan las secciones completas de seguimiento, renderizado y
+controles, incluidos los ajustes avanzados y las asignaciones de gestos. Se
+guardan desde el borrador visible, sin aplicarlo al visor. Cargar un preset
+aplica sus parámetros; si hay cambios sin guardar, se pide confirmación antes
+de sustituirlos. No cambian el modelo elegido, sus metadatos ni la red.
+Guardar con el mismo nombre sobrescribe el preset; también pueden eliminarse.
+Se conservan hasta 50 presets en `/var/lib/gestur/presets.json`, sobreviven al
+reinicio y se eliminan al borrar contenido y ajustes.
+
 Primero se elige un movimiento del modelo y después su gesto. El selector muestra, con iconos, la parte del cuerpo (Cabeza, Cuerpo, Manos o Combinado), la mano cuando corresponde, el tipo de movimiento y el eje. Las opciones aparecen al completar el paso anterior. Las rotaciones se llaman Giro horizontal, Giro vertical e Inclinación lateral; los desplazamientos, Horizontal, Vertical y Profundidad. Cada mano ofrece también Apertura de la mano y Pinza, sin pedir un eje. Combinado ofrece Distancia entre manos.
 
 El selector permite 29 gestos. Las asignaciones anteriores de giro de mano en pantalla (2D), centro de ambas manos y separación horizontal se siguen mostrando y admiten ajustes, pero ya no se pueden seleccionar. Al cambiar uno de esos gestos, el selector empieza sin selección en Parte del cuerpo y exige completar una opción válida antes de asignarla. Abrir o cancelar el selector conserva la asignación y sus valores.
@@ -68,7 +107,9 @@ La sección permite renombrar la red, **Añadir contraseña**, **Cambiar contras
 
 La API confirma un cambio pendiente antes de aplicarlo cinco segundos después, porque el AP puede desconectar al navegador. Vuelve a conectarte a la red indicada; «Comprobar estado» consulta el estado real. El resultado persiste en `/var/lib/gestur/wifi-job.json` sin la contraseña; si el servicio se interrumpe muestra que debe comprobarse la red. Un fallo de activación intenta restaurar la configuración previa.
 
-El backend no es root. Su regla sudo permite solo `gestur-wifi status` y `gestur-wifi apply`, y el helper root valida de nuevo el JSON de entrada. Usa la API D-Bus de NetworkManager para un UUID previamente elegido por el instalador; no ejecuta comandos enviados por el cliente, no expone claves Wi-Fi en respuestas/logs/argumentos de procesos y nunca da éxito simulado cuando NetworkManager no está disponible.
+El backend no es root. Sus reglas sudo permiten solo `gestur-wifi status`, `gestur-wifi apply` y las acciones `status`, `hostname`, `onboarding` y `reset` de `gestur-device`. Los helpers root validan de nuevo el JSON de entrada; la acción `bootstrap` está reservada al instalador y no se concede al portal. El helper de Wi-Fi usa la API D-Bus de NetworkManager para un UUID previamente elegido por el instalador; no ejecuta comandos enviados por el cliente, no expone claves Wi-Fi en respuestas/logs/argumentos de procesos y nunca da éxito simulado cuando NetworkManager no está disponible.
+
+La unidad permite escritura en `/var/lib/gestur` y monta `/etc/gestur` y `/etc/hosts` como rutas modificables por los helpers. Sus permisos de propietario siguen impidiendo la escritura directa al usuario del portal: el directorio de estado es `root:root` 0755 y las credenciales, `root:gestur-portal` 0640. Los helpers son `root:root` 0755; los valores de fábrica para restablecer el dispositivo están en `/etc/gestur/default.json`, `root:root` 0644.
 
 La unidad conserva la elevación de ese helper: no activa `NoNewPrivileges` ni limita el conjunto de capacidades a la de abrir puertos. Antes de ejecutar el conversor aislado, `setpriv` de `util-linux` elimina las capacidades heredables y ambientales solo de ese proceso hijo; así bubblewrap arranca sin heredar el permiso HTTP y mantiene sus espacios de nombres, `--cap-drop ALL` y límites de recursos. No se conceden capacidades al binario de Node ni se cambian los puertos privilegiados del sistema.
 

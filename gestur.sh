@@ -4,6 +4,8 @@ set -euo pipefail
 # Provisioning runs with a private log/state umask; runtimes must remain usable
 # by the unprivileged viewer and portal service accounts.
 umask 022
+export DEBIAN_FRONTEND=noninteractive
+export PIP_NO_INPUT=1
 GESTUR_SOURCE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 GESTUR_PREFIX=/opt/gestur
 GESTUR_STATE=/var/lib/gestur
@@ -29,7 +31,8 @@ install_gestur() {
     fi
     echo "Instalando la copia local de Gestur desde $GESTUR_SOURCE"
     apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o APT::Update::Error-Mode=any update
-    apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 install -y --no-install-recommends \
+    apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends \
         ca-certificates curl rsync python3 python3-venv \
         xserver-xorg xinit openbox x11-xserver-utils \
         mesa-utils libgl1-mesa-dri libglx-mesa0 libegl1 libgles2 \
@@ -80,7 +83,7 @@ install_gestur() {
         'from runtime_config import load_config; load_config("/var/lib/gestur/config.json")')
 
     # Complete all downloads and portal checks before enabling the kiosk login.
-    bash "$GESTUR_PREFIX/scripts/install-portal.sh" "$GESTUR_PREFIX"
+    bash "$GESTUR_PREFIX/scripts/install-portal.sh" "$GESTUR_PREFIX" "$@"
     # The display controller may be card0 or card1. Select vc4 by its DRM name,
     # so Xorg does not make the separate v3d render-only device the primary GPU.
     bash "$GESTUR_PREFIX/scripts/configure-xorg.sh" install
@@ -126,7 +129,8 @@ uninstall_gestur() {
         systemctl disable --now gestur-portal.service
         rm -f /etc/systemd/system/gestur-portal.service
     fi
-    rm -f /etc/sudoers.d/gestur-wifi /usr/local/libexec/gestur-wifi
+    rm -f /etc/sudoers.d/gestur-wifi /usr/local/libexec/gestur-wifi \
+          /etc/sudoers.d/gestur-device /usr/local/libexec/gestur-device
     if [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur ]]; then
         mv /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur \
             /etc/systemd/system/getty@tty1.service.d/override.conf
@@ -143,8 +147,26 @@ uninstall_gestur() {
     echo "Arranque y portal retirados. Código, usuarios, Wi-Fi, modelos y configuración conservados."
 }
 
-case "${1:-}" in
-    install) install_gestur ;;
-    uninstall) uninstall_gestur ;;
-    *) echo "Uso: sudo bash $0 {install|uninstall}"; exit 1 ;;
-esac
+main() {
+    local action=${1:-}
+    if [[ $# -gt 0 ]]; then shift; fi
+    case "$action" in
+        install)
+            # Validate before touching packages, files, networking or users.
+            if [[ $# -gt 0 ]]; then
+                if [[ $# != 2 || "$1" != --hostname || ! "$2" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+                    echo 'Usa --hostname con 1–63 letras minúsculas, números o guiones, sin .local ni guiones en los extremos.' >&2
+                    return 1
+                fi
+            fi
+            install_gestur "$@" </dev/null
+            ;;
+        uninstall)
+            if [[ $# != 0 ]]; then echo 'uninstall no admite opciones.' >&2; return 1; fi
+            uninstall_gestur
+            ;;
+        *) echo "Uso: sudo bash $0 install [--hostname nombre] | uninstall" >&2; return 1 ;;
+    esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi

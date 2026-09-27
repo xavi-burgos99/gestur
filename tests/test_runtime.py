@@ -300,9 +300,9 @@ def test_portal_url_prefers_access_point_over_lan(monkeypatch):
     monkeypatch.delenv("GESTUR_PORTAL_URL", raising=False)
     monkeypatch.setattr(visualizer.socket, "if_nameindex", lambda: [(1, "eth0"), (2, "wlan0")])
     monkeypatch.setattr(visualizer, "_interface_ipv4", lambda name: {"eth0": "192.168.1.8", "wlan0": "10.42.0.1"}.get(name))
-    assert visualizer.portal_url() == "http://10.42.0.1:3000"
+    assert visualizer.portal_url() == "http://10.42.0.1"
     monkeypatch.setattr(visualizer, "_interface_ipv4", lambda name: {"eth0": "192.168.1.8"}.get(name))
-    assert visualizer.portal_url() == "http://192.168.1.8:3000"
+    assert visualizer.portal_url() == "http://192.168.1.8"
 
 
 def test_portal_url_honors_valid_override_and_ignores_loopback_or_tokens(monkeypatch):
@@ -311,17 +311,40 @@ def test_portal_url_honors_valid_override_and_ignores_loopback_or_tokens(monkeyp
     monkeypatch.setattr(visualizer, "_interface_ipv4", lambda name: "10.42.0.1")
     monkeypatch.setenv("GESTUR_PORTAL_URL", "https://exhibition.local/gestur/")
     assert visualizer.portal_url() == "https://exhibition.local/gestur"
+    monkeypatch.setenv("GESTUR_PORTAL_URL", "http://exhibition.local:8080/gestur/")
+    assert visualizer.portal_url() == "http://exhibition.local:8080/gestur"
     for value in ("http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000", "file:///etc/passwd",
                   "http://10.42.0.1:3000/?token=secret", "http://admin:secret@10.42.0.1:3000", "http://0.0.0.0:3000"):
         monkeypatch.setenv("GESTUR_PORTAL_URL", value)
-        assert visualizer.portal_url() == "http://10.42.0.1:3000"
+        assert visualizer.portal_url() == "http://10.42.0.1"
+
+
+def test_portal_url_falls_back_to_route_then_mdns_without_explicit_port(monkeypatch):
+    import visualizer
+    from unittest.mock import MagicMock
+    monkeypatch.delenv('GESTUR_PORTAL_URL', raising=False)
+    monkeypatch.setattr(visualizer.socket, 'if_nameindex', lambda: [])
+    monkeypatch.setattr(visualizer, '_interface_ipv4', lambda name: None)
+    route = MagicMock()
+    route.__enter__.return_value = route
+    route.getsockname.return_value = ('192.168.1.22', 0)
+    monkeypatch.setattr(visualizer.socket, 'socket', lambda *args: route)
+    assert visualizer.portal_url() == 'http://192.168.1.22'
+    route.connect.side_effect = OSError('No route')
+    monkeypatch.setattr(visualizer.socket, 'gethostname', lambda: 'gestur')
+    assert visualizer.portal_url() == 'http://gestur.local'
+    monkeypatch.setattr(visualizer.socket, 'gethostname', lambda: 'exhibidor.local')
+    assert visualizer.portal_url() == 'http://exhibidor.local'
 
 
 def test_qr_contains_reachable_url_without_admin_token(tmp_path, monkeypatch):
     import cv2
     import numpy as np
+    import visualizer
     from visualizer import ControlledObjViewer
-    monkeypatch.setenv("GESTUR_PORTAL_URL", "http://10.42.0.1:3000")
+    monkeypatch.delenv("GESTUR_PORTAL_URL", raising=False)
+    monkeypatch.setattr(visualizer.socket, 'if_nameindex', lambda: [(1, 'wlan0')])
+    monkeypatch.setattr(visualizer, '_interface_ipv4', lambda name: '10.42.0.1')
     viewer = ControlledObjViewer(None, window_type="none", fullscreen=False)
     try:
         texture = viewer.welcome_overlay.find("**/welcome-qr").get_texture()
@@ -329,6 +352,6 @@ def test_qr_contains_reachable_url_without_admin_token(tmp_path, monkeypatch):
         image = raw.reshape(texture.get_y_size(), texture.get_x_size())[::-1]
         image = cv2.resize(image, None, fx=10, fy=10, interpolation=cv2.INTER_NEAREST)
         decoded, _, _ = cv2.QRCodeDetector().detectAndDecode(image)
-        assert decoded == "http://10.42.0.1:3000"
+        assert decoded == "http://10.42.0.1"
     finally:
         viewer.destroy()

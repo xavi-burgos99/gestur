@@ -78,7 +78,7 @@ class PoseHandTracker:
                  inference_fps=None, hand_fps=15, width=640, height=480,
                  model_dir=None, visibility_threshold=.5,
                  detection_timeout_ms=250, head_scale_min=.02, head_scale_max=.20,
-                 inference_duty=.6, idle_fps=3, idle_after_seconds=2):
+                 inference_duty=.6, idle_fps=3, idle_after_seconds=2, pose_parts=('head',)):
         """Keep the legacy callback schema, adding hand rotation/pinch/gesture.
 
         Construction opens no camera or models. ``run`` allocates resources and
@@ -87,8 +87,10 @@ class PoseHandTracker:
         ``response_time_ms`` remains a compatibility alias for pose cadence.
         ``inference_duty`` reserves gaps between complete inference cycles; it
         does not cap native CPU threads or promise an operating-system CPU rate.
-        After ``idle_after_seconds`` without a head/hand detection, each enabled
-        model independently probes at up to ``idle_fps`` until it detects again.
+        After ``idle_after_seconds`` without a requested pose part / hand,
+        each model independently probes at up to ``idle_fps``. ``pose_parts``
+        selects head/torso presence relevant to the enabled controls; it does
+        not allocate another network or change the published pose schema.
         """
         if inference_fps is None:
             inference_fps = 1000.0 / max(1.0, response_time_ms)
@@ -103,7 +105,12 @@ class PoseHandTracker:
             raise ValueError('Confianza o rango de escala no válido.')
         if inference_duty > 1 or idle_after_seconds < 0:
             raise ValueError('El presupuesto de inferencia debe ser como máximo 1 y la espera no negativa.')
+        if (not isinstance(pose_parts, (tuple, list))
+                or any(part not in ('head', 'torso') for part in pose_parts)
+                or (use_pose and not pose_parts)):
+            raise ValueError('Selecciona cabeza o torso para la presencia del modelo Pose.')
         self.use_pose, self.use_hands = bool(use_pose), bool(use_hands)
+        self.pose_parts = tuple(pose_parts)
         self.mirror, self.invert_hands, self.verbose = bool(mirror), bool(invert_hands), bool(verbose)
         self.camera_index, self.width, self.height = camera_index, int(width), int(height)
         self.inference_fps, self.hand_fps = float(inference_fps), float(hand_fps)
@@ -293,7 +300,8 @@ class PoseHandTracker:
                                              self.head_scale_min, self.head_scale_max)
                     for key, sample in features.items():
                         self._filter.update(key, sample, captured_at)
-                    self._schedule_model('pose', features['head']['detected'], captured_at,
+                    detected = any(features[part]['detected'] for part in self.pose_parts)
+                    self._schedule_model('pose', detected, captured_at,
                                          started, time.monotonic(), next_due, last_detected)
                     with self._state_lock:
                         self._metrics['pose_frames'] += 1

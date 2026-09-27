@@ -13,11 +13,14 @@ def tracking_request(config, *, has_model=True, no_camera=False):
         return None
     tracking = config['tracking']
     inputs = {mapping['input'] for mapping in config['controls']['mappings'] if mapping['enabled']}
-    pose = tracking['use_pose'] and any(name.startswith('head_') for name in inputs)
+    pose_parts = tuple(part for part in ('head', 'torso')
+                       if tracking['use_pose'] and any(name.startswith(f'{part}_') for name in inputs))
+    pose = bool(pose_parts)
     hands = tracking['use_hands'] and any('hand' in name for name in inputs)
     if not pose and not hands:
         return None
-    return dict(use_pose=pose, use_hands=hands, smoothing_time_ms=tracking['smoothing_ms'],
+    return dict(use_pose=pose, use_hands=hands, pose_parts=pose_parts,
+                smoothing_time_ms=tracking['smoothing_ms'],
                 mirror=tracking['mirror'], camera_index=tracking['camera_index'],
                 inference_fps=tracking['inference_fps'], hand_fps=tracking['hand_fps'],
                 width=tracking['width'], height=tracking['height'])

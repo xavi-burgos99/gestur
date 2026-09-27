@@ -68,20 +68,20 @@ def portal_url():
     for name in ordered:
         address = _interface_ipv4(name)
         if _usable_ipv4(address):
-            return f"http://{address}:3000"
+            return f"http://{address}"
     # Connecting a UDP socket selects an existing route without sending packets.
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as handle:
             handle.connect(("1.1.1.1", 80))
             address = handle.getsockname()[0]
         if _usable_ipv4(address):
-            return f"http://{address}:3000"
+            return f"http://{address}"
     except OSError:
         pass
     hostname = socket.gethostname().split(".", 1)[0]
     if not hostname or hostname.lower() == "localhost":
         hostname = "gestur"
-    return f"http://{hostname}.local:3000"
+    return f"http://{hostname}.local"
 
 
 def _welcome_geometry():

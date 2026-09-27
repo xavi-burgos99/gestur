@@ -13,7 +13,7 @@ cleanup() { [[ -z "$TASK_NODE_TEMP" ]] || rm -rf "$TASK_NODE_TEMP"; [[ -z "$TASK
 trap cleanup EXIT
 apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o APT::Update::Error-Mode=any update
 apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 install -y --no-install-recommends network-manager dnsmasq-base avahi-daemon python3-dbus sudo ca-certificates curl xz-utils rfkill \
-    assimp-utils bubblewrap
+    assimp-utils bubblewrap util-linux
 systemctl enable --now NetworkManager
 systemctl enable --now avahi-daemon
 # Prefer the distribution package when sufficiently recent. Otherwise install an
@@ -92,7 +92,8 @@ rfkill unblock wifi
 systemctl daemon-reload
 systemctl enable --now gestur-portal
 systemctl restart gestur-portal
-echo 'Portal instalado: http://10.42.0.1:3000 (o IP actual del dispositivo).'
+echo 'Portal instalado: http://10.42.0.1 (o IP actual del dispositivo, sin indicar puerto).'
+echo "También disponible por mDNS: http://$(hostname -s).local"
 if [[ ${GESTUR_UNATTENDED:-0} == 1 ]]; then
     echo 'Consulta la clave de administración con: sudo cat /etc/gestur/portal-token'
 else

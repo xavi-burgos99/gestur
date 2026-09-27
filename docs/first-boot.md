@@ -22,7 +22,7 @@ sudo python3 scripts/prepare-image.py \
 Sustituye `expositor` por **el mismo usuario configurado en Imager**, `ES` por el país de uso y la ruta por tu montaje real. La herramienta requiere Python 3.9+ y Git en el ordenador que prepara la tarjeta. El repositorio debe tener sus cambios guardados en un commit: se exporta exactamente `HEAD`, sin descargar otra rama durante el primer arranque.
 
 4. Desmonta la tarjeta de forma segura. Colócala en la Pi 5, conecta pantalla HDMI, alimentación adecuada y Ethernet con Internet, y enciéndela. No hace falta ejecutar el instalador por SSH: comienza automáticamente después de la personalización inicial de Pi OS. La duración depende de la tarjeta y la conexión.
-5. Tras completarse, la Pi reinicia e inicia la bienvenida con la figura 3D y el QR. La red abierta será **GESTUR-XXXX**, según la MAC de esa Raspberry. Conéctate y abre el QR o `http://10.42.0.1:3000`.
+5. Tras completarse, la Pi reinicia e inicia la bienvenida con la figura 3D y el QR. La red abierta será **GESTUR-XXXX**, según la MAC de esa Raspberry. Conéctate y abre el QR o `http://10.42.0.1`.
 
 La clave de administración es distinta en cada dispositivo y se obtiene con el usuario administrador, por SSH o consola:
 
@@ -73,4 +73,8 @@ python3 -m pytest tests/test_first_boot.py tests/test_prepare_image.py -q
 bash -n gestur.sh scripts/install-portal.sh
 ```
 
-Las pruebas usan raíces temporales y comandos simulados: verifican la preparación, exclusiones, permisos, fallos, reintentos y la marca de finalización sin instalar paquetes ni reiniciar el equipo de desarrollo. Queda pendiente validar el arranque completo sobre una Raspberry Pi 5 física.
+Las pruebas usan raíces temporales y comandos simulados: verifican la preparación, exclusiones, permisos, fallos, reintentos y la marca de finalización sin instalar paquetes ni reiniciar el equipo de desarrollo.
+
+En una Pi 5 física de 4 GB se completó la **instalación manual** y se comprobaron portal, Wi-Fi, cámara y visor con aceleración V3D; véase el [informe de validación](pi5-validation.md). Se corrigió la selección de `vc4` como salida principal de Xorg. Confirmar el arranque automático después de reiniciar con esa corrección sigue pendiente.
+
+El proceso completo **imagen preparada → primer encendido → instalación automática → reinicio** no se ha ejecutado todavía en la Pi. La instalación manual y los ensayos gráficos no validan por sí solos ese recorrido.

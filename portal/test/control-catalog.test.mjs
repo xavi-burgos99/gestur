@@ -6,11 +6,117 @@ import path from "node:path";
 import {
   CONTROL_OPTIONS,
   GESTURE_OPTIONS,
+  LEGACY_GESTURE_OPTIONS,
+  emptyGestureSelection,
+  selectionForGesture,
+  gestureFromSelection,
+  changeGestureSelection,
+  gestureSteps,
   createControlMapping,
   modeChanges,
   responseOptions,
 } from "../src/control-catalog.mjs";
 import { createStore } from "../server/store.mjs";
+
+test("progressive choices expose the next step only after its parent, with an icon on every option", () => {
+  let selection = emptyGestureSelection();
+  const ids = () => gestureSteps(selection).map((step) => step.id);
+  assert.deepEqual(ids(), ["body"]);
+  selection = changeGestureSelection(selection, "body", "hands");
+  assert.deepEqual(ids(), ["body", "side"]);
+  selection = changeGestureSelection(selection, "side", "left");
+  assert.deepEqual(ids(), ["body", "side", "movement"]);
+  selection = changeGestureSelection(selection, "movement", "translation");
+  assert.deepEqual(ids(), ["body", "side", "movement", "axis"]);
+  assert.equal(gestureFromSelection(selection), null);
+  selection = changeGestureSelection(selection, "axis", "scale");
+  assert.equal(gestureFromSelection(selection), "left_hand_scale");
+
+  const reachable = new Set();
+  function visit(current) {
+    const input = gestureFromSelection(current);
+    if (input) {
+      assert.ok(!reachable.has(input), `Duplicate path to ${input}`);
+      reachable.add(input);
+      return;
+    }
+    const step = gestureSteps(current).find((item) => !current[item.id]);
+    assert.ok(step, "Every incomplete selection must have a next step");
+    for (const option of step.options) {
+      assert.ok(option.label);
+      assert.ok(
+        ["head", "body", "hand", "hands"].includes(option.icon.subject),
+      );
+      visit(changeGestureSelection(current, step.id, option.id));
+    }
+  }
+  visit(emptyGestureSelection());
+  assert.deepEqual(
+    [...reachable].sort(),
+    GESTURE_OPTIONS.filter((item) => item.selection)
+      .map((item) => item.id)
+      .sort(),
+  );
+});
+
+test("changing a parent clears incompatible descendants and cannot retain a previous completed gesture", () => {
+  const hand = selectionForGesture("left_hand_scale");
+  const otherSide = changeGestureSelection(hand, "side", "right");
+  assert.equal(otherSide.movement, null);
+  assert.equal(otherSide.axis, null);
+  assert.equal(gestureFromSelection(otherSide), null);
+  const rotation = changeGestureSelection(hand, "movement", "rotation");
+  assert.equal(rotation.axis, null);
+  assert.equal(gestureFromSelection(rotation), null);
+  const body = changeGestureSelection(hand, "body", "body");
+  assert.equal(body.side, null);
+  assert.equal(body.movement, null);
+  assert.equal(body.axis, null);
+  assert.equal(gestureFromSelection(body), null);
+  const cleared = changeGestureSelection(hand, "body", null);
+  assert.deepEqual(cleared, emptyGestureSelection());
+});
+
+test("opening hands and combined distance finish without asking for an axis or an unrelated type", () => {
+  const opening = selectionForGesture("right_hand_openness");
+  assert.deepEqual(
+    gestureSteps(opening).map((step) => step.id),
+    ["body", "side", "movement"],
+  );
+  const combined = changeGestureSelection(
+    emptyGestureSelection(),
+    "body",
+    "combined",
+  );
+  assert.deepEqual(
+    gestureSteps(combined).map((step) => step.id),
+    ["body", "combined"],
+  );
+  assert.equal(gestureFromSelection(combined), null);
+  assert.equal(
+    gestureFromSelection(
+      changeGestureSelection(combined, "combined", "distance"),
+    ),
+    "hands_distance",
+  );
+});
+
+test("editing reconstructs every progressive and legacy gesture without silently replacing its input", () => {
+  for (const gesture of GESTURE_OPTIONS) {
+    const selection = selectionForGesture(gesture.id);
+    assert.equal(gestureFromSelection(selection), gesture.id);
+    assert.equal(!!selection.legacy, !gesture.selection);
+  }
+  assert.deepEqual(LEGACY_GESTURE_OPTIONS.map((gesture) => gesture.id).sort(), [
+    "hands_center_x",
+    "hands_center_y",
+    "hands_separation_x",
+    "left_hand_pinch",
+    "left_hand_rotation",
+    "right_hand_pinch",
+    "right_hand_rotation",
+  ]);
+});
 
 test("the gesture and movement selectors cover the runtime schema without dropping legacy gestures", async () => {
   const schema = JSON.parse(

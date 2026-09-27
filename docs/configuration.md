@@ -24,6 +24,9 @@ Los cambios de controles se aplican al recargar la configuración. Los ajustes d
 | `head_x`, `head_y` | Posición normalizada de la cabeza, normalmente de 0 a 1 |
 | `head_scale` | Tamaño aparente de la cabeza, entre 0 y 1; aproxima el acercamiento y alejamiento, no mide profundidad. Mantiene la calibración del zoom de Capitell |
 | `head_pitch`, `head_yaw`, `head_roll` | Giro vertical, giro horizontal e inclinación lateral de la cabeza, calculados con los puntos de seguimiento existentes. Los grados se normalizan a 0–1 con 0° en 0,5 y se suavizan por el ángulo más corto |
+| `torso_x`, `torso_y` | Centro de las caderas en la imagen, entre 0 y 1. Utiliza el modelo Pose existente; no necesita detectar la cabeza |
+| `torso_scale` | Proximidad relativa del cuerpo, entre 0 y 1: aumenta al acercarse. Usa el ancho aparente de hombros con corrección de giro; no mide metros |
+| `torso_pitch`, `torso_yaw`, `torso_roll` | Giro vertical, horizontal e inclinación del torso, calculados con hombros y caderas. Normalizados como los ángulos de cabeza: 0° equivale a 0,5 |
 | `hands_center_x`, `hands_center_y` | Centro de las manos visibles |
 | `hands_distance`, `hands_separation_x` | Distancia entre ambas manos o separación horizontal |
 | `left_hand_x`, `left_hand_y`, `right_hand_x`, `right_hand_y` | Posición normalizada de la muñeca de cada mano, normalmente de 0 a 1 |
@@ -31,12 +34,17 @@ Los cambios de controles se aplican al recargar la configuración. Los ajustes d
 | `left_hand_pitch`, `right_hand_pitch` | Inclinación de la mano calculada con las coordenadas 3D del modelo; grados normalizados a 0–1, con suavizado angular |
 | `left_hand_yaw`, `right_hand_yaw` | Giro lateral de la mano calculado con las coordenadas 3D del modelo; grados normalizados a 0–1, con suavizado angular |
 | `left_hand_roll`, `right_hand_roll` | Tercer giro del marco 3D de la palma, separado del giro de imagen `rotation`; grados normalizados a 0–1 |
+| `left_hand_scale`, `right_hand_scale` | Proximidad relativa de cada mano, entre 0 y 1. Aumenta al acercarse y usa la palma, sin depender de abrir los dedos o hacer pinza |
 | `left_hand_pinch`, `right_hand_pinch` | Distancia pulgar–índice dividida por el ancho de la palma: 0 es contacto, 1 es una apertura de al menos un ancho de palma |
 | `left_hand_openness`, `right_hand_openness` | Proporción de dedos extendidos, sin contar el pulgar: 0 es puño y 1 son los cuatro dedos extendidos. El seguimiento suaviza los pasos intermedios |
 
-Las entradas nuevas reutilizan el seguimiento actual; no cargan modelos adicionales. La posición y los giros de cabeza son señales distintas y pueden asignarse por separado. Una cabeza o mano no detectada produce una entrada ausente, nunca un cero fabricado. No hay una entrada de profundidad para las manos.
+Las entradas nuevas reutilizan el seguimiento actual; no cargan modelos adicionales. La posición y los giros de cabeza son señales distintas y pueden asignarse por separado. Una parte no detectada produce una entrada ausente, nunca un cero fabricado.
 
-La inclinación `head_roll` se mide con la línea de los ojos, sin distinguir sus extremos: tiene periodo de 180° y se informa entre −90° y +90°. Sus dos filtros respetan ese periodo para evitar saltos al cruzar el límite. Conserva la misma escala numérica que los demás ángulos (45° equivale a 0,625). Cuando controla una rotación absoluta, el retorno tras perder el seguimiento toma como referencia una vuelta completa del objeto y tiene en cuenta la sensibilidad; recuperar la cabeza conserva esa orientación sin saltos. `head_pitch` y `head_yaw` mantienen el periodo de 360°.
+Las inclinaciones `head_roll` y `torso_roll` se miden con las líneas de ojos y hombros, sin distinguir sus extremos: tienen periodo de 180° y se informan entre −90° y +90°. Sus dos filtros respetan ese periodo para evitar saltos al cruzar el límite. Conservan la misma escala numérica que los demás ángulos (45° equivale a 0,625). Cuando controlan una rotación absoluta, el retorno tras perder el seguimiento toma como referencia una vuelta completa del objeto y tiene en cuenta la sensibilidad; recuperar la parte conserva esa orientación sin saltos. Los canales `pitch` y `yaw` mantienen el periodo de filtrado de 360°.
+
+Las entradas de cuerpo requieren `tracking.use_pose`; las de manos requieren `tracking.use_hands`. Se cargan los modelos sólo si una asignación activa los utiliza. La cadencia de Pose se mantiene mientras esté visible alguna parte solicitada: ocultar la cabeza no ralentiza los controles de torso.
+
+La profundidad de cuerpo y manos es una aproximación monocular de tamaño aparente, no una coordenada Z medida. Se compara la proyección XY de los puntos métricos con sus posiciones en imagen para reducir el efecto de los giros. El ancho corregido, expresado como fracción del ancho de imagen, se normaliza desde 0,12–0,80 para hombros y 0,025–0,25 para palma, limitado a 0–1. El centro inicial recomendado es 0,5; debe ajustarse con la posición de la persona y la cámara. La perspectiva fuerte, la flexión del torso, la anatomía, las oclusiones y los errores del modelo pueden alterar esta estimación. Si resulta indeterminada, sólo `scale` queda sin dato; posición, giros y pinza siguen disponibles cuando son válidos. La escala de cabeza conserva su calibración anterior.
 
 Si una entrada angular controla un desplazamiento o el zoom, perder el seguimiento devuelve la entrada al centro numérico configurado, aunque antes hubiera cruzado su límite angular. Así, en modo absoluto el objeto recupera la posición cero o la escala uno.
 

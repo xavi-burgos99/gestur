@@ -789,7 +789,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
           </Title>
           <Stack>
             <Switch
-              label="Seguir la cabeza"
+              label="Seguir cabeza y cuerpo"
               checked={draft.tracking.use_pose}
               onChange={(e) =>
                 update("tracking", "use_pose", e.currentTarget.checked)
@@ -849,7 +849,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
           <Accordion.Panel>
             <SimpleGrid cols={{ base: 1, sm: 3 }}>
               <Numeric
-                label="Reconocimiento de cabeza"
+                label="Reconocimiento de cabeza y cuerpo"
                 suffix=" fps"
                 value={draft.tracking.inference_fps}
                 onChange={(v) => update("tracking", "inference_fps", v)}

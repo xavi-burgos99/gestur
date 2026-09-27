@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Accordion,
   Alert,
@@ -17,12 +17,19 @@ import {
 import {
   IconArrowLeft,
   IconCheck,
+  IconChevronDown,
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
 import {
   CONTROL_OPTIONS,
   GESTURE_OPTIONS,
+  LEGACY_GESTURE_OPTIONS,
+  emptyGestureSelection,
+  selectionForGesture,
+  gestureFromSelection,
+  changeGestureSelection,
+  gestureSteps,
   responseOptions,
   modeChanges,
   createControlMapping,
@@ -30,7 +37,6 @@ import {
 import MotionIcon from "./MotionIcon.jsx";
 import "./controls-editor.css";
 
-const categories = ["Cabeza", "Mano izquierda", "Mano derecha", "Ambas manos"];
 const controlFor = (id) => CONTROL_OPTIONS.find((option) => option.id === id);
 const gestureFor = (id) => GESTURE_OPTIONS.find((option) => option.id === id);
 const gestureLabel = (option) =>
@@ -57,24 +63,79 @@ function Numeric({
   );
 }
 
-function ChoiceCard({ option, selected, disabled, onClick, detail }) {
+function ChoiceCard({
+  option,
+  selected,
+  disabled,
+  onClick,
+  detail,
+  compact = false,
+}) {
   return (
     <button
       type="button"
-      className="motion-choice"
+      className={`motion-choice${compact ? " motion-choice-compact" : ""}`}
       aria-pressed={selected}
       disabled={disabled}
       onClick={onClick}
     >
       <span className="motion-choice-art" aria-hidden="true">
-        <MotionIcon {...option.icon} size={68} />
+        <MotionIcon {...option.icon} size={compact ? 48 : 68} />
         {selected && <IconCheck className="motion-choice-check" size={18} />}
       </span>
       <span className="motion-choice-label">{option.label}</span>
-      <span className="motion-choice-description">
-        {detail || option.description}
-      </span>
+      {(detail || option.description) && (
+        <span className="motion-choice-description">
+          {detail || option.description}
+        </span>
+      )}
     </button>
+  );
+}
+
+function GestureStep({ step, value, onChange }) {
+  const section = useRef(null);
+  const selected = step.options.find((option) => option.id === value);
+  useEffect(() => {
+    // The chosen card is replaced by a summary. Continue keyboard navigation
+    // at the next question instead of losing focus back to the modal header.
+    if (!value) section.current?.querySelector("button")?.focus();
+  }, [value]);
+  return (
+    <section ref={section} className="gesture-step" aria-label={step.label}>
+      <Text fw={600} size="sm" mb={8}>
+        {step.label}
+      </Text>
+      {selected ? (
+        <button
+          type="button"
+          className="gesture-step-selected"
+          aria-label={`Cambiar ${step.label.toLowerCase()}: ${selected.label}`}
+          onClick={() => onChange(null)}
+        >
+          <MotionIcon {...selected.icon} size={36} />
+          <span>{selected.label}</span>
+          <IconChevronDown size={17} aria-hidden="true" />
+        </button>
+      ) : (
+        <div
+          className="gesture-step-options"
+          role="group"
+          aria-label={step.label}
+          style={{ "--choice-count": step.options.length }}
+        >
+          {step.options.map((option) => (
+            <ChoiceCard
+              key={option.id}
+              option={option}
+              compact
+              selected={false}
+              onClick={() => onChange(option.id)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -86,10 +147,13 @@ function TrackingNotice({ input, tracking }) {
         Activa «Reconocer las manos» para utilizar este gesto.
       </Alert>
     );
-  if (input.startsWith("head") && !tracking.use_pose)
+  if (
+    (input.startsWith("head") || input.startsWith("torso")) &&
+    !tracking.use_pose
+  )
     return (
       <Alert color="yellow">
-        Activa «Seguir la cabeza» para utilizar este gesto.
+        Activa «Seguir cabeza y cuerpo» para utilizar este gesto.
       </Alert>
     );
   return null;
@@ -99,8 +163,9 @@ export default function ControlsEditor({ draft, update, mapping }) {
   const controls = draft.controls.mappings;
   const [dialog, setDialog] = useState(null);
   const [selectedOutput, setSelectedOutput] = useState(null);
-  const [selectedGesture, setSelectedGesture] = useState(null);
-  const [category, setCategory] = useState("Cabeza");
+  const [selection, setSelection] = useState(emptyGestureSelection);
+  const [showLegacy, setShowLegacy] = useState(false);
+  const selectedGesture = gestureFromSelection(selection);
   const [opened, setOpened] = useState([]);
   const editingIndex =
     dialog?.kind === "gesture"
@@ -117,19 +182,20 @@ export default function ControlsEditor({ draft, update, mapping }) {
   function closeDialog() {
     setDialog(null);
     setSelectedOutput(null);
-    setSelectedGesture(null);
+    setSelection(emptyGestureSelection());
+    setShowLegacy(false);
   }
   function addControl() {
     setSelectedOutput(null);
-    setSelectedGesture(null);
-    setCategory("Cabeza");
+    setSelection(emptyGestureSelection());
+    setShowLegacy(false);
     setDialog({ kind: "add" });
   }
   function editGesture(control) {
-    const gesture = gestureFor(control.input);
+    const restored = selectionForGesture(control.input);
     setSelectedOutput(control.output);
-    setSelectedGesture(control.input);
-    setCategory(gesture?.category || "Cabeza");
+    setSelection(restored);
+    setShowLegacy(!!restored.legacy);
     setDialog({ kind: "gesture", id: control.id });
   }
   function applySelection() {
@@ -430,123 +496,141 @@ export default function ControlsEditor({ draft, update, mapping }) {
         closeButtonProps={{ "aria-label": "Cerrar selector de control" }}
       >
         <Stack gap="lg" className="control-dialog-body">
-          {!selectedOutput ? (
-            <>
-              <Text size="sm" c="dimmed">
-                Selecciona el movimiento del modelo.
-              </Text>
-              <div
-                className="motion-choice-grid"
-                role="group"
-                aria-label="Movimiento del modelo"
-              >
-                {CONTROL_OPTIONS.map((option) => (
-                  <ChoiceCard
-                    key={option.id}
-                    option={option}
-                    selected={false}
-                    disabled={occupied(option.id)}
-                    detail={
-                      occupied(option.id)
-                        ? "Ya tiene un control activo"
-                        : undefined
-                    }
-                    onClick={() => setSelectedOutput(option.id)}
-                  />
-                ))}
-              </div>
-              {CONTROL_OPTIONS.some((option) => occupied(option.id)) && (
-                <Text size="xs" c="dimmed">
-                  Para sustituir un control activo, cambia su gesto o
-                  desactívalo antes de añadir otro.
+          <Stack gap="lg" className="control-dialog-scroll">
+            {!selectedOutput ? (
+              <>
+                <Text size="sm" c="dimmed">
+                  Selecciona el movimiento del modelo.
                 </Text>
-              )}
-            </>
-          ) : (
-            <>
-              <Group
-                justify="space-between"
-                className="selected-control"
-                wrap="wrap"
-              >
-                <Group gap="sm" wrap="nowrap">
-                  {selectedControl && (
-                    <span aria-hidden="true">
-                      <MotionIcon {...selectedControl.icon} size={44} />
-                    </span>
+                <div
+                  className="motion-choice-grid"
+                  role="group"
+                  aria-label="Movimiento del modelo"
+                >
+                  {CONTROL_OPTIONS.map((option) => (
+                    <ChoiceCard
+                      key={option.id}
+                      option={option}
+                      selected={false}
+                      disabled={occupied(option.id)}
+                      detail={
+                        occupied(option.id)
+                          ? "Ya tiene un control activo"
+                          : undefined
+                      }
+                      onClick={() => setSelectedOutput(option.id)}
+                    />
+                  ))}
+                </div>
+                {CONTROL_OPTIONS.some((option) => occupied(option.id)) && (
+                  <Text size="xs" c="dimmed">
+                    Para sustituir un control activo, cambia su gesto o
+                    desactívalo antes de añadir otro.
+                  </Text>
+                )}
+              </>
+            ) : (
+              <>
+                <Group
+                  justify="space-between"
+                  className="selected-control"
+                  wrap="wrap"
+                >
+                  <Group gap="sm" wrap="nowrap">
+                    {selectedControl && (
+                      <span aria-hidden="true">
+                        <MotionIcon {...selectedControl.icon} size={44} />
+                      </span>
+                    )}
+                    <div>
+                      <Text size="xs" c="dimmed">
+                        Control
+                      </Text>
+                      <Text fw={600}>{selectedControl?.label}</Text>
+                    </div>
+                  </Group>
+                  {adding && (
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      leftSection={<IconArrowLeft size={14} />}
+                      onClick={() => {
+                        setSelectedOutput(null);
+                        setSelection(emptyGestureSelection());
+                        setShowLegacy(false);
+                      }}
+                    >
+                      Cambiar control
+                    </Button>
                   )}
-                  <div>
-                    <Text size="xs" c="dimmed">
-                      Control
-                    </Text>
-                    <Text fw={600}>{selectedControl?.label}</Text>
-                  </div>
                 </Group>
-                {adding && (
+                <div className="gesture-selector">
+                  {showLegacy ? (
+                    <section aria-label="Otros gestos">
+                      <Text fw={600} size="sm" mb="sm">
+                        Otros gestos
+                      </Text>
+                      <div
+                        className="motion-choice-grid"
+                        role="group"
+                        aria-label="Otros gestos disponibles"
+                      >
+                        {LEGACY_GESTURE_OPTIONS.map((option) => (
+                          <ChoiceCard
+                            key={option.id}
+                            option={{ ...option, label: gestureLabel(option) }}
+                            selected={selectedGesture === option.id}
+                            onClick={() =>
+                              setSelection(
+                                changeGestureSelection(
+                                  selection,
+                                  "legacy",
+                                  option.id,
+                                ),
+                              )
+                            }
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ) : (
+                    gestureSteps(selection).map((step) => (
+                      <GestureStep
+                        key={step.id}
+                        step={step}
+                        value={selection[step.id]}
+                        onChange={(value) =>
+                          setSelection((current) =>
+                            changeGestureSelection(current, step.id, value),
+                          )
+                        }
+                      />
+                    ))
+                  )}
                   <Button
                     variant="subtle"
                     size="xs"
-                    leftSection={<IconArrowLeft size={14} />}
-                    onClick={() => setSelectedOutput(null)}
+                    className="gesture-other"
+                    onClick={() => {
+                      setShowLegacy((current) => !current);
+                      setSelection(emptyGestureSelection());
+                    }}
                   >
-                    Cambiar control
+                    {showLegacy ? "Volver al selector" : "Otros gestos"}
                   </Button>
-                )}
-              </Group>
-              <div>
-                <Text fw={600} mb="sm">
-                  Gesto
-                </Text>
-                <div
-                  className="gesture-categories"
-                  role="group"
-                  aria-label="Parte del cuerpo"
-                >
-                  {categories.map((name) => (
-                    <button
-                      type="button"
-                      key={name}
-                      aria-pressed={category === name}
-                      onClick={() => setCategory(name)}
-                    >
-                      {name}
-                    </button>
-                  ))}
                 </div>
-              </div>
-              <div
-                className="motion-choice-grid"
-                role="group"
-                aria-label={`Gestos: ${category}`}
-              >
-                {GESTURE_OPTIONS.filter(
-                  (option) => option.category === category,
-                ).map((option) => (
-                  <ChoiceCard
-                    key={option.id}
-                    option={option}
-                    selected={selectedGesture === option.id}
-                    onClick={() => setSelectedGesture(option.id)}
-                  />
-                ))}
-              </div>
-              {selectedGesture && (
-                <Text size="sm">
-                  Seleccionado:{" "}
-                  <strong>{gestureLabel(gestureFor(selectedGesture))}</strong>
-                </Text>
-              )}
-              <TrackingNotice
-                input={selectedGesture}
-                tracking={draft.tracking}
-              />
-              {adding && occupied(selectedOutput) && (
-                <Alert color="yellow">
-                  Este movimiento ya tiene un control activo.
-                </Alert>
-              )}
-            </>
-          )}
+                <TrackingNotice
+                  input={selectedGesture}
+                  tracking={draft.tracking}
+                />
+                {adding && occupied(selectedOutput) && (
+                  <Alert color="yellow">
+                    Este movimiento ya tiene un control activo.
+                  </Alert>
+                )}
+              </>
+            )}
+          </Stack>
           <Group justify="flex-end" className="control-dialog-actions">
             <Button variant="default" onClick={closeDialog}>
               Cancelar

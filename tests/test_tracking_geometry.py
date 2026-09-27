@@ -21,6 +21,19 @@ def hand():
     return points
 
 
+def project(points, magnification=1, aspect=4/3):
+    """Weak-perspective camera; z translation is absent from object-centred data."""
+    return [point(.5 + magnification*p.x, .5 + magnification*p.y*aspect, p.z)
+            for p in points]
+
+
+def torso_pose():
+    points = pose()
+    for index, x, y in ((11, -.2, -.4), (12, .2, -.4), (23, -.15, 0), (24, .15, 0)):
+        points[index] = point(x, y)
+    return points
+
+
 def rotate(points, axis, degrees):
     a = math.radians(degrees)
     c, s = math.cos(a), math.sin(a)
@@ -94,6 +107,7 @@ def test_mirror_and_model_handedness_have_consistent_orientation_signs():
     for field in ('yaw', 'roll', 'rotation'):
         assert changed[field] == pytest.approx(-original[field])
     assert changed['pinch'] == pytest.approx(original['pinch'])
+    assert changed['scale'] == pytest.approx(original['scale'])
 
 
 def test_knuckle_skew_along_fingers_does_not_change_palm_frame():
@@ -265,6 +279,113 @@ def test_head_visibility_is_independent_of_torso_visibility():
     assert not result['torso']['detected']
     points[2].presence = .1
     assert not pose_features(points,points)['head']['detected']
+
+
+@pytest.mark.parametrize('part', ['torso', 'hand'])
+@pytest.mark.parametrize('aspect', [1, 4/3, 16/9])
+def test_proximity_increases_with_projected_size_without_using_world_translation(part, aspect):
+    world = torso_pose() if part == 'torso' else hand()
+    minimum, maximum, span = (.12, .80, .4) if part == 'torso' else (.025, .25, .075)
+    def extract(image, landmarks):
+        return (pose_features(image, landmarks, aspect=aspect)['torso'] if part == 'torso'
+                else hand_features(image, landmarks, 'Right', aspect=aspect))
+    scales = []
+    for magnification in (.1, .75, 1, 1.5, 5):
+        image = project(world, magnification, aspect)
+        value = extract(image, world)['scale']
+        assert value == pytest.approx(max(0, min(1, (span*magnification-minimum)/(maximum-minimum))))
+        # Landmark origins and estimated metric body/hand size are not camera depth.
+        translated = [point(5*p.x+3, 5*p.y-4, 5*p.z+100) for p in world]
+        assert extract(image, translated)['scale'] == pytest.approx(value)
+        scales.append(value)
+    assert scales == sorted(scales) and scales[0] == 0 and scales[-1] == 1
+
+
+@pytest.mark.parametrize('part', ['torso', 'hand'])
+@pytest.mark.parametrize('pitch,yaw,roll', [(0,70,0), (65,0,0), (0,0,120), (35,60,-40)])
+def test_proximity_compensates_rigid_foreshortening_and_roll(part, pitch, yaw, roll):
+    base = torso_pose() if part == 'torso' else hand()
+    turned = rigid_orientation(base, pitch, yaw, roll)
+    def extract(world):
+        image = project(world, 1, 16/9)
+        return (pose_features(image, world, aspect=16/9)['torso'] if part == 'torso'
+                else hand_features(image, world, 'Right', aspect=16/9))
+    assert extract(turned)['detected']
+    assert extract(turned)['scale'] == pytest.approx(extract(base)['scale'])
+
+
+def test_hand_proximity_uses_palm_not_finger_opening_or_pinch():
+    opened = hand()
+    closed = hand()
+    for index in (4, 8, 12, 16, 20):
+        closed[index] = point(0, 0)
+    first = hand_features(project(opened), opened, 'Right')
+    second = hand_features(project(closed), closed, 'Right')
+    assert first['pinch'] != second['pinch']
+    assert first['openness'] != second['openness']
+    assert first['scale'] == pytest.approx(second['scale'])
+
+
+@pytest.mark.parametrize('part', ['torso', 'hand'])
+def test_unobservable_proximity_does_not_discard_other_channels(part):
+    world = torso_pose() if part == 'torso' else hand()
+    collapsed = [point(.5, .5, p.z) for p in world]
+    result = (pose_features(collapsed, world)['torso'] if part == 'torso'
+              else hand_features(collapsed, world, 'Right'))
+    assert result['detected'] and result['scale'] is None
+    assert result['x'] == result['y'] == .5
+    assert all(math.isfinite(result[key]) for key in ('pitch', 'yaw', 'roll'))
+    if part == 'hand':
+        assert result['rotation'] is None
+        assert result['gesture'] == 'open' and result['pinch'] is not None
+    if part == 'torso':
+        for index in (11, 12, 23, 24):
+            world[index] = point()
+        invalid = pose_features(collapsed, world)['torso']
+        assert not invalid['detected'] and invalid['scale'] is None
+
+
+def test_torso_remains_available_with_occluded_head_and_signed_rotations():
+    for axis, field, expected in (('x', 'pitch', 35), ('y', 'yaw', -35), ('z', 'roll', 35)):
+        world = rotate(torso_pose(), axis, 35)
+        image = project(world)
+        image[0].visibility = .1
+        result = pose_features(image, world)
+        assert not result['head']['detected'] and result['torso']['detected']
+        assert result['torso'][field] == pytest.approx(expected)
+        assert result['torso']['scale'] is not None
+
+
+@pytest.mark.parametrize('part', ['torso', 'left_hand', 'right_hand'])
+def test_proximity_filter_loss_expiry_and_reacquisition_are_independent(part):
+    state = TrackingFilter(smoothing_time=.06, timeout=.25)
+    sample = empty_part(hand='hand' in part)
+    sample.update(detected=True, x=.4, y=.6, pitch=30, yaw=10, roll=20, scale=.2)
+    state.update(part, sample, 0)
+    state.update(part, {**sample, 'scale':.8}, .06)
+    assert state.snapshot()[part]['scale'] == pytest.approx(.2 + .6*(1-math.exp(-1)))
+    state.update(part, {**sample, 'scale':None}, .12)
+    current = state.snapshot()[part]
+    assert current['detected'] and current['scale'] is None and current['pitch'] == 30
+    state.update(part, {**sample, 'scale':.8}, .18)
+    assert state.snapshot()[part]['scale'] == .8
+    state.expire(.5)
+    assert not state.snapshot()[part]['detected'] and state.snapshot()[part]['scale'] is None
+    state.update(part, {**sample, 'scale':.7}, .6)
+    assert state.snapshot()[part]['scale'] == .7
+
+
+def test_torso_roll_filter_uses_unoriented_shoulder_line():
+    state = TrackingFilter(smoothing_time=.06)
+    samples = []
+    for angle in (89, 91):
+        world = rotate(torso_pose(), 'z', angle)
+        samples.append(pose_features(project(world), world)['torso'])
+    assert [s['roll'] for s in samples] == pytest.approx([89, -89])
+    state.update('torso', samples[0], 0)
+    state.update('torso', samples[1], .06)
+    delta = wrap_angle(state.snapshot()['torso']['roll'] - 89, 180)
+    assert delta == pytest.approx(2*(1-math.exp(-1)))
 
 
 def tilted_head(degrees):

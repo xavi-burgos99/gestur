@@ -29,7 +29,7 @@ Esta rama incorpora las mejoras de rendimiento y añade un portal **React + Mant
 
 En instalaciones nuevas la red es **GESTUR-XXXX**, donde XXXX son los últimos cuatro caracteres de la MAC permanente de `wlan0`, sin separadores. Se crea **abierta**. Configura previamente el país Wi-Fi desde Raspberry Pi Imager o `raspi-config`; usa Ethernet para instalar, pues activar el punto de acceso puede interrumpir una conexión Wi-Fi existente.
 
-Conéctate a esa red y abre **http://10.42.0.1:3000**. La clave de administración del portal aparece al terminar la instalación y puede recuperarse con `sudo cat /etc/gestur/portal-token`. Esta clave protege los cambios del dispositivo y es independiente de la contraseña opcional de la red Wi-Fi.
+Conéctate a esa red y abre **http://10.42.0.1**. La clave de administración del portal aparece al terminar la instalación y puede recuperarse con `sudo cat /etc/gestur/portal-token`. Esta clave protege los cambios del dispositivo y es independiente de la contraseña opcional de la red Wi-Fi.
 
 - **Modelos 3D**: biblioteca vacía de inicio. Sube un archivo 3D o un ZIP con el modelo, materiales y texturas. Se admiten OBJ, glTF/GLB, FBX, STL, PLY, DAE, 3DS y otros formatos de malla; se reparan referencias a recursos que estén en el paquete y se convierte a GLB autocontenido. Solo por encima de 1.000.000 de triángulos aparece una propuesta fija de aproximadamente 500.000: puedes aceptarla o conservar el original. La Raspberry realiza el trabajo y el portal muestra su estado. Los modelos se centran y encuadran automáticamente.
 - **Parámetros**: ajusta sensibilidad, suavizado, umbrales y asignaciones de cabeza, pinza u orientación de manos a rotación, desplazamiento y escala. Las manos se pueden activar cuando hagan falta.
@@ -77,9 +77,11 @@ La captura guarda únicamente el fotograma más reciente. Se cargan sólo los de
 
 Se usan **Pose Landmarker Lite** y, al activar y asignar controles de manos, **Palm Detection Lite + Hand Landmark Lite**. Los tres giros se calculan desde un marco ortogonal de palma; se conserva el giro de imagen anterior como entrada independiente. Pinza y apertura se calculan sin otra red de clasificación. La [comparación de alternativas](docs/performance-research.md) incluye velocidad, detecciones válidas y límites de las pruebas; no atribuye precisión a un modelo sólo por ser más nuevo.
 
-El objetivo de simplificación de **500.000 triángulos** toma como referencia los 491.038 del antiguo capitel. La reducción es opcional y solo se ofrece en mallas de más de un millón de triángulos; nunca se aplica sin aceptar la propuesta. El resultado conserva materiales y UV en la medida que permite el formato de origen; se informa del recuento final. Se agrupan nodos compatibles y se evitan transformaciones redundantes. MSAA 2× es el valor inicial; se puede elegir 0/2/4 muestras. El código anterior no activaba explícitamente el antialiasing, por lo que no se atribuye a él un coste medido.
+El objetivo de simplificación de **500.000 triángulos** toma como referencia los 491.038 del antiguo capitel. La reducción es opcional y solo se ofrece en mallas de más de un millón de triángulos; nunca se aplica sin aceptar la propuesta. El resultado conserva materiales y UV en la medida que permite el formato de origen; se informa del recuento final. Se agrupan nodos compatibles y se evitan transformaciones redundantes. Se solicitan 2 muestras de MSAA inicialmente; se puede elegir 0/2/4, pero el framebuffer puede conceder otra cantidad: en la Pi probada se obtuvieron 4. El código anterior no activaba explícitamente el antialiasing, por lo que no se atribuye a él un coste medido.
 
 Los valores de 60 FPS de render y 24 detecciones/s son **objetivos configurables, no resultados garantizados en una Pi**. Ver [la guía de medición](docs/performance.md) para comprobar tiempos de fotograma, carga y temperatura en el dispositivo real.
+
+En una **Pi 5 física de 4 GB**, el capitel original alcanzó **38,62 FPS** a 1080p con cámara, pose y manos activas durante 60 segundos, conservando geometría y textura. La CPU media del proceso desde el segundo 5 fue 73,45 % de un núcleo y la temperatura máxima, 59,5 °C. El [informe de validación y sus JSON](docs/pi5-validation.md) separa estas medidas de las pruebas en Mac. La sesión térmica de 30 minutos y el reinicio que confirme el arranque automático con la corrección gráfica siguen pendientes.
 
 ## Controles y parámetros
 
@@ -100,7 +102,7 @@ El archivo [config/default.json](config/default.json) define captura, render y a
 bash -n gestur.sh scripts/kiosk-session.sh
 ```
 
-Las pruebas cubren pérdida y recuperación de seguimiento, cadencia de control, orientación circular, configuración inválida, transferencia entre hilos, bienvenida sin modelos e importación y simplificación de mallas de prueba. La precisión visual con personas, los controladores gráficos y el rendimiento térmico requieren validación en la instalación real.
+Las pruebas cubren pérdida y recuperación de seguimiento, cadencia de control, orientación circular, configuración inválida, transferencia entre hilos, bienvenida sin modelos e importación y simplificación de mallas de prueba. La instalación manual, el portal, la cámara y la salida gráfica V3D se han comprobado en la Pi descrita en el informe. Quedan por evaluar la precisión de los gestos y la estabilidad térmica sostenida; el proceso completo de imagen preparada y primer arranque también está pendiente.
 
 ## Créditos
 

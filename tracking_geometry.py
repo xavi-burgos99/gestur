@@ -1,8 +1,8 @@
 """Dependency-free landmark geometry and time-based filtering.
 
 Angles use camera coordinates (x right, y down, z away from the camera).
-Only image positions are normalized; hand orientation/gestures use metric 3D
-landmarks, so a wide camera image does not distort the palm plane.
+Image positions and proximity are normalized. Hand orientation/gestures use
+metric 3D landmarks, so a wide camera image does not distort the palm plane.
 """
 import math
 
@@ -11,9 +11,9 @@ ANGLE_FIELDS = frozenset(('pitch', 'yaw', 'roll', 'rotation'))
 
 
 def empty_part(hand=False, head=False):
-    result = dict(detected=False, x=None, y=None, pitch=None, yaw=None, roll=None)
-    if head:
-        result['scale'] = None
+    # Keep the legacy head argument while giving every tracked part the same
+    # optional proximity field. Missing proximity does not invalidate a part.
+    result = dict(detected=False, x=None, y=None, pitch=None, yaw=None, roll=None, scale=None)
     if hand:
         result.update(rotation=None, pinch=None, openness=None, gesture='unknown')
     return result
@@ -94,6 +94,36 @@ def anatomical_hand(label, mirror, invert=False):
     return label
 
 
+def apparent_proximity(normalized, world, indices, span_indices, aspect, minimum, maximum):
+    """Orientation-corrected apparent span in image-width units, mapped to 0..1.
+
+    A weak-perspective fit compares image pair lengths with the XY projection
+    of relative metric landmarks. Multiplying by the 3D span removes first-order
+    foreshortening without using absolute world.z (which is object-centered).
+    Multiple rigid palm/torso pairs reduce sensitivity to one projected edge.
+    This is a monocular size proxy, not calibrated camera distance in metres.
+    """
+    if not math.isfinite(aspect) or aspect <= 0:
+        return None
+    projected_energy = image_energy = spatial_energy = 0.0
+    for offset, first in enumerate(indices):
+        for second in indices[offset + 1:]:
+            delta = sub(xyz(world[second]), xyz(world[first]))
+            dx = normalized[second].x - normalized[first].x
+            dy = (normalized[second].y - normalized[first].y) / aspect
+            image_energy += dx * dx + dy * dy
+            projected_energy += delta[0] * delta[0] + delta[1] * delta[1]
+            spatial_energy += dot(delta, delta)
+    span = length(sub(xyz(world[span_indices[1]]), xyz(world[span_indices[0]])))
+    if (span < 1e-5 or spatial_energy < 1e-10 or image_energy < 1e-12
+            or projected_energy < .01 * spatial_energy):
+        return None
+    apparent_span = span * math.sqrt(image_energy / projected_energy)
+    if not math.isfinite(apparent_span):
+        return None
+    return clamp((apparent_span - minimum) / (maximum - minimum))
+
+
 def pose_features(normalized, world, visibility_threshold=.5, aspect=4/3,
                   scale_min=.02, scale_max=.20):
     result = {'head': empty_part(head=True), 'torso': empty_part()}
@@ -134,7 +164,9 @@ def pose_features(normalized, world, visibility_threshold=.5, aspect=4/3,
                 x=(normalized[23].x+normalized[24].x)/2,
                 y=(normalized[23].y+normalized[24].y)/2,
                 pitch=math.degrees(math.atan2(normal[1], math.hypot(normal[0],normal[2]))),
-                yaw=math.degrees(math.atan2(normal[0], -normal[2])), roll=roll)
+                yaw=math.degrees(math.atan2(normal[0], -normal[2])), roll=roll,
+                scale=apparent_proximity(normalized, world, torso_indices, (11, 12),
+                                         aspect, .12, .80))
     return result
 
 
@@ -198,7 +230,9 @@ def hand_features(normalized, world, label, aspect=4/3):
     result.update(detected=True, x=normalized[0].x, y=normalized[0].y,
         pitch=wrap_angle(math.degrees(pitch)), yaw=wrap_angle(math.degrees(yaw)),
         roll=wrap_angle(math.degrees(roll)), rotation=rotation,
-        pinch=pinch, openness=openness, gesture=gesture)
+        pinch=pinch, openness=openness, gesture=gesture,
+        scale=apparent_proximity(normalized, world, (0, 5, 9, 13, 17), (5, 17),
+                                 aspect, .025, .25))
     return result
 
 
@@ -224,8 +258,8 @@ class TrackingFilter:
         filtered = {}
         for name, value in sample.items():
             if isinstance(value, (int, float)) and not isinstance(value, bool):
-                # The eye line is unoriented: +89° and -89° differ by 2°.
-                period = 180.0 if key == 'head' and name == 'roll' else 360.0
+                # Eye and shoulder lines are unoriented: +89° and -89° differ by 2°.
+                period = 180.0 if key in ('head', 'torso') and name == 'roll' else 360.0
                 filtered[name] = smooth_value(previous.get(name), value, dt,
                     self.smoothing_time, name in ANGLE_FIELDS, period)
             else:

@@ -1,6 +1,7 @@
 """Camera lifecycle must never stall drawing or revive obsolete callbacks."""
 import threading
 import time
+import pytest
 
 from runtime_config import default_config
 from tracking_session import TrackingSession, tracking_request
@@ -38,6 +39,7 @@ def test_demand_loads_only_enabled_detectors_actually_used_by_controls():
     config['tracking']['use_hands'] = True
     assert tracking_request(config)['use_pose'] is True
     assert tracking_request(config)['use_hands'] is False
+    assert tracking_request(config)['pose_parts'] == ('head',)
     mapping = config['controls']['mappings'][0]
     config['controls']['mappings'] = [{**mapping, 'input': 'right_hand_roll', 'enabled': True}]
     assert tracking_request(config)['use_pose'] is False
@@ -48,6 +50,36 @@ def test_demand_loads_only_enabled_detectors_actually_used_by_controls():
     assert tracking_request(config) is None
     config['tracking']['use_hands'] = True
     config['controls']['mappings'][0]['enabled'] = False
+    assert tracking_request(config) is None
+
+
+@pytest.mark.parametrize('input_name', [f'torso_{field}' for field in ('x', 'y', 'scale', 'pitch', 'yaw', 'roll')])
+def test_body_only_controls_request_pose_and_torso_presence(input_name):
+    config = default_config()
+    mapping = config['controls']['mappings'][0]
+    config['controls']['mappings'] = [{**mapping, 'input': input_name, 'enabled': True}]
+    request = tracking_request(config)
+    assert request['use_pose'] is True and request['use_hands'] is False
+    assert request['pose_parts'] == ('torso',)
+    config['tracking']['use_pose'] = False
+    assert tracking_request(config) is None
+    config['tracking']['use_pose'] = True
+    config['controls']['mappings'][0]['enabled'] = False
+    assert tracking_request(config) is None
+
+
+def test_mixed_body_head_and_hand_proximity_demand_remains_independent():
+    config = default_config()
+    config['tracking']['use_hands'] = True
+    mapping = config['controls']['mappings'][0]
+    config['controls']['mappings'] = [{**mapping, 'input': name, 'enabled': True}
+                                    for name in ('torso_scale', 'head_x', 'left_hand_scale', 'right_hand_scale')]
+    request = tracking_request(config)
+    assert request['pose_parts'] == ('head', 'torso') and request['use_hands']
+    config['tracking']['use_pose'] = False
+    request = tracking_request(config)
+    assert not request['use_pose'] and request['pose_parts'] == () and request['use_hands']
+    config['tracking']['use_hands'] = False
     assert tracking_request(config) is None
 
 

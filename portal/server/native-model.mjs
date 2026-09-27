@@ -32,8 +32,15 @@ export async function sandboxCommand(
       if (await exists(directory))
         mounts.push("--ro-bind", directory, directory);
     return {
-      command: "/usr/bin/bwrap",
+      // The HTTP service inherits CAP_NET_BIND_SERVICE. Non-setuid bwrap
+      // rejects any effective capabilities before parsing --cap-drop, so
+      // clear inherited/ambient caps before exec. Node and sudo stay intact.
+      command: "/usr/bin/setpriv",
       args: [
+        "--inh-caps=-all",
+        "--ambient-caps=-all",
+        "--",
+        "/usr/bin/bwrap",
         "--unshare-all",
         "--die-with-parent",
         "--new-session",

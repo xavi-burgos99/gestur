@@ -71,6 +71,40 @@ const head = [
     "roll",
   ],
 ];
+const torso = [
+  [
+    "x",
+    "Desplazamiento horizontal",
+    "Mueve el cuerpo a izquierda y derecha.",
+    "translate-x",
+  ],
+  [
+    "y",
+    "Desplazamiento vertical",
+    "Mueve el cuerpo hacia arriba y abajo.",
+    "translate-y",
+  ],
+  [
+    "scale",
+    "Acercar y alejar",
+    "Acerca o aleja el cuerpo de la cámara.",
+    "depth",
+  ],
+  ["yaw", "Giro horizontal", "Gira el cuerpo a izquierda y derecha.", "yaw"],
+  [
+    "pitch",
+    "Giro vertical",
+    "Inclina el cuerpo hacia delante y atrás.",
+    "pitch",
+  ],
+  [
+    "roll",
+    "Inclinación lateral",
+    "Inclina el cuerpo a un lado y al otro.",
+    "roll",
+  ],
+];
+
 const hand = [
   [
     "x",
@@ -83,6 +117,12 @@ const hand = [
     "Desplazamiento vertical",
     "Mueve la mano hacia arriba y abajo.",
     "translate-y",
+  ],
+  [
+    "scale",
+    "Acercar y alejar",
+    "Acerca o aleja la mano de la cámara.",
+    "depth",
   ],
   ["yaw", "Giro horizontal", "Gira la palma a izquierda y derecha.", "yaw"],
   [
@@ -107,6 +147,15 @@ const hand = [
   ],
 ];
 
+function movementPath(body, id, side = null) {
+  if (["x", "y", "scale"].includes(id))
+    return { body, side, movement: "translation", axis: id };
+  if (["yaw", "pitch", "roll"].includes(id))
+    return { body, side, movement: "rotation", axis: id };
+  if (id === "openness") return { body, side, movement: "openness" };
+  return null;
+}
+
 export const GESTURE_OPTIONS = [
   ...head.map(([id, label, description, motion]) => ({
     id: `head_${id}`,
@@ -114,6 +163,15 @@ export const GESTURE_OPTIONS = [
     description,
     category: "Cabeza",
     icon: { subject: "head", motion },
+    selection: movementPath("head", id),
+  })),
+  ...torso.map(([id, label, description, motion]) => ({
+    id: `torso_${id}`,
+    label,
+    description,
+    category: "Cuerpo",
+    icon: { subject: "body", motion },
+    selection: movementPath("body", id),
   })),
   ...["left", "right"].flatMap((side) =>
     hand.map(([id, label, description, motion]) => ({
@@ -122,6 +180,7 @@ export const GESTURE_OPTIONS = [
       description,
       category: side === "left" ? "Mano izquierda" : "Mano derecha",
       icon: { subject: "hand", motion, side },
+      selection: movementPath("hands", id, side),
     })),
   ),
   {
@@ -140,10 +199,11 @@ export const GESTURE_OPTIONS = [
   },
   {
     id: "hands_distance",
-    label: "Separación total",
+    label: "Distancia entre manos",
     description: "Junta o separa las manos en la imagen.",
     category: "Ambas manos",
     icon: { subject: "hands", motion: "spread" },
+    selection: { body: "combined", combined: "distance" },
   },
   {
     id: "hands_separation_x",
@@ -153,6 +213,159 @@ export const GESTURE_OPTIONS = [
     icon: { subject: "hands", motion: "spread-x" },
   },
 ];
+
+export const LEGACY_GESTURE_OPTIONS = GESTURE_OPTIONS.filter(
+  (option) => !option.selection,
+);
+
+export function emptyGestureSelection() {
+  return {
+    body: null,
+    side: null,
+    movement: null,
+    axis: null,
+    combined: null,
+    legacy: null,
+  };
+}
+
+export function selectionForGesture(input) {
+  const option = GESTURE_OPTIONS.find((item) => item.id === input);
+  return {
+    ...emptyGestureSelection(),
+    ...(option?.selection || (option ? { legacy: input } : {})),
+  };
+}
+
+export function gestureFromSelection(selection) {
+  if (selection.legacy)
+    return (
+      LEGACY_GESTURE_OPTIONS.find((option) => option.id === selection.legacy)
+        ?.id || null
+    );
+  return (
+    GESTURE_OPTIONS.find(
+      (option) =>
+        option.selection &&
+        Object.entries(option.selection).every(
+          ([key, value]) => selection[key] === value,
+        ),
+    )?.id || null
+  );
+}
+
+export function changeGestureSelection(current, field, value) {
+  if (field === "body" || field === "legacy")
+    return { ...emptyGestureSelection(), [field]: value };
+  const next = { ...current, [field]: value, legacy: null };
+  const descendants = {
+    side: ["movement", "axis", "combined"],
+    movement: ["axis", "combined"],
+    axis: [],
+    combined: [],
+  };
+  for (const key of descendants[field] || []) next[key] = null;
+  return next;
+}
+
+export function gestureSteps(selection) {
+  const steps = [
+    {
+      id: "body",
+      label: "Parte del cuerpo",
+      options: [
+        { id: "head", label: "Cabeza", icon: { subject: "head" } },
+        { id: "body", label: "Cuerpo", icon: { subject: "body" } },
+        { id: "hands", label: "Manos", icon: { subject: "hands" } },
+        {
+          id: "combined",
+          label: "Combinado",
+          icon: { subject: "hands", motion: "spread" },
+        },
+      ],
+    },
+  ];
+  if (!selection.body) return steps;
+  if (selection.body === "combined") {
+    steps.push({
+      id: "combined",
+      label: "Gesto combinado",
+      options: [
+        {
+          id: "distance",
+          label: "Distancia entre manos",
+          icon: { subject: "hands", motion: "spread" },
+        },
+      ],
+    });
+    return steps;
+  }
+  if (selection.body === "hands") {
+    steps.push({
+      id: "side",
+      label: "Mano",
+      options: [
+        {
+          id: "left",
+          label: "Mano izquierda",
+          icon: { subject: "hand", side: "left" },
+        },
+        {
+          id: "right",
+          label: "Mano derecha",
+          icon: { subject: "hand", side: "right" },
+        },
+      ],
+    });
+    if (!selection.side) return steps;
+  }
+  const subject = selection.body === "hands" ? "hand" : selection.body;
+  const icon = (motion) => ({
+    subject,
+    motion,
+    side: selection.side || undefined,
+  });
+  steps.push({
+    id: "movement",
+    label: "Tipo de movimiento",
+    options: [
+      { id: "translation", label: "Desplazamiento", icon: icon("translate") },
+      { id: "rotation", label: "Rotación", icon: icon("rotate") },
+      ...(selection.body === "hands"
+        ? [
+            {
+              id: "openness",
+              label: "Apertura de la mano",
+              icon: icon("openness"),
+            },
+          ]
+        : []),
+    ],
+  });
+  if (!selection.movement || selection.movement === "openness") return steps;
+  const axes =
+    selection.movement === "translation"
+      ? [
+          ["x", "Horizontal", "translate-x"],
+          ["y", "Vertical", "translate-y"],
+          ["scale", "Profundidad", "depth"],
+        ]
+      : [
+          ["yaw", "Giro horizontal", "yaw"],
+          ["pitch", "Giro vertical", "pitch"],
+          ["roll", "Inclinación lateral", "roll"],
+        ];
+  steps.push({
+    id: "axis",
+    label: "Eje",
+    options: axes.map(([id, label, motion]) => ({
+      id,
+      label,
+      icon: icon(motion),
+    })),
+  });
+  return steps;
+}
 
 export function responseOptions(output) {
   const result = [{ value: "absolute", label: "Proporcional" }];

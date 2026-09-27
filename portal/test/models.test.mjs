@@ -343,7 +343,10 @@ test("Linux sandbox denies host/network access and bounds native converters", as
       dir,
       "linux",
     );
-  assert.equal(cmd.command, "/usr/bin/bwrap");
+  assert.equal(cmd.command, "/usr/bin/setpriv");
+  assert.deepEqual(cmd.args.slice(0, 4), [
+    "--inh-caps=-all", "--ambient-caps=-all", "--", "/usr/bin/bwrap",
+  ]);
   assert.ok(cmd.args.includes("--unshare-all"));
   assert.ok(cmd.args.includes("--cap-drop"));
   assert.ok(cmd.args.includes("--as=3221225472"));

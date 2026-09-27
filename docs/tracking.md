@@ -1,7 +1,7 @@
 # Seguimiento ligero y sin red
 
 El controlador conserva `head`, `torso`, `left_hand` y `right_hand`, sus campos
-`detected`, `x`, `y`, `pitch`, `yaw`, `roll`, y `head.scale` entre 0 y 1. Los
+`detected`, `x`, `y`, `pitch`, `yaw`, `roll`, y `scale` entre 0 y 1 en cada parte. Los
 controles de posición de cabeza y zoom del capitell siguen utilizando ese
 contrato. Se mantienen `run`, `stop`, `subscribe`, `unsubscribe` y
 `get_current_data`; construir un tracker ya no abre la cámara.
@@ -58,14 +58,18 @@ entorno manualmente; la validación del hardware objetivo se hace en Linux ARM64
 - Pose y manos tienen frecuencias máximas independientes (`inference_fps` y
   `hand_fps`). El controlador carga sólo los detectores autorizados por
   `use_pose`/`use_hands` que alguna asignación activa necesita. Sin modelo o
-  sin controles activos no abre la cámara. Cambiar estos parámetros reemplaza
+  sin controles activos no abre la cámara. Los controles `torso_*` usan Pose,
+  igual que `head_*`, sin añadir otra red. Cambiar estos parámetros reemplaza
   el tracker fuera del hilo de dibujo y revoca sus callbacks antiguos.
 - Los dos modelos comparten un presupuesto del 60 % de tiempo de inferencia:
   se dejan pausas entre ciclos aunque ambos estén atrasados. Es tiempo de pared,
   no un límite del 60 % de CPU; las bibliotecas nativas pueden usar varios hilos.
 - Tras dos segundos sin detectar una parte, ese detector pasa a sondear a
   3 FPS y recupera su frecuencia solicitada en cuanto la detecta. Los modelos
-  se gestionan por separado: unas manos ausentes no frenan la cabeza. Volver a
+  se gestionan por separado: unas manos ausentes no frenan la cabeza. Para Pose,
+  `pose_parts` indica qué partes requieren los controles: cabeza, torso o ambas.
+  Un torso visible mantiene la cadencia si está asignado, aunque la cabeza esté
+  oculta; una parte sin asignar no impide entrar en reposo. Volver a
   entrar en escena puede añadir hasta un intervalo de sondeo más la inferencia.
 - La cámara se comprueba antes de cargar redes. Una desconexión se reintenta
   cada 15 segundos sin bloquear el visor. La captura no despierta a la
@@ -107,6 +111,24 @@ contacto. `openness` es la fracción de los cuatro dedos largos extendidos.
 etiqueta no tiene un modelo adicional ni sustituye una evaluación de precisión
 con usuarios reales. Para controles continuos se recomienda el valor `pinch`.
 
+`torso.scale` y las escalas de cada mano son proximidad relativa. El cálculo
+compara distancias entre pares de puntos de la imagen con sus proyecciones XY
+métricas, y multiplica ese factor por el ancho 3D de hombros o palma. Así compensa
+el acortamiento aparente del giro bajo una aproximación de perspectiva débil.
+Usa hombros/caderas para el torso y muñeca/bases de los dedos para las manos;
+la pinza y las puntas de dedos no intervienen. Las diferencias entre puntos
+eliminan la traslación de las coordenadas métricas y el factor de escala se
+cancela: **no se interpreta `world.z` como distancia a la cámara**.
+
+El resultado es un ancho equivalente expresado en unidades del ancho de imagen.
+Se normaliza y limita a 0–1 usando 0,12–0,80 para hombros y 0,025–0,25 para palma.
+Acercarse aumenta el valor. No es una medición calibrada en metros: perspectiva
+fuerte, articulación, tamaño de la persona y ruido del modelo pueden confundir
+movimiento y tamaño. Una proyección degenerada deja sólo `scale=None`, sin
+anular las otras señales válidas. Las escalas se suavizan por tiempo, caducan
+con su parte y se reinician al perderla, igual que la posición. La línea de
+hombros tiene periodo de 180°; ambos filtros de `torso_roll` respetan ese periodo.
+
 La escala de cabeza ahora usa los centros de **los dos ojos** (2 y 5). El código
 anterior medía entre dos landmarks del mismo ojo (1 y 2). El rango nuevo por
 defecto es 0.02–0.20 del ancho de imagen, limitado a 0–1; puede calibrarse con
@@ -129,9 +151,11 @@ inferencia CPU real en ambos Tasks con imágenes vacías.
 Además se verificó manualmente en el entorno de desarrollo que los modelos Lite
 producen dos manos y sus landmarks métricos con la imagen oficial
 `right_hands.jpg`, y una pose con `pose.jpg`. Es una prueba de integración, no una
-medición de precisión ni de rendimiento en Raspberry Pi. Queda por medir en
-una Pi 5 con la cámara, iluminación, refrigeración, resolución de pantalla y
-modelo capitell de la instalación. Los modelos Lite pueden cambiar la precisión
+medición de precisión. Las pruebas posteriores de cámara y capitel en una Pi 5
+física están en [el informe de validación](pi5-validation.md); corresponden al
+runtime anterior a añadir estos nuevos controles de cuerpo y proximidad de manos.
+Sus pruebas geométricas sintéticas no validan precisión con personas reales.
+Los modelos Lite pueden cambiar la precisión
 frente a Full; la geometría y el filtrado corrigen errores concretos del código,
 pero no permiten prometer que todas las oclusiones se resuelvan.
 

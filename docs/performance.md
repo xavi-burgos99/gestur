@@ -1,6 +1,6 @@
 # Medir el rendimiento de Gestur
 
-No se ha medido todavía esta versión en una Raspberry Pi física. El cambio reduce trabajo redundante y separa los relojes de captura/inferencia/control/render; no promete un número de FPS o una mejora porcentual sin medir el dispositivo.
+Esta versión se ha probado en una **Raspberry Pi 5 física de 4 GB**. Con el capitel original de 491.038 triángulos, cámara, pose y manos, se midieron **38,62 FPS a 1080p durante 60 segundos**. La CPU media del proceso desde el segundo 5 fue 73,45 % de un núcleo y el máximo térmico, 59,5 °C. El [informe de validación](pi5-validation.md) conserva los JSON, condiciones y límites de estas pruebas. No son una comparación porcentual contra la versión antigua ni una validación térmica de 30 minutos.
 
 ## Medición reproducible en Pi 5
 
@@ -22,11 +22,23 @@ Los JSON separan dibujos reales, actualizaciones de control, detecciones y polí
 
 El benchmark del controlador incluye el arranque asíncrono de cámara/modelos y conserva el visor disponible durante ese arranque. Para medir únicamente inferencia con arranque excluido, usa `pose_hand_tracker.py`, explicado en [seguimiento](tracking.md). `--hands` permite el detector, pero el controlador sólo lo carga si hay al menos una asignación de manos activa. Para comparar pose y pose+manos debe haber una persona ante la cámara; de lo contrario se mide el sondeo de ausencia.
 
+Para probar el conjunto con un **modelo real indicado explícitamente**, usa el ensayo acotado desde la sesión gráfica, sin otro visor ni otro proceso usando la cámara:
+
+```bash
+.venv/bin/python scripts/benchmark_pi_system.py --source camera --duration 60 --model /ruta/capitel-original/capitell.obj --motion controls --output-dir /tmp/capitel-camera-new
+# Ensayo prolongado: usar otro directorio de salida nuevo.
+.venv/bin/python scripts/benchmark_pi_system.py --source camera --duration 1800 --model /ruta/capitel-original/capitell.obj --motion controls --output-dir /tmp/capitel-thermal-new
+```
+
+Sustituye la ruta por el modelo que quieras medir y conserva sus recursos auxiliares junto a él. El capitel no viene incluido en las instalaciones nuevas. Omitir `--model` genera una escena sintética, por lo que no sirve para afirmar el rendimiento de tu modelo. `--motion controls` usa los gestos reales; el modo predeterminado `continuous` impone movimiento para mantener trabajo de dibujo. Con una escena sin personas pueden activarse las políticas de ausencia.
+
+La herramienta activa pose y manos con una configuración de ensayo aislada, conserva las políticas de inferencia y no modifica la configuración del portal. Registra la escena cargada, el framebuffer, MSAA efectivo, resúmenes y telemetría JSONL de CPU, RSS, temperatura y throttling. Solicita terminar si la temperatura disponible supera **85 °C** o persisten errores; comprueba el progreso tras 30 segundos de margen de arranque. Los sensores ausentes se guardan como `null`. El directorio de salida debe ser nuevo y estar fuera de `/var/lib/gestur`.
+
 `--show-fps --verbose` muestra dibujo y control por separado. Con el arranque habitual, `/var/lib/gestur/runtime-status.json` se actualiza una vez por segundo con CPU del proceso, CPU total del sistema, temperatura y frecuencia de CPU cuando Linux las ofrece. La CPU del proceso usa 100 % por núcleo; puede superar 100 %. El presupuesto de inferencia del 60 % mide tiempo de trabajo entre pausas, no equivale a un uso del 60 % de CPU. El indicador térmico avisa desde 78 °C; no modifica el firmware ni certifica ausencia de throttling.
 
-Para verificar estabilidad térmica, repite con `--benchmark-seconds 1800 --verbose`, redirige el registro a un archivo y compara el principio y el final con la misma interacción. La Raspberry Pi [reduce la frecuencia al alcanzar sus límites térmicos](https://www.raspberrypi.com/news/heating-and-cooling-raspberry-pi-5/); optimizar software no sustituye medir la instalación y su refrigeración. No se ha ejecutado aquí esa prueba física.
+Para verificar estabilidad térmica, compara el principio y el final del ensayo de 1.800 segundos con la misma interacción. La Raspberry Pi [reduce la frecuencia al alcanzar sus límites térmicos](https://www.raspberrypi.com/news/heating-and-cooling-raspberry-pi-5/); optimizar software no sustituye medir la instalación y su refrigeración. La prueba física prolongada sigue pendiente de resultados; las mediciones breves publicadas no la sustituyen.
 
-Para aislar el coste de antialiasing, copia `config/default.json` a un archivo local y repite con `render.antialias_samples` en 0, 2 y 4. No cambies simultáneamente frecuencia, resolución y antialiasing. Por defecto hay MSAA 2×; el proyecto original no solicitaba muestras de forma explícita.
+Para aislar el coste de antialiasing, copia `config/default.json` a un archivo local y repite las pruebas del controlador con `render.antialias_samples` en 0, 2 y 4. No cambies simultáneamente frecuencia, resolución y antialiasing. Por defecto se solicitan 2 muestras; en la Pi probada el framebuffer concedió **4 muestras reales**. Registra siempre el valor efectivo: cambiar la solicitud no garantiza cambiar el trabajo gráfico. `benchmark_pi_system.py` mantiene fija la solicitud de 2; el proyecto original no solicitaba muestras de forma explícita.
 
 ## Decisiones
 
@@ -41,13 +53,14 @@ Para aislar el coste de antialiasing, copia `config/default.json` a un archivo l
 - No se activa supersampling, postprocesado, sombras ni compresión de texturas con pérdidas.
 - Un cambio de objeto grande puede pausar brevemente el visor durante su carga. Si no hay un modelo disponible, se muestra la bienvenida con QR y se registra el error de carga.
 
-## Evidencia local y comparación de alternativas
+## Evidencia medida y comparación de alternativas
 
-- [Pruebas de dibujo y consumo del reloj de Panda3D](render-performance.md): escena sintética comparable en complejidad al capitel, calidad constante y diferencia entre refresco inmóvil e interacción.
+- [Validación física en Pi 5](pi5-validation.md): capitel con cámara y seguimiento, carga de CPU, temperaturas breves, motores de inferencia, API y diagnóstico de render. Con replay, cuatro ajustes del reloj dieron 39,32–39,54 FPS; retirar el callback de métricas no aportó una mejora útil y se conserva la instrumentación. Estos ensayos no identifican todavía el cuello de botella ni miden ocupación de GPU.
+- [Pruebas de dibujo y consumo del reloj de Panda3D](render-performance.md): distingue la escena sintética medida en Mac de los ensayos posteriores con capitel real en Pi; no extrapola el ahorro observado entre equipos.
 - [Geometría y comparación de modelos](performance-research.md): Lite frente a Full, alternativas faciales y compatibilidad del runtime reciente.
 - Los ensayos matemáticos cubren los giros combinados de palma, ambas manos y la pérdida/recuperación de detección. Corrigen errores del cálculo anterior; no sustituyen evaluar la precisión con una cámara y personas reales.
 - La validación de integración ejecutó el controlador, ambos modelos nativos y el visor de 524.288 triángulos durante cinco segundos. La captura se sustituyó por una imagen oficial repetida; se comprobó inferencia, dibujo y cierre sin errores, sin atribuirlo a una prueba de cámara USB o Pi. Las pruebas de ciclo de vida cubren cambios durante una carga lenta, reconexión con callbacks tardíos y una cámara que sigue ocupada tras solicitar su cierre.
-- En Linux ARM64 se verificaron los servicios de primer arranque y la copia de los nuevos módulos con las opciones del instalador. Se mantienen las dependencias fijadas y el Python privado. Esto no equivale a instalar y ejecutar la aplicación completa en hardware Pi.
+- La verificación inicial en Linux ARM64 cubrió los servicios de primer arranque y la copia de módulos. Después se completó la instalación manual en la Pi física y se ejecutaron portal, seguimiento y visor acelerado. El proceso completo de imagen preparada → instalación en primer arranque → reinicio sigue pendiente, igual que confirmar el arranque automático tras reiniciar con la corrección Xorg.
 
 ## Referencias de implementación
 

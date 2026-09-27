@@ -1,5 +1,6 @@
 """First-boot failure recovery without root, networking, installation or reboot."""
 import importlib.util
+import io
 import json
 from pathlib import Path
 import stat
@@ -210,6 +211,47 @@ def test_reboot_failure_preserves_completed_installation(prepared, capsys):
     prepared.events.clear()
     first_boot.provision(**prepared.options)
     assert prepared.events == ['host']
+
+
+def test_portal_healthcheck_uses_port_80_without_proxy_and_retries_invalid_response(monkeypatch):
+    calls, delays, proxies = [], [], []
+    replies = [OSError('Starting'), '[]', '{"authenticated": "false"}', '{"authenticated": false}']
+
+    class Opener:
+        def open(self, url, timeout):
+            calls.append((url, timeout))
+            reply = replies.pop(0)
+            if isinstance(reply, Exception):
+                raise reply
+            response = io.StringIO(reply)
+            response.status = 200
+            return response
+
+    def build_opener(handler):
+        proxies.append(handler.proxies)
+        return Opener()
+
+    monkeypatch.setattr(first_boot.urllib.request, 'build_opener', build_opener)
+    monkeypatch.setattr(first_boot.time, 'sleep', delays.append)
+    first_boot.portal_ready()
+    assert proxies == [{}]
+    assert calls == [('http://127.0.0.1/api/session', 2)] * 4
+    assert delays == [1, 1, 1]
+
+
+def test_portal_healthcheck_fails_instead_of_accepting_a_started_service(monkeypatch):
+    calls = []
+
+    class Opener:
+        def open(self, url, timeout):
+            calls.append(url)
+            raise OSError('Connection refused')
+
+    monkeypatch.setattr(first_boot.urllib.request, 'build_opener', lambda *args: Opener())
+    monkeypatch.setattr(first_boot.time, 'sleep', lambda seconds: None)
+    with pytest.raises(RuntimeError, match='puerto 80'):
+        first_boot.portal_ready()
+    assert len(calls) == 30
 
 
 @pytest.fixture

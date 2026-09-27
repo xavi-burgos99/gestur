@@ -71,6 +71,18 @@ export default function MotionIcon({
         </marker>
       </defs>
       {subject === "head" && image(headImage, 8, 3, 84, 88)}
+      {subject === "body" && (
+        <>
+          {image(headImage, 28, 0, 44, 46)}
+          <g stroke="#41675b" strokeWidth="2.3" strokeLinejoin="round">
+            <path
+              d="M39 41 24 48 16 77 28 81 34 62 33 92H67L66 62 72 81 84 77 76 48 61 41 50 49Z"
+              fill="#e4ede8"
+            />
+            <path d="M39 41 50 49 61 41M50 49v40" opacity=".5" />
+          </g>
+        </>
+      )}
       {subject === "hand" && image(handImage, 8, 3, 84, 88, side === "left")}
       {subject === "hands" && (
         <>
@@ -92,6 +104,15 @@ export default function MotionIcon({
         strokeLinejoin="round"
       >
         {motion === "translate-x" && <path d="M13 88H87" {...twoEnds} />}
+        {motion === "translate" && (
+          <>
+            <path d="M16 87H84" {...twoEnds} />
+            <path d="M12 70V20" {...twoEnds} />
+          </>
+        )}
+        {motion === "rotate" && (
+          <path d="M21 28C6 42 8 70 27 80C46 91 72 83 82 65" {...twoEnds} />
+        )}
         {motion === "translate-y" && <path d="M12 81V19" {...twoEnds} />}
         {motion === "depth" && (
           <>

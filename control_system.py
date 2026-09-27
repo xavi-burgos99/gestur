@@ -302,15 +302,18 @@ def create_extractors():
             return value
         return extractor
 
-    extractors = {f"head_{axis}": tracked("head", axis) for axis in ("x", "y", "scale")}
-    for angle in ("pitch", "yaw", "roll"):
-        extractors[f"head_{angle}"] = tracked("head", angle, True)
+    extractors = {}
+    for part in ("head", "torso"):
+        for axis in ("x", "y", "scale"):
+            extractors[f"{part}_{axis}"] = tracked(part, axis)
+        for angle in ("pitch", "yaw", "roll"):
+            extractors[f"{part}_{angle}"] = tracked(part, angle, True)
     for field in ("center_x", "center_y", "distance", "separation_x"):
         extractors[f"hands_{field}"] = lambda data, field=field: _number(data.get("hands", {}).get(field))
     for side in ("left", "right"):
         for angle in ("rotation", "pitch", "yaw", "roll"):
             extractors[f"{side}_hand_{angle}"] = tracked(f"{side}_hand", angle, True)
-        for field in ("x", "y", "pinch", "openness"):
+        for field in ("x", "y", "scale", "pinch", "openness"):
             extractors[f"{side}_hand_{field}"] = tracked(f"{side}_hand", field)
     return extractors
 
@@ -389,14 +392,14 @@ def create_control_system(config=None, clock=time.monotonic):
         circular = spec["input"].endswith(("_rotation", "_pitch", "_yaw", "_roll"))
         # The original zoom responded faster than the head position channels.
         smoothing = controls["smoothing_ms"] / 3 if spec["mode"] == "stepped" else controls["smoothing_ms"]
-        # Head roll is an unoriented eye line (180 degrees); other angles wrap
+        # Head/torso roll are unoriented lines (180 degrees); other angles wrap
         # at 360 degrees. Neutral return follows a full OUTPUT turn, whose input
         # range changes with sensitivity, independently of the measured period.
         decay_period = (180.0 / spec["scale"] if circular and spec["mode"] == "absolute"
                         and spec["output"] in axes and spec["scale"] > 0 else None)
         smoother = ExponentialSmoother(smoothing_ms=smoothing, decay_rate=0.2,
                                        center_value=spec["center"], clock=clock,
-                                       period=0.5 if spec["input"] == "head_roll" else 1.0 if circular else None,
+                                       period=0.5 if spec["input"] in ("head_roll", "torso_roll") else 1.0 if circular else None,
                                        decay_period=decay_period,
                                        linear_decay=circular and spec["output"] not in axes)
         if spec["mode"] == "hybrid":

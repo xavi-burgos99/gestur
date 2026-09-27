@@ -210,8 +210,10 @@ class ControlTests(unittest.TestCase):
     def test_new_inputs_require_detected_finite_measurements(self):
         extractors = create_extractors()
         inputs = [(f"head_{angle}", "head", angle, 90, 0.75) for angle in ("pitch", "yaw", "roll")]
+        inputs += [(f"torso_{angle}", "torso", angle, 45, 0.625) for angle in ("pitch", "yaw", "roll")]
+        inputs += [(f"torso_{field}", "torso", field, .75, .75) for field in ("x", "y", "scale")]
         inputs += [(f"{side}_hand_{field}", f"{side}_hand", field, 0, 0)
-                   for side in ("left", "right") for field in ("x", "y", "openness")]
+                   for side in ("left", "right") for field in ("x", "y", "scale", "openness")]
         for name, part, field, value, expected in inputs:
             with self.subTest(input=name):
                 extractor = extractors[name]
@@ -302,6 +304,7 @@ class ControlTests(unittest.TestCase):
 
     def test_angular_position_and_zoom_return_to_numeric_center_after_wrap_and_loss(self):
         for input_name, limit in (("head_roll", 90), ("head_pitch", 180), ("head_yaw", 180),
+                                  ("torso_roll", 90), ("torso_pitch", 180), ("torso_yaw", 180),
                                   ("left_hand_rotation", 180), ("right_hand_roll", 180)):
             part, field = input_name.rsplit("_", 1)
             for output_name in ("position_x", "position_y", "position_z", "scale_uniform"):
@@ -368,6 +371,56 @@ class ControlTests(unittest.TestCase):
         self.assertAlmostEqual(result["position"][0], .6)
         self.assertAlmostEqual(result["position"][1], -35)
         self.assertAlmostEqual(result["scale"], 1.6)
+
+    def test_body_rotation_and_hand_depth_mapping_preserve_other_channels_on_depth_loss(self):
+        clock = Clock()
+        config = default_config()
+        config['controls']['smoothing_ms'] = 0
+        config['controls']['mappings'] = [
+            {'id':name, 'input':name, 'output':output, 'mode':'absolute', 'enabled':True,
+             'scale':scale, 'center':.5, 'invert':False}
+            for name, output, scale in (('torso_roll', 'rotation_roll', 70),
+                ('torso_scale', 'position_z', 2), ('left_hand_scale', 'position_x', 2),
+                ('right_hand_scale', 'scale_uniform', 2), ('torso_y', 'position_y', 2))]
+        system = create_control_system(config, clock)
+        data = {'torso':{'detected':True, 'roll':89, 'scale':.75, 'y':.6},
+                'left_hand':{'detected':True, 'scale':.8}, 'right_hand':{'detected':True, 'scale':.7}}
+        first = system.process_input(data)
+        self.assertAlmostEqual(first['position'][0], .6)
+        self.assertAlmostEqual(first['position'][2], .5)
+        self.assertAlmostEqual(first['scale'], 1.4)
+        clock.advance(.05)
+        data['torso'].update(roll=-89, scale=None)
+        data['left_hand']['scale'] = None
+        result = system.process_input(data)
+        self.assertAlmostEqual(result['rotation'][2]-first['rotation'][2], 2*70/180)
+        self.assertGreater(result['position'][2], 0)
+        self.assertLess(result['position'][2], .5)
+        self.assertAlmostEqual(result['position'][1], .2)
+        self.assertAlmostEqual(result['scale'], 1.4)
+        clock.advance(5)
+        neutral = system.process_input({})
+        self.assertAlmostEqual(neutral['rotation'][2], 0, places=7)
+        self.assertAlmostEqual(neutral['position'][2], 0, places=7)
+
+    def test_proximity_accepts_existing_hybrid_and_stepped_modes(self):
+        clock = Clock()
+        config = default_config()
+        config['controls']['smoothing_ms'] = 0
+        hybrid = dict(config['controls']['mappings'][0])
+        hybrid.update(input='torso_scale', output='rotation_yaw', invert=False)
+        stepped = next(dict(m) for m in config['controls']['mappings'] if m['mode']=='stepped')
+        stepped.update(input='left_hand_scale', transition_ms=0, scale=1)
+        config['controls']['mappings'] = [hybrid, stepped]
+        system = create_control_system(config, clock)
+        far = system.process_input({'torso':{'detected':True, 'scale':.5},
+                                    'left_hand':{'detected':True, 'scale':0}})
+        clock.advance(.05)
+        near = system.process_input({'torso':{'detected':True, 'scale':1},
+                                     'left_hand':{'detected':True, 'scale':1}})
+        self.assertGreater(near['rotation'][0], far['rotation'][0])
+        self.assertEqual(far['scale'], stepped['small_scale'])
+        self.assertEqual(near['scale'], stepped['large_scale'])
 
 
 if __name__ == "__main__":

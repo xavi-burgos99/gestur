@@ -52,14 +52,14 @@ def portal_ready():
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     for _ in range(30):
         try:
-            with opener.open('http://127.0.0.1:3000/api/session', timeout=2) as response:
+            with opener.open('http://127.0.0.1/api/session', timeout=2) as response:
                 body = json.load(response)
-                if response.status == 200 and isinstance(body.get('authenticated'), bool):
+                if response.status == 200 and isinstance(body, dict) and isinstance(body.get('authenticated'), bool):
                     return
         except (OSError, ValueError):
             pass
         time.sleep(1)
-    raise RuntimeError('El portal no responde en el puerto 3000; la instalación sigue pendiente.')
+    raise RuntimeError('El portal no responde en el puerto 80; la instalación sigue pendiente.')
 
 
 def atomic_json(path, content):

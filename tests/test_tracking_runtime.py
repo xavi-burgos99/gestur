@@ -293,18 +293,46 @@ def test_idle_probe_is_bounded_and_empty_capture_keeps_no_phantom_detection(monk
     assert not tracker.get_current_data()['head']['detected']
 
 
+@pytest.mark.parametrize('parts,head_present,torso_present,idle', [
+    (('torso',), False, True, False),
+    (('head', 'torso'), False, True, False),
+    (('head',), False, True, True),
+    (('torso',), True, False, True),
+])
+def test_pose_idle_cadence_uses_only_parts_requested_by_controls(monkeypatch, parts, head_present, torso_present, idle):
+    import pose_detector
+    head, torso = empty_part(head=True), empty_part()
+    head.update(detected=head_present, x=.5, y=.4, scale=.3)
+    torso.update(detected=torso_present, x=.5, y=.6, scale=.6)
+    monkeypatch.setattr(pose_detector, 'pose_features', lambda *args: {'head':head, 'torso':torso})
+    tracker, _, _ = setup(monkeypatch, use_hands=False, pose_parts=parts, idle_after_seconds=0)
+    tracker.run()
+    try:
+        wait_until(lambda: tracker.get_metrics()['pose_frames'] >= 2)
+        metrics = tracker.get_metrics()
+        assert metrics['pose_idle'] is idle
+        assert metrics['pose_scheduled_fps'] == (3 if idle else 30)
+        assert tracker.get_current_data()['torso']['scale'] == (.6 if torso_present else None)
+    finally:
+        tracker.stop()
+
+
 def test_idle_hand_expiry_cannot_extend_head_detection():
     tracker = PoseHandTracker()
     tracker._expiry_timeouts = {'pose':.25,'hand':2/3}
-    for key in ('head','left_hand'):
+    for key in ('head', 'torso', 'left_hand'):
         sample = empty_part(head=key=='head',hand=key=='left_hand')
-        sample.update(detected=True,x=.5,y=.5)
+        sample.update(detected=True,x=.5,y=.5,scale=.7)
         tracker._filter.update(key,sample,0)
     assert tracker._expire_tracking(.3)
     assert not tracker._filter.data['head']['detected']
+    assert not tracker._filter.data['torso']['detected']
+    assert tracker._filter.data['torso']['scale'] is None
     assert tracker._filter.data['left_hand']['detected']
+    assert tracker._filter.data['left_hand']['scale'] == .7
     assert not tracker._expire_tracking(.4)
     assert tracker._expire_tracking(.7)
+    assert tracker._filter.data['left_hand']['scale'] is None
 
 
 def test_fast_hand_cycle_cannot_shorten_expiry_of_budget_limited_head():
@@ -321,7 +349,8 @@ def test_fast_hand_cycle_cannot_shorten_expiry_of_budget_limited_head():
 @pytest.mark.parametrize('kwargs',[{'inference_fps':0},{'width':0},{'hand_fps':float('nan')},
                                     {'visibility_threshold':2},{'head_scale_min':1,'head_scale_max':0},
                                     {'inference_duty':0},{'inference_duty':1.1},{'idle_fps':0},
-                                    {'idle_after_seconds':-1},{'idle_after_seconds':float('nan')}])
+                                    {'idle_after_seconds':-1},{'idle_after_seconds':float('nan')},
+                                    {'pose_parts':()}, {'pose_parts':'torso'}, {'pose_parts':('feet',)}])
 def test_invalid_configuration_fails_before_allocating_resources(kwargs):
     with pytest.raises(ValueError):
         PoseHandTracker(**kwargs)

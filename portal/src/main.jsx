@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   MantineProvider,
@@ -136,82 +136,179 @@ function SectionTitle({ eyebrow, title, description, action }) {
     </Group>
   );
 }
-function ModelArt({ builtin }) {
+const formatCount = (value) => new Intl.NumberFormat("es-ES").format(value);
+const importFormats =
+  ".zip,.glb,.gltf,.obj,.fbx,.stl,.ply,.dae,.3ds,.off,.x,.lwo,.ase,.dxf,.ac,.ms3d,.cob,.b3d";
+
+function ModelArt() {
   return (
-    <div
-      className={`model-art ${builtin ? "stone" : "digital"}`}
-      aria-hidden="true"
-    >
-      {builtin ? (
-        <svg viewBox="0 0 260 180">
-          <defs>
-            <linearGradient id="stone" x2="1" y2="1">
-              <stop stopColor="#c2baad" />
-              <stop offset="1" stopColor="#8d8b80" />
-            </linearGradient>
-          </defs>
-          <ellipse
-            cx="130"
-            cy="159"
-            rx="61"
-            ry="8"
-            fill="#45534a"
-            opacity=".1"
-          />
-          <path d="M87 58 155 39 183 53 116 74Z" fill="#d3ccbf" />
-          <path d="M87 58 116 74 116 91 88 75Z" fill="#9b9b8c" />
-          <path d="M116 74 183 53 181 73 116 91Z" fill="#b8b3a4" />
-          <path d="m97 80 19 11 58-18-12 44-43 14-17-11Z" fill="url(#stone)" />
-          <path d="m105 120 14 11 43-14v26l-44 15-14-9Z" fill="#ada898" />
-          <path d="m119 131 43-14v26l-44 15Z" fill="#98998b" />
-          <g fill="none" stroke="#e0d9c9" strokeWidth="3">
-            <path d="m105 89 5 24 9 9 6-19 5-12 7 23 8-26 9 18 11-26" />
-            <path d="m111 141 7 6 35-12" />
-          </g>
-        </svg>
-      ) : (
-        <IconCube size={76} stroke={1} />
-      )}
+    <div className="model-art digital" aria-hidden="true">
+      <IconCube size={76} stroke={1} />
     </div>
+  );
+}
+function ImportButton({ upload, disabled, loading, variant, fullWidth }) {
+  const resetRef = useRef(null);
+  return (
+    <FileButton
+      onChange={(file) => {
+        upload(file);
+        resetRef.current?.();
+      }}
+      accept={importFormats}
+      resetRef={resetRef}
+      disabled={disabled}
+    >
+      {(props) => (
+        <Button
+          {...props}
+          leftSection={<IconUpload size={18} />}
+          disabled={disabled}
+          loading={loading}
+          variant={variant}
+          fullWidth={fullWidth}
+        >
+          Subir modelo
+        </Button>
+      )}
+    </FileButton>
+  );
+}
+function ImportWarnings({ warnings = [] }) {
+  if (!warnings.length) return null;
+  return (
+    <details className="import-warnings">
+      <summary>
+        {warnings.length === 1
+          ? "1 detalle de la importación"
+          : `${warnings.length} detalles de la importación`}
+      </summary>
+      <ul>
+        {warnings.map((warning, index) => (
+          <li key={index}>{warning}</li>
+        ))}
+      </ul>
+    </details>
   );
 }
 function Models({ config, setConfig, notify }) {
   const [runtime, setRuntime] = useState({ online: false });
   useEffect(() => {
+    let stopped = false;
     const poll = () =>
       api("runtime")
-        .then(setRuntime)
-        .catch(() => setRuntime({ online: false }));
+        .then((data) => !stopped && setRuntime(data))
+        .catch(() => !stopped && setRuntime({ online: false }));
     poll();
     const timer = setInterval(poll, 3000);
-    return () => clearInterval(timer);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
   }, []);
   const [models, setModels] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const load = () => {
+  const [job, setJob] = useState(null);
+  const [restoring, setRestoring] = useState(true);
+  const [jobError, setJobError] = useState("");
+  const [decisionError, setDecisionError] = useState("");
+  const [deciding, setDeciding] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const importRevision = useRef(0);
+  const importMutating = useRef(false);
+  const completedJob = useRef(null);
+  const dragDepth = useRef(0);
+  const pending = ["processing", "awaiting_decision"].includes(job?.state);
+  const importDisabled = restoring || uploading || pending;
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    api("models")
-      .then((d) => setModels(d.models))
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  };
-  useEffect(load, []);
+    try {
+      const data = await api("models");
+      setModels(data.models);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+  useEffect(() => {
+    let stopped = false;
+    let timer;
+    async function poll() {
+      const revision = importRevision.current;
+      try {
+        if (!importMutating.current) {
+          const data = await api("imports/current");
+          if (!stopped && revision === importRevision.current) {
+            setJob(data.job);
+            setJobError("");
+          }
+        }
+      } catch (e) {
+        if (!stopped && revision === importRevision.current)
+          setJobError(e.message);
+      } finally {
+        if (!stopped) {
+          setRestoring(false);
+          timer = setTimeout(poll, 2000);
+        }
+      }
+    }
+    poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, []);
+  useEffect(() => {
+    if (job?.state === "completed" && completedJob.current !== job.id) {
+      completedJob.current = job.id;
+      load();
+    }
+  }, [job?.id, job?.state, load]);
   async function upload(file) {
-    if (!file) return;
-    setBusy(true);
+    if (!file || importDisabled || importMutating.current) return;
+    importRevision.current += 1;
+    importMutating.current = true;
+    setUploading(true);
+    setDecisionError("");
+    setJobError("");
     try {
       const form = new FormData();
       form.append("file", file);
-      await api("models", { method: "POST", body: form });
-      notify("Modelo importado. Ya puedes activarlo.");
-      load();
+      const data = await api("models", { method: "POST", body: form });
+      setJob(data.job);
     } catch (e) {
       notify(e.message, true);
     } finally {
-      setBusy(false);
+      importMutating.current = false;
+      setUploading(false);
+    }
+  }
+  async function decide(simplify) {
+    if (!job || importMutating.current) return;
+    importRevision.current += 1;
+    importMutating.current = true;
+    setDeciding(simplify);
+    setDecisionError("");
+    try {
+      const data = await api(`imports/${job.id}/decision`, {
+        method: "POST",
+        body: { simplify },
+      });
+      setJob(data.job);
+    } catch (e) {
+      setDecisionError(e.message);
+    } finally {
+      importMutating.current = false;
+      setDeciding(null);
     }
   }
   async function activate(id) {
@@ -223,7 +320,9 @@ function Models({ config, setConfig, notify }) {
       });
       setConfig(result.config);
       notify(
-        "Selección guardada. El visualizador intentará cargar el modelo en unos segundos.",
+        id
+          ? "Selección guardada. El visualizador cargará el modelo en unos segundos."
+          : "La pantalla de bienvenida se mostrará en el dispositivo.",
       );
     } catch (e) {
       notify(e.message, true);
@@ -231,24 +330,35 @@ function Models({ config, setConfig, notify }) {
       setBusy(false);
     }
   }
+  function drop(event) {
+    event.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+    if (importDisabled) return;
+    const files = [...event.dataTransfer.files];
+    if (files.length !== 1) {
+      notify(
+        "Sube un modelo cada vez. Si tiene varios archivos, júntalos en un ZIP.",
+        true,
+      );
+      return;
+    }
+    upload(files[0]);
+  }
+  const proposal = job?.proposal;
+  const empty = !loading && !error && models.length === 0;
   return (
     <>
       <SectionTitle
         eyebrow="TU COLECCIÓN"
         title="Modelos 3D"
-        description="Elige la pieza que responde a tus movimientos."
+        description="Tus piezas, listas para responder a cada movimiento."
         action={
-          <FileButton onChange={upload} accept=".zip,application/zip">
-            {(props) => (
-              <Button
-                {...props}
-                leftSection={<IconUpload size={18} />}
-                loading={busy}
-              >
-                Importar modelo
-              </Button>
-            )}
-          </FileButton>
+          <ImportButton
+            upload={upload}
+            disabled={importDisabled}
+            loading={uploading}
+          />
         }
       />
       <Alert
@@ -265,10 +375,89 @@ function Models({ config, setConfig, notify }) {
         {runtime.online
           ? runtime.error ||
             (runtime.rendered_model === config.active_model
-              ? "El modelo seleccionado se está mostrando en el dispositivo."
+              ? config.active_model
+                ? "El modelo seleccionado se está mostrando en el dispositivo."
+                : "El dispositivo muestra la bienvenida con el QR de este portal."
               : "El visor está aplicando la selección.")
           : "Puedes guardar cambios. Se aplicarán cuando el visualizador esté en marcha."}
       </Alert>
+      {jobError && (
+        <Alert
+          color="yellow"
+          mb="lg"
+          title="Reconectando con la importación"
+          role="status"
+        >
+          {jobError} Si ya había una importación en marcha, continúa en el
+          dispositivo. Volveremos a comprobar su estado automáticamente.
+        </Alert>
+      )}
+      {uploading && (
+        <Paper withBorder p="lg" mb="xl" role="status">
+          <Group wrap="nowrap">
+            <Loader size="sm" />
+            <div>
+              <Text fw={600}>Enviando tu archivo</Text>
+              <Text size="sm" c="dimmed">
+                Mantén esta página abierta hasta que termine la subida.
+              </Text>
+            </div>
+          </Group>
+        </Paper>
+      )}
+      {job && !uploading && (
+        <Paper
+          withBorder
+          p="lg"
+          mb="xl"
+          className={`import-status ${job.state}`}
+          role="status"
+          aria-live="polite"
+        >
+          <Group wrap="nowrap" align="flex-start">
+            {job.state === "processing" ? (
+              <Loader size="sm" mt={3} />
+            ) : (
+              <ThemeIcon
+                variant="light"
+                color={job.state === "failed" ? "red" : "teal"}
+                radius="xl"
+              >
+                {job.state === "failed" ? (
+                  <IconAlertCircle size={18} />
+                ) : job.state === "completed" ? (
+                  <IconCheck size={18} />
+                ) : (
+                  <IconCube size={18} />
+                )}
+              </ThemeIcon>
+            )}
+            <div className="import-status-copy">
+              <Text fw={600}>
+                {job.state === "completed"
+                  ? `Modelo preparado: ${job.model?.name || "Nueva pieza"}`
+                  : job.state === "failed"
+                    ? "No se pudo importar el modelo"
+                    : job.state === "awaiting_decision"
+                      ? "Tu modelo tiene muchos triángulos"
+                      : "Preparando tu modelo"}
+              </Text>
+              <Text size="sm" c="dimmed" mt={3}>
+                {job.state === "failed"
+                  ? job.error || job.message
+                  : job.message}
+              </Text>
+              {job.state === "processing" && (
+                <Text size="sm" c="dimmed" mt={5}>
+                  La Raspberry Pi está trabajando. Puede tardar varios minutos;
+                  puedes salir y volver a esta página.
+                </Text>
+              )}
+              <ImportWarnings warnings={job.warnings} />
+            </div>
+          </Group>
+        </Paper>
+      )}
       {error && (
         <Alert color="red" mb="lg" title="No se pudo cargar la colección">
           {error}
@@ -278,89 +467,299 @@ function Models({ config, setConfig, notify }) {
         </Alert>
       )}
       {loading ? (
-        <Loader />
+        <Loader aria-label="Cargando modelos" />
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="xl">
-          {models.map((model) => (
+        <div
+          onDragEnter={(event) => {
+            event.preventDefault();
+            if ([...event.dataTransfer.types].includes("Files")) {
+              dragDepth.current += 1;
+              if (!importDisabled) setDragging(true);
+            }
+          }}
+          onDragLeave={(event) => {
+            event.preventDefault();
+            dragDepth.current = Math.max(0, dragDepth.current - 1);
+            if (!dragDepth.current) setDragging(false);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = importDisabled ? "none" : "copy";
+          }}
+          onDrop={drop}
+          className={`collection-drop-area ${dragging ? "dragging" : ""}`}
+        >
+          {dragging && (
+            <div className="drop-overlay" aria-hidden="true">
+              Suelta tu modelo aquí
+            </div>
+          )}
+          {empty ? (
             <Paper
-              className={`model-card ${config.active_model === model.id ? "selected" : ""}`}
-              key={model.id}
               withBorder
+              className="empty-collection"
+              p={{ base: "xl", sm: 44 }}
             >
-              <ModelArt builtin={model.builtin} />
-              <Stack p="xl" gap="md">
-                <Group justify="space-between">
-                  <Title order={3}>{model.name}</Title>
-                  <Badge
-                    variant="light"
-                    color={config.active_model === model.id ? "teal" : "gray"}
-                  >
-                    {runtime.online && runtime.rendered_model === model.id
-                      ? "En pantalla"
-                      : config.active_model === model.id
-                        ? "Seleccionado"
-                        : model.format}
-                  </Badge>
-                </Group>
-                <Text c="dimmed" size="sm">
-                  {model.builtin
-                    ? "Colección original · Siempre disponible"
-                    : `${model.format} · ${(model.size / 1024 / 1024).toFixed(1)} MB`}
+              <div className="empty-model-art" aria-hidden="true">
+                <svg viewBox="0 0 160 180" fill="none">
+                  <ellipse
+                    cx="80"
+                    cy="154"
+                    rx="49"
+                    ry="8"
+                    fill="#173f35"
+                    opacity=".07"
+                  />
+                  <path d="M80 19 131 49v63l-51 30-51-30V49Z" fill="#d4e4df" />
+                  <path d="m80 19 51 30-51 31-51-31Z" fill="#e9f1ed" />
+                  <path d="M80 80v62l51-30V49Z" fill="#8fb7a8" />
+                  <path
+                    d="M80 19 29 49v63l51 30 51-30V49Z"
+                    stroke="#7a9e8e"
+                    strokeWidth="1.5"
+                  />
+                  <path
+                    d="m29 49 51 31 51-31M80 80v62"
+                    stroke="#7a9e8e"
+                    strokeWidth="1.5"
+                  />
+                </svg>
+              </div>
+              <div className="empty-collection-copy">
+                <Text className="eyebrow">TODO EMPIEZA CON UNA PIEZA</Text>
+                <Title order={2}>Tu primera pieza va aquí</Title>
+                <Text c="dimmed" mt="sm" maw={470}>
+                  La colección está vacía. Sube un modelo 3D o arrástralo aquí y
+                  Gestur lo preparará para el visualizador.
                 </Text>
-                <Button
-                  fullWidth
-                  variant={
-                    config.active_model === model.id ? "light" : "default"
-                  }
-                  leftSection={
-                    config.active_model === model.id ? (
-                      <IconCheck size={17} />
-                    ) : (
-                      <IconArrowUpRight size={17} />
-                    )
-                  }
-                  disabled={busy || config.active_model === model.id}
-                  onClick={() => activate(model.id)}
-                >
-                  {config.active_model === model.id
-                    ? "Modelo seleccionado"
-                    : "Mostrar en pantalla"}
-                </Button>
-              </Stack>
+                <Group mt="xl">
+                  <ImportButton
+                    upload={upload}
+                    disabled={importDisabled}
+                    loading={uploading}
+                  />
+                  <Text size="xs" c="dimmed">
+                    Archivo 3D o ZIP · Hasta 100 MB
+                  </Text>
+                </Group>
+              </div>
             </Paper>
-          ))}
-          <Paper className="import-guide" p="xl" withBorder>
-            <ThemeIcon variant="light" size={48} radius="xl">
-              <IconUpload size={24} />
-            </ThemeIcon>
-            <Title order={3} mt="xl">
-              Una nueva perspectiva
-            </Title>
-            <Text c="dimmed" mt="sm" size="sm">
-              Sube un ZIP con un único modelo OBJ, glTF o GLB. Incluye sus
-              materiales y texturas en las carpetas originales.
-            </Text>
-            <Divider my="lg" />
-            <Text size="xs" c="dimmed">
-              Hasta 100 MB por ZIP · 250 MB al descomprimir · 500 archivos
-            </Text>
-          </Paper>
-        </SimpleGrid>
+          ) : (
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="xl">
+              {models.map((model) => (
+                <Paper
+                  className={`model-card ${config.active_model === model.id ? "selected" : ""}`}
+                  key={model.id}
+                  withBorder
+                >
+                  <ModelArt />
+                  <Stack p="xl" gap="md">
+                    <Group
+                      justify="space-between"
+                      align="flex-start"
+                      wrap="nowrap"
+                    >
+                      <Title order={3} className="model-name">
+                        {model.name}
+                      </Title>
+                      <Badge
+                        variant="light"
+                        color={
+                          config.active_model === model.id ? "teal" : "gray"
+                        }
+                        className="model-badge"
+                      >
+                        {runtime.online && runtime.rendered_model === model.id
+                          ? "En pantalla"
+                          : config.active_model === model.id
+                            ? "Seleccionado"
+                            : model.sourceFormat || model.format}
+                      </Badge>
+                    </Group>
+                    <Text c="dimmed" size="sm">
+                      {model.triangles != null &&
+                        `${formatCount(model.triangles)} triángulos · `}
+                      {(model.size / 1024 / 1024).toFixed(1)} MB
+                    </Text>
+                    <ImportWarnings warnings={model.warnings} />
+                    <Button
+                      fullWidth
+                      variant={
+                        config.active_model === model.id ? "light" : "default"
+                      }
+                      leftSection={
+                        config.active_model === model.id ? (
+                          <IconCheck size={17} />
+                        ) : (
+                          <IconArrowUpRight size={17} />
+                        )
+                      }
+                      disabled={busy || config.active_model === model.id}
+                      onClick={() => activate(model.id)}
+                    >
+                      {config.active_model === model.id
+                        ? "Modelo seleccionado"
+                        : "Mostrar en pantalla"}
+                    </Button>
+                  </Stack>
+                </Paper>
+              ))}
+              {!error && (
+                <Paper className="import-guide" p="xl" withBorder>
+                  <ThemeIcon variant="light" size={48} radius="xl">
+                    <IconUpload size={24} />
+                  </ThemeIcon>
+                  <Title order={3} mt="xl">
+                    Suma una nueva pieza
+                  </Title>
+                  <Text c="dimmed" mt="sm" mb="xl" size="sm">
+                    Arrastra aquí un archivo 3D o un ZIP con el modelo y sus
+                    texturas.
+                  </Text>
+                  <ImportButton
+                    upload={upload}
+                    disabled={importDisabled}
+                    loading={uploading}
+                    variant="light"
+                    fullWidth
+                  />
+                </Paper>
+              )}
+            </SimpleGrid>
+          )}
+        </div>
       )}
-      <Paper className="note-panel" mt={28} p="lg">
+      <Paper withBorder mt="xl" p="lg">
         <Group wrap="nowrap" align="flex-start">
-          <IconDeviceDesktop size={23} />
+          <ThemeIcon variant="light" radius="xl">
+            <IconUpload size={19} />
+          </ThemeIcon>
           <div>
             <Text fw={600} size="sm">
-              Tu modelo, en movimiento
+              Un archivo, y nos encargamos del resto
             </Text>
-            <Text size="sm" c="dimmed">
-              La selección se guarda en el dispositivo. Los cambios de gestos y
-              sensibilidad se ajustan en Parámetros.
+            <Text size="sm" c="dimmed" mt={4}>
+              GLB, glTF, OBJ, FBX, STL, PLY, COLLADA y más. Si hay texturas o
+              archivos auxiliares, inclúyelos en un ZIP junto al modelo. Gestur
+              convierte el modelo y busca sus texturas aunque las rutas hayan
+              cambiado.
+            </Text>
+            <Text size="xs" c="dimmed" mt={8}>
+              Si una textura falta o hay varias posibles, te avisaremos. Hasta
+              100 MB por subida · 250 MB al descomprimir · 500 archivos.
             </Text>
           </div>
         </Group>
       </Paper>
+      <Paper className="note-panel" mt="lg" p="lg">
+        <Group justify="space-between" align="center">
+          <Group wrap="nowrap" align="flex-start" className="welcome-note">
+            <IconDeviceDesktop size={23} className="fixed-icon" />
+            <div>
+              <Text fw={600} size="sm">
+                {config.active_model
+                  ? "Elige qué muestra tu dispositivo"
+                  : "Tu dispositivo está listo para empezar"}
+              </Text>
+              <Text size="sm" c="dimmed">
+                Sin un modelo seleccionado, el visualizador muestra una figura
+                3D y un QR para abrir este portal.
+              </Text>
+            </div>
+          </Group>
+          {config.active_model && (
+            <Button
+              variant="white"
+              disabled={busy}
+              onClick={() => activate(null)}
+              leftSection={<IconDeviceDesktop size={17} />}
+            >
+              Mostrar bienvenida
+            </Button>
+          )}
+        </Group>
+      </Paper>
+      <Modal
+        opened={job?.state === "awaiting_decision" && !!proposal}
+        onClose={() => {}}
+        withCloseButton={false}
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+        title="¿Hacemos tu modelo más ligero?"
+        centered
+        size="lg"
+      >
+        {proposal && (
+          <Stack gap="lg">
+            <Text size="sm" c="dimmed">
+              Hemos detectado un número muy elevado de triángulos. Reducirlos
+              puede ayudar a que el movimiento sea más fluido en la Raspberry
+              Pi.
+            </Text>
+            <div className="simplify-comparison">
+              <div>
+                <Text size="xs" c="dimmed" fw={600}>
+                  MODELO ACTUAL
+                </Text>
+                <Text className="triangle-count">
+                  {formatCount(proposal.originalTriangles)}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  triángulos
+                </Text>
+              </div>
+              <IconArrowRight
+                size={24}
+                className="simplify-arrow"
+                aria-hidden="true"
+              />
+              <div>
+                <Text size="xs" c="dimmed" fw={600}>
+                  TRAS REDUCIR, APROX.
+                </Text>
+                <Text className="triangle-count reduced">
+                  {formatCount(proposal.targetTriangles)}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  triángulos
+                </Text>
+              </div>
+            </div>
+            <Badge size="lg" variant="light">
+              {formatCount(proposal.reductionPercent)} % menos triángulos
+            </Badge>
+            <Text size="sm">
+              La Raspberry Pi realizará la reducción; puede tardar varios
+              minutos. La simplificación puede cambiar algunos detalles de la
+              geometría.
+            </Text>
+            <ImportWarnings warnings={job.warnings} />
+            {decisionError && (
+              <Alert color="red" title="No se pudo guardar la decisión">
+                {decisionError}
+              </Alert>
+            )}
+            <div className="simplify-actions">
+              <Button
+                variant="default"
+                onClick={() => decide(false)}
+                loading={deciding === false}
+                disabled={deciding !== null}
+              >
+                Continuar sin simplificar
+              </Button>
+              <Button
+                onClick={() => decide(true)}
+                loading={deciding === true}
+                disabled={deciding !== null}
+                leftSection={<IconBolt size={17} />}
+              >
+                Reducir polígonos
+              </Button>
+            </div>
+          </Stack>
+        )}
+      </Modal>
     </>
   );
 }

@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createStore, ApiError, atomicJson } from "./store.mjs";
-import { importModel } from "./models.mjs";
+import { createImporter } from "./models.mjs";
 import { systemWifi, validateWifi } from "./wifi.mjs";
 
 export async function createApp(options) {
@@ -29,7 +29,8 @@ export async function createApp(options) {
   const timers = new Set();
   const jobFile = path.join(path.dirname(configPath), "wifi-job.json");
   let job = null;
-  let importing = false;
+  const importer = await createImporter(options);
+  let receivingUpload = false;
   try {
     job = JSON.parse(await readFile(jobFile, "utf8"));
   } catch {}
@@ -170,33 +171,48 @@ export async function createApp(options) {
     models: await store.listModels(),
     active: (await store.read()).active_model,
   }));
-  app.post("/api/models", async (request) => {
-    if (importing)
-      throw new ApiError(
-        409,
-        "Ya se está importando un modelo. Espera a que termine.",
-      );
-    importing = true;
+  app.post("/api/models", async (request, reply) => {
+    if (
+      receivingUpload ||
+      ["processing", "awaiting_decision"].includes(importer.current()?.state)
+    )
+      throw new ApiError(409, "Ya se está recibiendo otro archivo.");
+    receivingUpload = true;
     try {
       const upload = await request.file();
-      if (!upload) throw new ApiError(400, "Selecciona un ZIP.");
+      if (!upload) throw new ApiError(400, "Selecciona un modelo o un ZIP.");
       const buffer = await upload.toBuffer();
       if (upload.file.truncated)
-        throw new ApiError(413, "El ZIP supera los 100 MB.");
-      return {
-        model: await importModel(
-          buffer,
-          upload.filename,
-          modelsDir,
-          options.modelChecker,
-        ),
-      };
+        throw new ApiError(413, "El archivo supera los 100 MB.");
+      const job = await importer.start(buffer, upload.filename);
+      return reply.code(202).send({ job });
     } finally {
-      importing = false;
+      receivingUpload = false;
     }
   });
+  app.get("/api/imports/current", async () => ({ job: importer.current() }));
+  app.get("/api/imports/:id", async (request) => ({
+    job: importer.get(request.params.id),
+  }));
+  app.post("/api/imports/:id/decision", async (request, reply) => {
+    if (
+      !request.body ||
+      Object.keys(request.body).length !== 1 ||
+      typeof request.body.simplify !== "boolean"
+    )
+      throw new ApiError(
+        400,
+        "Elige reducir los polígonos o continuar sin simplificar.",
+      );
+    return reply.code(202).send({
+      job: await importer.decide(request.params.id, request.body.simplify),
+    });
+  });
   app.put("/api/models/active", async (request) => {
-    if (!request.body || typeof request.body.id !== "string")
+    if (
+      !request.body ||
+      (request.body.id !== null && typeof request.body.id !== "string")
+    )
       throw new ApiError(400, "Selecciona un modelo.");
     return {
       config: await store.update((current) => ({
@@ -251,6 +267,7 @@ export async function createApp(options) {
   });
   app.addHook("onClose", async () => {
     for (const timer of timers) clearTimeout(timer);
+    await importer.close();
   });
   return app;
 }

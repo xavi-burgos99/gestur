@@ -4,9 +4,9 @@ El portal utiliza React 19, Mantine 9 (componentes accesibles), Vite y Fastify 5
 
 ## Instalación
 
-En la rama del portal, `sudo ./gestur.sh install` instala también el servicio. El hook separado es `sudo bash /opt/gestur/scripts/install-portal.sh /opt/gestur`; requiere que el instalador principal haya creado el usuario `gestur`, su entorno Python y los modelos. Raspberry Pi OS de 64 bits con NetworkManager; configura el país WLAN con Raspberry Pi Imager o `sudo raspi-config` antes de instalar.
+En la rama del portal, `sudo ./gestur.sh install` instala también el servicio. El hook separado es `sudo bash /opt/gestur/scripts/install-portal.sh /opt/gestur`; requiere que el instalador principal haya creado el usuario `gestur`, su entorno Python y los modelos de reconocimiento. Raspberry Pi OS de 64 bits con NetworkManager; configura el país WLAN con Raspberry Pi Imager o `sudo raspi-config` antes de instalar.
 
-El hook instala Node 22.23.3 ARM64/x64 desde nodejs.org y verifica su archivo con el manifiesto SHA-256 oficial si no hay Node >=22.12. El runtime privado vive en `/opt/gestur-node`, sin sustituir archivos de paquetes del sistema. `npm ci`, compilación y poda de dependencias se ejecutan como usuario sin privilegios. El código y el helper privilegiado quedan propiedad de root. Los datos permanecen en `/var/lib/gestur` al reinstalar.
+El hook instala Assimp y bubblewrap desde la distribución, y comprueba el aislamiento del conversor con el usuario del servicio. Después de la compilación y la poda de dependencias, `scripts/check-importer.mjs` verifica el motor de simplificación, la conversión de imágenes y un modelo real con Assimp/Panda3D. También habilita mDNS para el enlace de respaldo `<hostname>.local`. También instala Node 22.23.3 ARM64/x64 desde nodejs.org y verifica su archivo con el manifiesto SHA-256 oficial si no hay Node >=22.12. El runtime privado vive en `/opt/gestur-node`, sin sustituir archivos de paquetes del sistema. `npm ci`, compilación y poda de dependencias se ejecutan como usuario sin privilegios. El código y el helper privilegiado quedan propiedad de root. Los datos permanecen en `/var/lib/gestur` al reinstalar.
 
 El servicio `gestur-portal` escucha en el puerto 3000. Para una instalación nueva, conéctate a **GESTUR-XXXX**, donde XXXX son los últimos cuatro dígitos de la MAC permanente de `wlan0`, y abre **http://10.42.0.1:3000**. La red es abierta por defecto. Si ya había un único perfil AP en `wlan0`, se conserva su SSID, contraseña y configuración IP; utiliza la IP de ese perfil. Si hay varios, el instalador se detiene para que el administrador elija el UUID en `/etc/gestur/wifi-profile.json` (objeto `{"uuid":"UUID","interface":"wlan0"}` propiedad root y modo 0600).
 
@@ -14,11 +14,28 @@ La clave de administración independiente se genera una sola vez y se muestra al
 
 ## Modelos 3D
 
-**Capitel** (`capitell.obj`) permanece siempre disponible y no puede borrarse desde el portal. Importa un ZIP que contenga **exactamente una** entrada `.obj`, `.gltf` o `.glb`, junto a sus archivos MTL, BIN y texturas. Para OBJ, usa una biblioteca MTL por directiva `mtllib`; se admiten las opciones de textura Wavefront habituales. Se conservan subcarpetas y nombres con espacios; los componentes del camino al modelo deben empezar por letra o número y usar caracteres ASCII: letras, números, guiones, puntos, espacios y guiones bajos.
+La biblioteca está **vacía** en instalaciones nuevas. No se distribuyen el capitel ni modelos de ejemplo. El expositor muestra una figura 3D procedural con el texto «Escanea el QR para comenzar» y el enlace al portal. El QR se genera localmente; usa la IP del punto de acceso o la red local y no contiene la clave de administración. `GESTUR_PORTAL_URL` permite establecer una dirección alternativa. La antigua selección del capitel se migra a la bienvenida; las importaciones del usuario se conservan.
 
-Límites: 100 MiB comprimidos, 250 MiB descomprimidos, 500 entradas y ratio de expansión máximo 100× por archivo (con margen de 1 MiB para archivos pequeños). Se rechazan enlaces, rutas absolutas o que salgan del ZIP, nombres duplicados sin distinguir mayúsculas y ZIP cifrados. Los recursos deben estar dentro del paquete; glTF puede incluir URI `data:`. El modelo se carga además con el mismo motor 3D en un subproceso sin ventana/cámara, con límite de tiempo; una importación fallida elimina sus temporales y no modifica la selección.
+### Subir un modelo
 
-Los paquetes se guardan en `/var/lib/gestur/models/<uuid>/` con metadatos `.gestur-model.json`. La selección persistente es `<uuid>/<entrada>`; el modelo original sigue siendo `capitell.obj`. El portal distingue **Seleccionado** de **En pantalla** consultando el estado real del visualizador cada tres segundos; a los diez segundos sin actualización muestra el visor desconectado. Los errores de carga se muestran sin inventar un renderizado correcto.
+Sube un archivo directamente cuando contenga todo lo necesario (por ejemplo GLB, STL o PLY), o un **ZIP con un único modelo principal** y sus materiales, texturas y archivos BIN. Se admiten GLB, glTF, OBJ, FBX, DAE/Collada, STL, PLY, 3DS, OFF, DirectX X, LWO, ASE, DXF, AC, MS3D, COB y B3D. El soporte concreto depende del lector de Assimp instalado y del contenido del archivo; formatos propietarios, extensiones glTF y shaders específicos de un programa pueden requerir exportar de nuevo desde ese programa. No se promete conservar animaciones ni reproducir motores de materiales externos.
+
+La importación busca recursos **solo dentro del paquete**: normaliza separadores de Windows, rutas exportadas absolutas, URI codificadas y diferencias de mayúsculas; intenta recuperar referencias mediante coincidencias de carpeta y nombre de archivo. Los nombres Unicode están permitidos. Una coincidencia ambigua o un archivo ausente produce un aviso o un error que identifica el recurso; no se descargan texturas ni se inventan imágenes. Si faltan materiales, incluye el MTL y las texturas en el ZIP. Para varios modelos independientes, sube cada uno por separado.
+
+Assimp convierte el modelo; el portal reúne geometría, materiales y texturas en un GLB autocontenido y comprueba que Panda3D pueda cargarlo. El usuario ve el progreso mientras el dispositivo trabaja. Los procesos de conversión Linux se ejecutan con **bubblewrap**, sin acceso a la red ni a datos ajenos a la importación. Tienen límites de tiempo y recursos; no se ejecutan scripts incluidos en un modelo. Solo se publica una importación terminada y válida, por lo que un fallo no sustituye el modelo activo.
+
+### Simplificación opcional
+
+Solo si hay **más de 1.000.000 de triángulos**, el trabajo espera la decisión del usuario. El modal muestra el recuento actual, un objetivo fijo de **aproximadamente 500.000 triángulos** y el porcentaje de reducción. Esa referencia es similar a los 491.038 del capitel utilizado anteriormente. No hay deslizadores ni valores que configurar.
+
+- **Reducir e importar**: meshoptimizer reduce la malla localmente en la Raspberry Pi, conservando materiales y coordenadas UV; se valida de nuevo y se registra el recuento final. Para preservar bordes y limitar el error geométrico, algunas mallas pueden quedar por encima del objetivo; se muestra el recuento real y un aviso si la diferencia supera el 5 %.
+- **Continuar sin simplificar**: se publica el modelo convertido conservando su geometría.
+
+La reducción de mallas grandes puede tardar minutos. Solo hay una importación en curso; recargar el portal recupera su estado. Los trabajos interrumpidos por un reinicio se notifican como fallidos en lugar de darse por completados; una propuesta que ya esperaba confirmación puede recuperarse y responderse después del reinicio. El modelo activo no cambia hasta seleccionarlo en la colección. «Mostrar bienvenida» permite volver al QR sin borrar modelos.
+
+Límites de subida: 100 MiB por archivo, 250 MiB al descomprimir, 500 entradas y ratio de expansión máximo 100× por archivo (con margen de 1 MiB para archivos pequeños). Se rechazan enlaces, rutas que salgan del ZIP, nombres duplicados sin distinguir mayúsculas y ZIP cifrados. No se incluyen los temporales ni los datos de desarrollo en una instalación nueva.
+
+Los paquetes terminados se guardan en `/var/lib/gestur/models/<uuid>/` con metadatos `.gestur-model.json`. La selección persistente usa `<uuid>/model.glb` o `<uuid>/simplified.glb` al reducir; el original se conserva dentro del paquete. El portal distingue **Seleccionado** de **En pantalla** consultando el estado real del visualizador cada tres segundos; a los diez segundos sin actualización muestra el visor desconectado.
 
 ## Parámetros
 
@@ -49,7 +66,7 @@ GESTUR_PYTHON=/ruta/al/gestur/.venv/bin/python \
 HOST=127.0.0.1 npm start
 ```
 
-Abre http://127.0.0.1:3000. El validador usa `../scripts/check_model.py` y necesita el entorno Python del proyecto; no se sustituye por una aprobación simulada en desarrollo. En equipos sin el helper Linux, Configuración muestra «Wi-Fi no disponible». `npm run dev` inicia Vite en 5173 y delega `/api` al backend 3000.
+Abre http://127.0.0.1:3000. El validador usa `../scripts/check_model.py` y necesita el entorno Python del proyecto. Para importar también se requiere Assimp y la simplificación usa las dependencias Node del portal; no se sustituye por una aprobación simulada en desarrollo. En macOS instala Assimp para probar importaciones; el conversor se aísla con `sandbox-exec`. `GESTUR_ASSIMP` permite indicar la ruta del ejecutable. `GESTUR_PYTHON` debe apuntar al Python con los requisitos del visor. En equipos sin el helper Linux, Configuración muestra «Wi-Fi no disponible». `npm run dev` inicia Vite en 5173 y delega `/api` al backend 3000.
 
 ```bash
 python3 -m unittest discover -s portal/test -p 'test_*.py'
@@ -62,3 +79,5 @@ sudo journalctl -u gestur-portal -n 50
 Las pruebas API/ZIP y del helper usan directorios temporales y dobles de NetworkManager; no modifican el Wi-Fi del ordenador. La activación real y la reconexión deben verificarse en Raspberry Pi con NetworkManager y `wlan0`.
 
 Referencias técnicas: [Mantine + Vite](https://mantine.dev/guides/vite/), [Fastify](https://fastify.dev/docs/latest/), [NetworkManager Update/GetSecrets](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.Settings.Connection.html), [MAC permanente del dispositivo Wi-Fi](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.Device.Wireless.html).
+
+Referencias de importación: [formatos de Assimp](https://github.com/assimp/assimp/blob/master/doc/Fileformats.md), [simplificación con meshoptimizer](https://github.com/zeux/meshoptimizer#simplification).

@@ -6,7 +6,7 @@
   "required": ["schema_version", "active_model", "tracking", "render", "controls"],
   "properties": {
     "schema_version": {"type": "integer", "enum": [1]},
-    "active_model": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z0-9][A-Za-z0-9_. -]*(/[A-Za-z0-9][A-Za-z0-9_. -]*)*\\.(obj|gltf|glb)$"},
+    "active_model": {"type": ["string", "null"], "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z0-9][A-Za-z0-9_. -]*(/[A-Za-z0-9][A-Za-z0-9_. -]*)*\\.(obj|gltf|glb)$"},
     "tracking": {
       "type": "object", "additionalProperties": false,
       "required": ["use_pose", "use_hands", "inference_fps", "hand_fps", "camera_index", "width", "height", "mirror", "smoothing_ms"],

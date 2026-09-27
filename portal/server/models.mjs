@@ -1,42 +1,75 @@
-import { preflightModel } from "./model-check.mjs";
 import yauzl from "yauzl";
-import { mkdir, writeFile, readFile, rename, rm, stat } from "node:fs/promises";
+import {
+  mkdir,
+  writeFile,
+  readFile,
+  rename,
+  rm,
+  readdir,
+  stat,
+} from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { ApiError, validateGlb, atomicJson, resourceUris } from "./store.mjs";
+import { ApiError, atomicJson, validateGlb } from "./store.mjs";
+import { FORMATS, repairTextResources } from "./package-model.mjs";
+import { convertModel, simplifyModel } from "./native-model.mjs";
+import { preflightModel } from "./model-check.mjs";
+
+export const HIGH_TRIANGLES = 1000000;
+export const TARGET_TRIANGLES = 500000;
 const MAX_EXPANDED = 250 * 1024 * 1024;
 const MAX_FILES = 500;
 const fail = (message) => new ApiError(400, message);
-function safeName(name) {
+function safeName(raw) {
+  const name = raw.replaceAll("\\", "/").normalize("NFC");
   if (
     !name ||
-    name.length > 200 ||
-    name.includes("\\") ||
+    name.length > 240 ||
     name.startsWith("/") ||
     /[\x00-\x1f\x7f:]/.test(name) ||
-    name.split("/").some((s) => s === ".." || s === ".")
+    name
+      .split("/")
+      .some(
+        (part) =>
+          part === ".." || part === "." || (!part && !name.endsWith("/")),
+      )
   )
-    throw fail("El ZIP contiene una ruta no permitida.");
-  if (!/^[A-Za-z0-9_ .\-/]+$/.test(name))
-    throw fail(
-      "Usa nombres de archivo con letras sin acentos, números, espacios, guiones y puntos.",
-    );
+    throw fail("El paquete contiene una ruta no permitida.");
   return name;
 }
-async function unzip(buffer, destination) {
+export async function extractUpload(buffer, filename, destination) {
+  await mkdir(destination, { recursive: true, mode: 0o2770 });
+  if (!filename?.toLowerCase().endsWith(".zip")) {
+    const name = safeName(
+      path.posix.basename(filename?.replaceAll("\\", "/") || ""),
+    );
+    if (!FORMATS.has(path.extname(name).slice(1).toLowerCase()))
+      throw fail(
+        "Formato no admitido. Sube GLB, glTF, OBJ, FBX, STL, PLY, DAE, 3DS u otro formato compatible, o un ZIP con sus texturas.",
+      );
+    await writeFile(path.join(destination, name), buffer, {
+      flag: "wx",
+      mode: 0o660,
+    });
+    return { entrypoint: name, files: [name] };
+  }
   const zip = await new Promise((resolve, reject) =>
     yauzl.fromBuffer(
       buffer,
-      { lazyEntries: true, strictFileNames: true },
+      { lazyEntries: true, strictFileNames: false },
       (error, value) =>
         error ? reject(fail("No se ha podido abrir el ZIP.")) : resolve(value),
     ),
   );
-  const files = new Set();
-  let total = 0;
-  let count = 0;
+  const names = new Set(),
+    files = [];
+  let total = 0,
+    count = 0;
   await new Promise((resolve, reject) => {
+    let stopped = false;
     const stop = (error) => {
+      if (stopped) return;
+      stopped = true;
       zip.close();
       reject(error instanceof ApiError ? error : fail("El ZIP está dañado."));
     };
@@ -44,9 +77,11 @@ async function unzip(buffer, destination) {
     zip.on("end", resolve);
     zip.on("entry", (entry) => {
       (async () => {
-        const name = safeName(entry.fileName);
-        if (++count > MAX_FILES || files.has(name.toLowerCase()))
+        const name = safeName(entry.fileName),
+          key = name.toLocaleLowerCase("en-US");
+        if (++count > MAX_FILES || names.has(key))
           throw fail("El ZIP tiene demasiados archivos o nombres duplicados.");
+        names.add(key);
         const type = (entry.externalFileAttributes >>> 16) & 0xf000;
         if (
           ![0, 0x8000, 0x4000].includes(type) ||
@@ -70,14 +105,13 @@ async function unzip(buffer, destination) {
           zip.readEntry();
           return;
         }
-        files.add(name.toLowerCase());
         await mkdir(path.dirname(path.join(destination, name)), {
           recursive: true,
           mode: 0o2770,
         });
         const stream = await new Promise((res, rej) =>
-          zip.openReadStream(entry, (err, value) =>
-            err ? rej(err) : res(value),
+          zip.openReadStream(entry, (error, value) =>
+            error ? rej(error) : res(value),
           ),
         );
         const chunks = [];
@@ -94,140 +128,335 @@ async function unzip(buffer, destination) {
           flag: "wx",
           mode: 0o660,
         });
+        files.push(name);
         zip.readEntry();
       })().catch(stop);
     });
     zip.readEntry();
   });
-  return files;
-}
-async function resolveReference(root, source, uri) {
-  if (
-    typeof uri !== "string" ||
-    !uri ||
-    /[\x00-\x1f\x7f\\]/.test(uri) ||
-    uri.startsWith("/") ||
-    /^[a-z][a-z\d+.-]*:/i.test(uri)
-  )
-    throw fail("El modelo contiene una referencia externa o no permitida.");
-  let decoded;
-  try {
-    decoded = decodeURIComponent(uri);
-  } catch {
-    throw fail("Referencia no válida.");
-  }
-  const target = path.resolve(path.dirname(path.join(root, source)), decoded);
-  if (!target.startsWith(root + path.sep))
-    throw fail("El modelo intenta acceder fuera del paquete.");
-  try {
-    if (!(await stat(target)).isFile()) throw new Error();
-  } catch {
-    throw fail(`Falta un archivo del modelo: ${uri}`);
-  }
-  return path.relative(root, target);
-}
-async function validateEntrypoint(root, entrypoint) {
-  if (entrypoint.endsWith(".glb")) {
-    validateGlb(await readFile(path.join(root, entrypoint)));
-    return;
-  }
-  if (entrypoint.endsWith(".gltf")) {
-    let doc;
-    try {
-      doc = JSON.parse(await readFile(path.join(root, entrypoint), "utf8"));
-    } catch {
-      throw fail("El glTF no contiene JSON válido.");
-    }
-    if (doc.asset?.version !== "2.0") throw fail("Solo se admite glTF 2.0.");
-    for (const uri of resourceUris(doc))
-      if (!uri.startsWith("data:"))
-        await resolveReference(root, entrypoint, uri);
-    return;
-  }
-  const obj = await readFile(path.join(root, entrypoint), "utf8");
-  if (
-    !/^[ \t]*v[ \t]+[-+.\d]/m.test(obj) ||
-    !/^[ \t]*f[ \t]+[+-]?\d/m.test(obj)
-  )
-    throw fail("El OBJ debe contener vértices y caras.");
-  for (const match of obj.matchAll(/^[ \t]*mtllib[ \t]+([^\r\n]+)$/gm)) {
-    // One material filename per directive allows spaces in exported filenames.
-    const mtl = await resolveReference(root, entrypoint, match[1].trim());
-    const materials = await readFile(path.join(root, mtl), "utf8");
-    for (const texture of materials.matchAll(
-      /^[ \t]*(?:map_\w+|bump|disp|decal|norm|refl)[ \t]+([^\r\n]+)$/gim,
-    )) {
-      let value = texture[1].trim();
-      // Common Wavefront options; reject unknown options instead of guessing a path.
-      while (value.startsWith("-")) {
-        const option = value.match(
-          /^-(?:blendu|blendv|cc|clamp|imfchan|type|texres|bm|boost)\s+\S+\s+|^-(?:mm)\s+\S+\s+\S+\s+|^-(?:o|s|t)\s+[-+.\d]+(?:\s+[-+.\d]+){0,2}\s+/,
-        );
-        if (!option)
-          throw fail(
-            "Una textura MTL usa opciones no admitidas. Exporta el material con rutas simples.",
-          );
-        value = value.slice(option[0].length);
-      }
-      await resolveReference(root, mtl, value);
-    }
-  }
-}
-export async function importModel(
-  buffer,
-  filename,
-  modelsDir,
-  checkModel = preflightModel,
-) {
-  if (!filename?.toLowerCase().endsWith(".zip"))
+  const candidates = files.filter(
+    (name) =>
+      !name
+        .split("/")
+        .some((part) => part.startsWith(".") || part === "__MACOSX") &&
+      FORMATS.has(path.extname(name).slice(1).toLowerCase()),
+  );
+  if (candidates.length !== 1)
     throw fail(
-      "Sube un ZIP con un único modelo OBJ, glTF o GLB y todos sus recursos.",
+      "El ZIP debe contener un único modelo principal, junto con sus materiales y texturas.",
     );
-  const uuid = randomUUID();
-  const staging = path.join(modelsDir, `.upload-${uuid}`);
-  const target = path.join(modelsDir, uuid);
-  await mkdir(staging, { mode: 0o2770 });
+  return { entrypoint: candidates[0], files };
+}
+
+export async function createImporter({
+  modelsDir,
+  modelChecker = preflightModel,
+  modelConverter = convertModel,
+  modelSimplifier = simplifyModel,
+}) {
+  await mkdir(modelsDir, { recursive: true, mode: 0o2770 });
+  const stateFile = path.join(modelsDir, ".import-job.json");
+  let job = null,
+    running = null,
+    closed = false;
+  const abort = new AbortController();
+  const workspaceFor = (id) => path.join(modelsDir, `.import-${id}`);
+  const snapshot = () => (job ? structuredClone(job) : null);
+  const persist = async () => atomicJson(stateFile, job);
   try {
-    const files = await unzip(buffer, staging);
-    // Keep original case by walking actual names, never resolve case-folded names.
-    const { readdir } = await import("node:fs/promises");
-    const all = await readdir(staging, { recursive: true });
-    const candidates = all.filter(
-      (n) => !n.startsWith("__MACOSX/") && /\.(obj|gltf|glb)$/.test(n),
-    );
-    if (candidates.length !== 1)
-      throw fail(
-        "El ZIP debe contener exactamente un modelo .obj, .gltf o .glb.",
+    job = JSON.parse(await readFile(stateFile, "utf8"));
+  } catch {}
+  if (job && !/^[a-f0-9-]{36}$/.test(job.id)) job = null;
+  if (job?.state === "processing") {
+    // A final rename may have completed just before the service stopped.
+    try {
+      const metadata = JSON.parse(
+        await readFile(
+          path.join(modelsDir, job.id, ".gestur-model.json"),
+          "utf8",
+        ),
       );
-    const entrypoint = candidates[0];
-    if (
-      !/^[A-Za-z0-9][A-Za-z0-9_. -]*(\/[A-Za-z0-9][A-Za-z0-9_. -]*)*\.(obj|gltf|glb)$/.test(
-        entrypoint,
-      )
-    )
-      throw fail(
-        "Las carpetas y el modelo deben empezar por una letra o un número.",
-      );
-    await validateEntrypoint(staging, entrypoint);
-    await checkModel(path.join(staging, entrypoint));
-    const name =
-      filename.replace(/\.zip$/i, "").slice(0, 80) || "Modelo importado";
-    await atomicJson(path.join(staging, ".gestur-model.json"), {
-      entrypoint,
-      name,
-      size: buffer.length,
-      files: files.size,
-    });
-    await rename(staging, target);
-    return {
-      id: `${uuid}/${entrypoint}`,
-      name,
-      format: path.extname(entrypoint).slice(1).toUpperCase(),
-      builtin: false,
-      size: buffer.length,
-    };
-  } catch (error) {
-    await rm(staging, { recursive: true, force: true });
-    throw error;
+      job = {
+        ...job,
+        state: "completed",
+        stage: "completed",
+        message: "Modelo importado.",
+        model: publicModel(job.id, metadata),
+      };
+    } catch {
+      job = {
+        ...job,
+        state: "failed",
+        stage: "failed",
+        message:
+          "La importación se interrumpió al reiniciar. Vuelve a subir el archivo.",
+        error:
+          "La importación se interrumpió al reiniciar. Vuelve a subir el archivo.",
+      };
+      await rm(workspaceFor(job.id), { recursive: true, force: true });
+    }
+    await persist();
   }
+  if (job?.state === "awaiting_decision") {
+    try {
+      validateGlb(await readFile(path.join(workspaceFor(job.id), "model.glb")));
+    } catch {
+      job = {
+        ...job,
+        state: "failed",
+        stage: "failed",
+        error:
+          "La importación pendiente ya no está disponible. Vuelve a subir el archivo.",
+        message: "Vuelve a subir el archivo.",
+      };
+      await rm(workspaceFor(job.id), { recursive: true, force: true });
+      await persist();
+    }
+  }
+  for (const name of await readdir(modelsDir))
+    if (
+      /^\.(?:upload|import)-[a-f0-9-]{36}$/.test(name) &&
+      name !== (job?.state === "awaiting_decision" ? `.import-${job.id}` : null)
+    )
+      await rm(path.join(modelsDir, name), { recursive: true, force: true });
+  function publicModel(id, metadata) {
+    return {
+      id: `${id}/${metadata.entrypoint}`,
+      name: metadata.name,
+      format: "GLB",
+      builtin: false,
+      size: metadata.size,
+      triangles: metadata.triangles,
+      originalTriangles: metadata.originalTriangles,
+      sourceFormat: metadata.sourceFormat,
+      simplified: metadata.simplified,
+      warnings: metadata.warnings || [],
+    };
+  }
+  async function publish(simplify) {
+    const workspace = workspaceFor(job.id);
+    let entrypoint = "model.glb",
+      triangles = job.proposal?.originalTriangles || job.triangles;
+    if (simplify) {
+      job.stage = "simplifying";
+      job.message = "La Raspberry Pi está reduciendo los polígonos…";
+      await persist();
+      ({ entrypoint } = await modelSimplifier({
+        workspace,
+        ...job.proposal,
+        signal: abort.signal,
+      }));
+      if (entrypoint !== "simplified.glb")
+        throw new Error("Invalid simplifier output");
+      const result = await modelChecker(path.join(workspace, entrypoint));
+      triangles = result.triangles ?? result.primitives;
+      if (
+        !Number.isSafeInteger(triangles) ||
+        triangles <= 0 ||
+        triangles >= job.proposal.originalTriangles
+      )
+        throw new ApiError(
+          422,
+          "No se ha podido reducir este modelo conservando una geometría válida. Vuelve a subirlo y continúa sin simplificar.",
+        );
+    }
+    if (simplify && triangles > job.proposal.targetTriangles * 1.05)
+      job.warnings.push(
+        `Se han conservado ${triangles.toLocaleString("es-ES")} triángulos para proteger la forma y las uniones de las texturas; el objetivo era ${job.proposal.targetTriangles.toLocaleString("es-ES")}.`,
+      );
+    validateGlb(await readFile(path.join(workspace, entrypoint)));
+    const metadata = {
+      entrypoint,
+      name: job.name,
+      size: (await stat(path.join(workspace, entrypoint))).size,
+      uploadSize: job.size,
+      files: job.files,
+      triangles,
+      originalTriangles: job.proposal?.originalTriangles || job.triangles,
+      sourceFormat: job.sourceFormat,
+      simplified: simplify,
+      warnings: job.warnings,
+    };
+    await atomicJson(path.join(workspace, ".gestur-model.json"), metadata);
+    // Keep the upload and the canonical original for later reprocessing. Only
+    // finished imports are renamed into the catalog's UUID namespace.
+    await rm(path.join(workspace, "converted"), {
+      recursive: true,
+      force: true,
+    });
+    await rename(workspace, path.join(modelsDir, job.id));
+    job = {
+      ...job,
+      state: "completed",
+      stage: "completed",
+      message: "Modelo importado. Ya puedes mostrarlo.",
+      model: publicModel(job.id, metadata),
+    };
+    await persist().catch(() => {});
+  }
+  function work(fn) {
+    running = (async () => {
+      try {
+        await fn();
+      } catch (error) {
+        job = {
+          ...job,
+          state: "failed",
+          stage: "failed",
+          error:
+            error instanceof ApiError
+              ? error.message
+              : "No se ha podido importar el modelo. Revisa sus archivos y vuelve a intentarlo.",
+          message: "La importación no se ha completado.",
+        };
+        await rm(workspaceFor(job.id), { recursive: true, force: true }).catch(
+          () => {},
+        );
+        await persist().catch(() => {});
+      }
+    })().finally(() => {
+      running = null;
+    });
+  }
+  return {
+    current: snapshot,
+    get(id) {
+      if (!job || job.id !== id)
+        throw new ApiError(404, "No se encuentra esta importación.");
+      return snapshot();
+    },
+    async start(buffer, filename) {
+      if (
+        closed ||
+        running ||
+        ["processing", "awaiting_decision"].includes(job?.state)
+      )
+        throw new ApiError(
+          409,
+          "Ya hay una importación en curso. Termínala antes de subir otro modelo.",
+        );
+      const id = randomUUID();
+      // Reserve synchronously before the first await to serialize uploads.
+      job = {
+        id,
+        state: "processing",
+        stage: "preparing",
+        message: "Preparando el modelo…",
+        proposal: null,
+        model: null,
+        warnings: [],
+        name: path.posix
+          .basename(filename?.replaceAll("\\", "/") || "Modelo")
+          .replace(/\.[^.]+$/, "")
+          .slice(0, 80),
+        size: buffer.length,
+      };
+      const accepted = snapshot();
+      try {
+        if (!buffer.length || buffer.length > 100 * 1024 * 1024)
+          throw new ApiError(413, "El archivo está vacío o supera los 100 MB.");
+        await mkdir(workspaceFor(id), { mode: 0o2770 });
+        await persist();
+      } catch (error) {
+        job = null;
+        await rm(workspaceFor(id), { recursive: true, force: true });
+        throw error;
+      }
+      work(async () => {
+        const workspace = workspaceFor(id),
+          sourceRoot = path.join(workspace, "source");
+        const { entrypoint, files } = await extractUpload(
+          buffer,
+          filename,
+          sourceRoot,
+        );
+        await writeFile(
+          path.join(
+            workspace,
+            "original-upload" +
+              (filename.toLowerCase().endsWith(".zip")
+                ? ".zip"
+                : path.extname(entrypoint)),
+          ),
+          buffer,
+        );
+        job.sourceFormat = path.extname(entrypoint).slice(1).toUpperCase();
+        job.files = files.length;
+        job.stage = "converting";
+        job.message = "Convirtiendo el modelo y reparando sus texturas…";
+        await persist();
+        await repairTextResources(sourceRoot, entrypoint, files, job.warnings);
+        await modelConverter({
+          workspace,
+          source: entrypoint,
+          files,
+          warnings: job.warnings,
+          signal: abort.signal,
+        });
+        validateGlb(await readFile(path.join(workspace, "model.glb")));
+        job.stage = "checking";
+        job.message = "Comprobando geometría y texturas…";
+        await persist();
+        const result = await modelChecker(path.join(workspace, "model.glb"));
+        job.triangles = result.triangles ?? result.primitives;
+        if (!Number.isSafeInteger(job.triangles) || job.triangles <= 0)
+          throw new ApiError(
+            422,
+            "El modelo no contiene triángulos visibles válidos.",
+          );
+        if (job.triangles > HIGH_TRIANGLES) {
+          job.proposal = {
+            originalTriangles: job.triangles,
+            targetTriangles: TARGET_TRIANGLES,
+            reductionPercent:
+              Math.round((1 - TARGET_TRIANGLES / job.triangles) * 1000) / 10,
+          };
+          job.state = "awaiting_decision";
+          job.stage = "awaiting_decision";
+          job.message =
+            "Este modelo tiene muchos triángulos. Puedes reducirlos o conservar el original.";
+          await persist();
+        } else await publish(false);
+      });
+      return accepted;
+    },
+    async decide(id, simplify) {
+      if (typeof simplify !== "boolean")
+        throw fail("Indica si deseas simplificar el modelo.");
+      if (
+        closed ||
+        !job ||
+        job.id !== id ||
+        job.state !== "awaiting_decision" ||
+        running
+      )
+        throw new ApiError(
+          409,
+          "Esta importación no está esperando una decisión.",
+        );
+      const pending = snapshot();
+      job.state = "processing";
+      job.stage = simplify ? "simplifying" : "finishing";
+      job.message = simplify
+        ? "Preparando la reducción…"
+        : "Conservando la geometría original…";
+      try {
+        await persist();
+      } catch (error) {
+        job = pending;
+        throw error;
+      }
+      const accepted = snapshot();
+      work(() => publish(simplify));
+      return accepted;
+    },
+    async close() {
+      closed = true;
+      abort.abort();
+      await running;
+    },
+    async idle() {
+      await running;
+    },
+  };
 }

@@ -14,6 +14,7 @@ class ConfigTests(unittest.TestCase):
         validated["tracking"]["use_hands"] = True
         self.assertFalse(original["tracking"]["use_hands"])
         self.assertFalse(default_config()["tracking"]["use_hands"])
+        self.assertIsNone(default_config()["active_model"])
 
     def test_missing_file_uses_defaults(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -35,10 +36,19 @@ class ConfigTests(unittest.TestCase):
                 validate_config(config)
 
     def test_safe_archive_entrypoints_are_supported(self):
-        for model in ("capitell.obj", "a123/model.obj", "a123/sculpture/Capital.gltf", "a123/Capital.glb"):
+        for model in (None, "a123/model.obj", "a123/sculpture/Capital.gltf", "a123/Capital.glb"):
             config = default_config()
             config["active_model"] = model
             self.assertEqual(validate_config(config)["active_model"], model)
+
+    def test_legacy_bundled_selection_becomes_empty_but_imports_survive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            for selected, expected in (("capitell.obj", None), ("package/capitell.obj", "package/capitell.obj")):
+                config = default_config()
+                config["active_model"] = selected
+                path.write_text(json.dumps(config), encoding="utf-8")
+                self.assertEqual(load_config(path)["active_model"], expected)
 
     def test_mapping_modes_and_relationships_are_validated(self):
         for mutate in (

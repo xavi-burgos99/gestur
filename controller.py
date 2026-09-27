@@ -18,8 +18,8 @@ RESTART_REQUESTED = 42
 
 
 def resolve_model(model_id, models_dir):
-    if model_id == "capitell.obj":
-        return ROOT / "capitell.obj"
+    if model_id is None:
+        return None
     root = Path(models_dir).resolve()
     candidate = (root / model_id).resolve(strict=True)
     if not candidate.is_relative_to(root) or not candidate.is_file():
@@ -47,6 +47,9 @@ class PoseController:
         self.no_camera = no_camera
         self.status_path = Path(os.environ["GESTUR_STATUS_PATH"]) if os.environ.get("GESTUR_STATUS_PATH") else None
         self.last_error = None
+        self.model_error = None
+        self.tracking_error = None
+        self.config_error = None
         self.requested_model = self.config["active_model"]
         self.rendered_model = None
         self.exit_code = 0
@@ -55,6 +58,8 @@ class PoseController:
         self._cleaned = False
         self._last_config_check = 0.0
         self._last_log = 0.0
+        self._next_camera_attempt = 0.0
+        self._running = False
         self._start = None
         from visualizer import ControlledObjViewer
         try:
@@ -62,12 +67,12 @@ class PoseController:
             self.visualizer = ControlledObjViewer(model_path, **self.config["render"], show_fps=show_fps)
             self.rendered_model = str(self.obj_override) if self.obj_override else self.requested_model
         except (ValueError, OSError, RuntimeError) as exc:
-            if self.obj_override or self.requested_model == "capitell.obj":
+            if self.obj_override:
                 raise
-            self.last_error = f"No se pudo cargar el modelo seleccionado; se muestra el capitell: {exc}"
+            self.model_error = f"No se pudo cargar el modelo seleccionado; el visor está vacío: {exc}"
+            self.last_error = self.model_error or self.config_error
             LOG.error(self.last_error)
-            self.visualizer = ControlledObjViewer(ROOT / "capitell.obj", **self.config["render"], show_fps=show_fps)
-            self.rendered_model = "capitell.obj"
+            self.visualizer = ControlledObjViewer(None, **self.config["render"], show_fps=show_fps)
         self.visualizer.accept("escape", self.request_stop)
         self.visualizer.taskMgr.add(self._render_tick, "gestur-control", sort=10)
 
@@ -102,6 +107,44 @@ class PoseController:
         # Runs in the inference thread: copying to a bounded mailbox is all it does.
         self.mailbox.publish(pose_data)
 
+    def _sync_tracking(self, now):
+        """Keep onboarding available without a camera or inference models.
+
+        Tracking is only useful after a model is selected. Camera failures keep
+        the viewer open, report an error, and retry at a low fixed cadence.
+        """
+        if self.no_camera or self.rendered_model is None:
+            if self.pose_tracker is not None:
+                self.pose_tracker.stop()
+                self.pose_tracker = None
+                self.mailbox.publish({})
+            self.tracking_error = None
+            self.last_error = self.model_error or self.config_error
+            return
+        if self.pose_tracker is not None:
+            error = getattr(self.pose_tracker, "last_error", None)
+            if not error:
+                return
+            self.tracking_error = f"Seguimiento detenido: {error}"
+            self.pose_tracker.stop()
+            self.pose_tracker = None
+            self.mailbox.publish({})
+            self._next_camera_attempt = now + 15
+            LOG.error(self.tracking_error)
+        elif now >= self._next_camera_attempt:
+            self._next_camera_attempt = now + 15
+            try:
+                self._init_pose_tracker()
+                self.pose_tracker.run()
+                self.tracking_error = None
+            except Exception as exc:
+                if self.pose_tracker is not None:
+                    self.pose_tracker.stop()
+                    self.pose_tracker = None
+                self.tracking_error = f"No se pudo iniciar el seguimiento: {exc}"
+                LOG.error(self.tracking_error)
+        self.last_error = self.model_error or self.tracking_error or self.config_error
+
     def _reload_config(self):
         stamp = self._stamp()
         if stamp == self._config_stamp:
@@ -112,8 +155,15 @@ class PoseController:
             candidate = self._read_config()
             self.requested_model = candidate["active_model"]
             if not self.obj_override and candidate["active_model"] != self.config["active_model"]:
-                self.visualizer.load_model(resolve_model(candidate["active_model"], self.models_dir))
-                self.rendered_model = candidate["active_model"]
+                try:
+                    self.visualizer.load_model(resolve_model(candidate["active_model"], self.models_dir))
+                    self.rendered_model = candidate["active_model"]
+                    self.model_error = None
+                except (ValueError, OSError, RuntimeError) as exc:
+                    self.visualizer.load_model(None)
+                    self.rendered_model = None
+                    self.model_error = f"No se pudo cargar el modelo seleccionado; el visor está vacío: {exc}"
+                    LOG.error(self.model_error)
             restart_keys = ("antialias_samples", "fullscreen")
             needs_restart = (candidate["tracking"] != self.config["tracking"] or
                              any(candidate["render"][k] != self.config["render"][k] for k in restart_keys))
@@ -122,13 +172,15 @@ class PoseController:
             self.visualizer.apply_settings(target_fps=candidate["render"]["target_fps"],
                                            hide_cursor=candidate["render"]["hide_cursor"])
             self.config = candidate
-            self.last_error = None if self.rendered_model == self.requested_model else self.last_error
+            self.config_error = None
+            self.last_error = self.model_error or self.tracking_error
             if needs_restart:
                 LOG.info("Configuración guardada; reiniciando cámara/ventana")
                 self.exit_code = RESTART_REQUESTED
                 self.request_stop()
         except (ValueError, OSError, RuntimeError) as exc:
-            self.last_error = str(exc)
+            self.config_error = str(exc)
+            self.last_error = self.config_error
             LOG.error("No se pudo aplicar la configuración; se conserva la anterior: %s", exc)
 
     def _write_status(self):
@@ -151,14 +203,9 @@ class PoseController:
         self.visualizer.update_model(**output)
         if now - self._last_config_check >= 1.0:
             self._last_config_check = now
-            if self.pose_tracker is not None and getattr(self.pose_tracker, "last_error", None):
-                self.last_error = f"Seguimiento detenido: {self.pose_tracker.last_error}"
-                self._write_status()
-                LOG.error("Seguimiento detenido: %s", self.pose_tracker.last_error)
-                self.exit_code = 1
-                self.request_stop()
-                return task.done
             self._reload_config()
+            if self._running and self.exit_code != RESTART_REQUESTED:
+                self._sync_tracking(now)
             self._write_status()
         if self.verbose and now - self._last_log >= 2.0:
             self._last_log = now
@@ -176,14 +223,14 @@ class PoseController:
         try:
             for signum in (signal.SIGINT, signal.SIGTERM):
                 previous_handlers[signum] = signal.signal(signum, self.request_stop)
-            if not self.no_camera:
-                self._init_pose_tracker()
-                self.pose_tracker.run()
+            self._running = True
+            self._sync_tracking(time.monotonic())
             self._start = time.monotonic()
             self.visualizer.run()
         except KeyboardInterrupt:
             pass
         finally:
+            self._running = False
             self.cleanup()
             for signum, handler in previous_handlers.items():
                 signal.signal(signum, handler)
@@ -217,7 +264,7 @@ def main(argv=None):
     parser.add_argument("--config", default=os.environ.get("GESTUR_CONFIG"), help="JSON compartido con el portal")
     parser.add_argument("--models-dir", help="Directorio de modelos subidos")
     parser.add_argument("--control-preset", choices=["default", "continuous"], default="continuous",
-                        help="Alias conservados para la configuración del capitell")
+                        help="Alias conservados para la configuración de movimientos")
     parser.add_argument("--hands", action="store_true", help="Activar también el modelo Lite de manos")
     parser.add_argument("--windowed", action="store_true", help="Ejecutar en una ventana")
     parser.add_argument("--show-fps", action="store_true")

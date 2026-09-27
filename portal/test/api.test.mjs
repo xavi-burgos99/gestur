@@ -8,6 +8,7 @@ const token = "a-test-admin-token-with-32-characters";
 async function fixture(
   t,
   wifi = async () => ({ ssid: "GESTUR-ABCD", secured: false, active: true }),
+  options = {},
 ) {
   const folder = await mkdtemp(path.join(os.tmpdir(), "gestur-api-"));
   const app = await createApp({
@@ -16,6 +17,7 @@ async function fixture(
     token,
     wifi,
     wifiDelayMs: 5,
+    ...options,
   });
   t.after(async () => {
     await app.close();
@@ -87,12 +89,14 @@ test("authentication, strict cookie, origin protection, token is never exposed",
   );
   assert.ok(!(await request("GET", "config")).body.includes(token));
 });
-test("persisted controls, schema and cross-field validation, immutable builtin model", async (t) => {
+test("persisted controls, schema and cross-field validation, empty model catalog", async (t) => {
   const { request, folder } = await fixture(t);
   const config = (await request("GET", "config")).json().config;
+  assert.deepEqual((await request("GET", "models")).json().models, []);
+  assert.equal((await request("GET", "models")).json().active, null);
   assert.equal(
-    (await request("GET", "models")).json().models[0].name,
-    "Capitel",
+    (await request("PUT", "models/active", { id: null })).statusCode,
+    200,
   );
   config.tracking.use_hands = true;
   assert.equal((await request("PUT", "config", config)).statusCode, 200);
@@ -211,4 +215,88 @@ test("runtime status reports stale/absent viewer without claiming active renderi
     }),
   );
   assert.equal((await request("GET", "runtime")).json().online, false);
+});
+
+function testGlb() {
+  const text = JSON.stringify({ asset: { version: "2.0" } });
+  const json = Buffer.from(text.padEnd(Math.ceil(text.length / 4) * 4, " "));
+  const result = Buffer.alloc(20 + json.length);
+  result.writeUInt32LE(0x46546c67);
+  result.writeUInt32LE(2, 4);
+  result.writeUInt32LE(result.length, 8);
+  result.writeUInt32LE(json.length, 12);
+  result.writeUInt32LE(0x4e4f534a, 16);
+  json.copy(result, 20);
+  return result;
+}
+function uploadBody(filename = "model.ply") {
+  return Buffer.from(
+    `--upload\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: application/octet-stream\r\n\r\nply\r\n--upload--\r\n`,
+  );
+}
+async function settledJob(request) {
+  for (let i = 0; i < 100; i++) {
+    const job = (await request("GET", "imports/current")).json().job;
+    if (job?.state !== "processing") return job;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("Import did not settle");
+}
+test("multipart import returns202, polls durablejob, prompts onlyhighpoly and serializes consent", async (t) => {
+  const { request, app } = await fixture(t, undefined, {
+    modelConverter: async ({ workspace }) =>
+      writeFile(path.join(workspace, "model.glb"), testGlb()),
+    modelChecker: async () => ({ triangles: 1200000 }),
+  });
+  assert.equal((await request("GET", "imports/current")).json().job, null);
+  assert.equal((await app.inject("/api/imports/current")).statusCode, 401);
+  const response = await request("POST", "models", uploadBody(), {
+    "content-type": "multipart/form-data; boundary=upload",
+  });
+  assert.equal(response.statusCode, 202);
+  assert.equal(response.json().job.state, "processing");
+  const pending = await settledJob(request);
+  assert.equal(pending.state, "awaiting_decision");
+  assert.equal(pending.proposal.targetTriangles, 500000);
+  assert.deepEqual((await request("GET", "models")).json().models, []);
+  assert.equal(
+    (await request("GET", `imports/${pending.id}`)).json().job.id,
+    pending.id,
+  );
+  assert.equal((await request("GET", "imports/missing")).statusCode, 404);
+  assert.equal(
+    (
+      await request("POST", `imports/${pending.id}/decision`, {
+        simplify: false,
+        target: 1,
+      })
+    ).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await request("POST", `imports/${pending.id}/decision`, {
+        simplify: false,
+      })
+    ).statusCode,
+    202,
+  );
+  assert.equal(
+    (
+      await request("POST", `imports/${pending.id}/decision`, {
+        simplify: false,
+      })
+    ).statusCode,
+    409,
+  );
+  const completed = await settledJob(request);
+  assert.equal(completed.state, "completed");
+  const catalog = (await request("GET", "models")).json();
+  assert.equal(catalog.models.length, 1);
+  assert.equal(catalog.active, null);
+  assert.equal(
+    (await request("PUT", "models/active", { id: completed.model.id }))
+      .statusCode,
+    200,
+  );
 });

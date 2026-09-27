@@ -11,8 +11,10 @@ TASK_SUDOERS=''
 cleanup() { [[ -z "$TASK_NODE_TEMP" ]] || rm -rf "$TASK_NODE_TEMP"; [[ -z "$TASK_BUILD" ]] || rm -rf "$TASK_BUILD"; [[ -z "$TASK_SUDOERS" ]] || rm -f "$TASK_SUDOERS"; }
 trap cleanup EXIT
 apt-get update
-apt-get install -y network-manager dnsmasq-base python3-dbus sudo ca-certificates curl xz-utils rfkill
+apt-get install -y --no-install-recommends network-manager dnsmasq-base avahi-daemon python3-dbus sudo ca-certificates curl xz-utils rfkill \
+    assimp-utils bubblewrap
 systemctl enable --now NetworkManager
+systemctl enable --now avahi-daemon
 # Prefer the distribution package when sufficiently recent. Otherwise install an
 # exact upstream release, checking the official SHA256 manifest (no remote shell).
 TASK_EXISTING_NODE=/usr/bin/node
@@ -40,6 +42,14 @@ getent group gestur >/dev/null || groupadd --system gestur
 getent group gestur-portal >/dev/null || groupadd --system gestur-portal
 id gestur-portal >/dev/null 2>&1 || useradd --system --gid gestur-portal --groups gestur --home-dir /var/lib/gestur --no-create-home --shell /usr/sbin/nologin gestur-portal
 usermod -a -G gestur gestur-portal
+# Conversion stays local and is isolated from device data/network. Verify the
+# distribution permits unprivileged namespaces before accepting model uploads.
+runuser -u gestur-portal -- bwrap --unshare-all --die-with-parent \
+    --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib \
+    --ro-bind-try /lib64 /lib64 --proc /proc --dev /dev --tmpfs /tmp /usr/bin/true || {
+    echo 'No se pudo aislar el conversor 3D. Revisa el soporte de espacios de nombres de usuario (bubblewrap) en esta imagen.' >&2
+    exit 1
+}
 install -d -o gestur -g gestur -m 2770 /var/lib/gestur /var/lib/gestur/models
 install -d -o root -g root -m 755 /etc/gestur /usr/local/libexec
 if [[ ! -f /var/lib/gestur/config.json ]]; then install -o gestur -g gestur -m 660 "$INSTALL_ROOT/config/default.json" /var/lib/gestur/config.json; fi
@@ -61,6 +71,9 @@ runuser -u gestur-portal -- env PATH="$BUILD_PATH" npm_config_cache="$TASK_BUILD
 rm -rf "$INSTALL_ROOT/portal/node_modules" "$INSTALL_ROOT/portal/dist"
 cp -a "$TASK_BUILD/node_modules" "$TASK_BUILD/dist" "$INSTALL_ROOT/portal/"
 chown -R root:root "$INSTALL_ROOT/portal"
+# Use the final production dependencies, service account and real isolation.
+runuser -u gestur-portal -- env PATH="$BUILD_PATH" GESTUR_PYTHON="$INSTALL_ROOT/.venv/bin/python" \
+    "$NODE_BIN" "$INSTALL_ROOT/scripts/check-importer.mjs"
 sed "s|ExecStart=/usr/bin/node |ExecStart=$NODE_BIN |" "$INSTALL_ROOT/deployment/gestur-portal.service" > /etc/systemd/system/gestur-portal.service
 chown root:root /etc/systemd/system/gestur-portal.service
 chmod 644 /etc/systemd/system/gestur-portal.service

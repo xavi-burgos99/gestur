@@ -40,8 +40,10 @@ def _validate(value, schema, location="config"):
         "boolean": lambda item: isinstance(item, bool),
         "number": lambda item: type(item) in (int, float) and math.isfinite(item),
         "integer": lambda item: type(item) in (int, float) and math.isfinite(item) and int(item) == item,
+        "null": lambda item: item is None,
     }
-    if kind and not types[kind](value):
+    kinds = kind if isinstance(kind, list) else [kind]
+    if kind and not any(types[item](value) for item in kinds):
         raise ConfigurationError(f"{location}: expected {kind}")
     if "enum" in schema and value not in schema["enum"]:
         raise ConfigurationError(f"{location}: unsupported value {value!r}")
@@ -128,6 +130,10 @@ def load_config(path=None):
         config = json.loads(serialized)
     except (json.JSONDecodeError, ValueError) as exc:
         raise ConfigurationError(f"Invalid JSON in {source}: {exc}") from exc
+    # The old bundled exhibition is no longer shipped. Imported packages have
+    # their own directory and must retain their selection during this migration.
+    if isinstance(config, dict) and config.get("active_model") == "capitell.obj":
+        config["active_model"] = None
     return validate_config(config)
 
 

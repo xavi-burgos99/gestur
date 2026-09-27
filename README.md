@@ -1,10 +1,10 @@
 # Gestur
 
-Visor de objetos 3D controlado por cámara para exposiciones, orientado a Raspberry Pi 5. Conserva Panda3D, el capitell original y sus controles de cabeza, proximidad y retorno al reposo.
+Visor de objetos 3D controlado por cámara para exposiciones, orientado a Raspberry Pi 5. Utiliza Panda3D y controles de cabeza, manos, proximidad y retorno al reposo. La biblioteca empieza vacía; no incluye modelos de exposición.
 
 ## Instalación en Raspberry Pi 5
 
-Requiere Raspberry Pi OS Lite/Debian **de 64 bits**, pantalla HDMI y cámara USB compatible con OpenCV/V4L2. En una imagen Desktop hay que desactivar antes el gestor de escritorio: el instalador comprueba que la pantalla esté disponible para el expositor. Usa refrigeración adecuada. La instalación descarga dependencias y modelos; después el expositor funciona sin Internet.
+Requiere Raspberry Pi OS Lite/Debian **de 64 bits**, pantalla HDMI y cámara USB compatible con OpenCV/V4L2. En una imagen Desktop hay que desactivar antes el gestor de escritorio: el instalador comprueba que la pantalla esté disponible para el expositor. Usa refrigeración adecuada. La instalación descarga dependencias y modelos de reconocimiento; después el expositor funciona sin Internet.
 
 ```bash
 git clone https://github.com/xavi-burgos99/gestur.git
@@ -14,7 +14,7 @@ sudo bash gestur.sh install
 sudo reboot
 ```
 
-El instalador despliega **la copia local de la rama elegida** en `/opt/gestur`; no hace `pull main`. Crea un Python 3.12.14 privado, instala versiones fijadas con ruedas ARM64, aprovisiona los modelos Lite verificados y configura el arranque del controlador completo. No modifica el Python del sistema, el firmware ni la memoria GPU. La configuración y los modelos de usuario se conservan al reinstalar.
+El instalador despliega **la copia local de la rama elegida** en `/opt/gestur`; no hace `pull main`. Crea un Python 3.12.14 privado, instala versiones fijadas con ruedas ARM64, aprovisiona los modelos Lite verificados, instala Assimp y meshoptimizer y configura el arranque del controlador completo. No modifica el Python del sistema, el firmware ni la memoria GPU. La configuración y los modelos de usuario se conservan al reinstalar.
 
 - Configuración: `/var/lib/gestur/config.json`.
 - Modelos importados: `/var/lib/gestur/models`.
@@ -29,11 +29,13 @@ En instalaciones nuevas la red es **GESTUR-XXXX**, donde XXXX son los últimos c
 
 Conéctate a esa red y abre **http://10.42.0.1:3000**. La clave de administración del portal aparece al terminar la instalación y puede recuperarse con `sudo cat /etc/gestur/portal-token`. Esta clave protege los cambios del dispositivo y es independiente de la contraseña opcional de la red Wi-Fi.
 
-- **Modelos 3D**: el Capitel está siempre disponible. Importa un ZIP con un único modelo OBJ + MTL + texturas, glTF + BIN + texturas o GLB. Se validan rutas, referencias, límites y carga real con Panda3D antes de añadirlo. Los modelos importados se centran y encuadran automáticamente. El panel distingue el modelo seleccionado del que el visor está mostrando.
+- **Modelos 3D**: biblioteca vacía de inicio. Sube un archivo 3D o un ZIP con el modelo, materiales y texturas. Se admiten OBJ, glTF/GLB, FBX, STL, PLY, DAE, 3DS y otros formatos de malla; se reparan referencias a recursos que estén en el paquete y se convierte a GLB autocontenido. Solo por encima de 1.000.000 de triángulos aparece una propuesta fija de aproximadamente 500.000: puedes aceptarla o conservar el original. La Raspberry realiza el trabajo y el portal muestra su estado. Los modelos se centran y encuadran automáticamente.
 - **Parámetros**: ajusta sensibilidad, suavizado, umbrales y asignaciones de cabeza, pinza u orientación de manos a rotación, desplazamiento y escala. Las manos se pueden activar cuando hagan falta.
 - **Configuración**: en **Punto de acceso Wi-Fi** puedes cambiar el nombre, **Añadir contraseña**, **Cambiar contraseña** o **Eliminar contraseña**. Los cambios se aplican con unos segundos de margen para avisar antes de la desconexión; si fallan, se intenta recuperar la configuración anterior.
 
-Reinstalar conserva los modelos, los parámetros, la clave de administración y la red existente. Si ya había un punto de acceso, su dirección puede ser distinta de `10.42.0.1`. Consulta [docs/portal.md](docs/portal.md) para desarrollo, permisos, formatos y recuperación.
+Sin selección, el expositor muestra una figura 3D procedural y un QR con «Escanea el QR para comenzar». La URL usa la IP del punto de acceso o de la red local.
+
+Reinstalar conserva los modelos importados, los parámetros, la clave de administración y la red existente. La antigua selección del capitel incluido pasa a la bienvenida. Si ya había un punto de acceso, su dirección puede ser distinta de `10.42.0.1`. Consulta [docs/portal.md](docs/portal.md) para desarrollo, permisos, formatos y recuperación.
 
 ```bash
 cd portal
@@ -51,14 +53,14 @@ Python **3.11 o 3.12** (MediaPipe 0.10.18 tiene ruedas ARM64 verificadas; sus ve
 python3.12 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python scripts/provision_models.py
-.venv/bin/python controller.py capitell.obj --windowed
+.venv/bin/python controller.py --windowed
 ```
 
 El cursor queda oculto en el expositor. `Esc` cierra el visor. Con `--windowed` se conserva una ventana para desarrollo; la visibilidad del cursor es configurable en el JSON. La cámara predeterminada es la USB de índice 0. Las cámaras CSI que no expongan V4L2 requieren un adaptador de captura adicional.
 
 ```bash
 # Sólo el visor, sin abrir la cámara
-.venv/bin/python controller.py capitell.obj --no-camera --windowed
+.venv/bin/python controller.py --no-camera --windowed
 
 # Seguimiento opcional de manos; asignar una entrada de mano en config para controlarlo
 .venv/bin/python controller.py --config config/default.json --hands
@@ -71,9 +73,9 @@ El cursor queda oculto en el expositor. `Esc` cierra el visor. Con `--windowed` 
 
 La captura guarda únicamente el fotograma más reciente. La inferencia de pose y manos tiene frecuencias limitadas e independientes; el renderizador procesa los controles en su propio hilo a la frecuencia de pantalla. No se acumulan fotogramas pendientes ni se modifica Panda3D desde el hilo de cámara.
 
-Se usan **Pose Landmarker Lite** y, al activar manos, **Palm Detection Lite + Hand Landmark Lite**. El seguimiento de manos incorpora orientación de palma, pinza y gestos geométricos, sin otra red de clasificación. Las manos están desactivadas por defecto para conservar el perfil del capitell y ahorrar trabajo; pueden activarse desde configuración.
+Se usan **Pose Landmarker Lite** y, al activar manos, **Palm Detection Lite + Hand Landmark Lite**. El seguimiento de manos incorpora orientación de palma, pinza y gestos geométricos, sin otra red de clasificación. Las manos están desactivadas por defecto para ahorrar trabajo; pueden activarse desde configuración.
 
-Se mantienen los **491.038 triángulos y la textura 2048 × 2048 del capitell**. No hay reducción de malla o resolución de textura. Se agrupan nodos compatibles y se evitan transformaciones redundantes. MSAA 2× es el valor inicial; se puede elegir 0/2/4 muestras. El código anterior no activaba explícitamente el antialiasing, por lo que no se atribuye a él un coste medido.
+El objetivo de simplificación de **500.000 triángulos** toma como referencia los 491.038 del antiguo capitel. La reducción es opcional y solo se ofrece en mallas de más de un millón de triángulos; nunca se aplica sin aceptar la propuesta. El resultado conserva materiales y UV en la medida que permite el formato de origen; se informa del recuento final. Se agrupan nodos compatibles y se evitan transformaciones redundantes. MSAA 2× es el valor inicial; se puede elegir 0/2/4 muestras. El código anterior no activaba explícitamente el antialiasing, por lo que no se atribuye a él un coste medido.
 
 Los valores de 60 FPS de render y 24 detecciones/s son **objetivos configurables, no resultados garantizados en una Pi**. Ver [la guía de medición](docs/performance.md) para comprobar tiempos de fotograma, carga y temperatura en el dispositivo real.
 
@@ -96,7 +98,7 @@ El archivo [config/default.json](config/default.json) define captura, render y a
 bash -n gestur.sh scripts/kiosk-session.sh
 ```
 
-Las pruebas cubren pérdida y recuperación de seguimiento, cadencia de control, orientación circular, configuración inválida, transferencia entre hilos y carga del capitell. La precisión visual con personas, los controladores gráficos y el rendimiento térmico requieren validación en la instalación real.
+Las pruebas cubren pérdida y recuperación de seguimiento, cadencia de control, orientación circular, configuración inválida, transferencia entre hilos, bienvenida sin modelos e importación y simplificación de mallas de prueba. La precisión visual con personas, los controladores gráficos y el rendimiento térmico requieren validación en la instalación real.
 
 ## Créditos
 

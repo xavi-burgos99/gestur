@@ -2,12 +2,14 @@
 
 El visor y el portal comparten `/var/lib/gestur/config.json`. Se puede cambiar la ruta con `GESTUR_CONFIG` o con la opción de configuración del visor. Una instalación sin archivo utiliza `config/default.json`. El contrato versionado está en `config/schema.json` (JSON Schema Draft 7); `schema_version` debe ser `1`. El portal valida antes de guardar y sustituye el archivo de forma atómica. No se guardan contraseñas Wi-Fi en este archivo: las gestiona el servicio de red.
 
-La configuración completa contiene `active_model`, `tracking`, `render` y `controls`. `active_model` selecciona `capitell.obj` o una ruta relativa de un paquete instalado, por ejemplo `a123/escultura/modelo.gltf`. Los formatos permitidos son OBJ, glTF y GLB. Los componentes de ruta empiezan por una letra o un número y admiten letras ASCII, números, espacios, guiones, puntos y guiones bajos. No se permiten rutas absolutas ni componentes `.` o `..`. El visor además comprueba que el modelo esté dentro de los directorios autorizados.
+La configuración completa contiene `active_model`, `tracking`, `render` y `controls`. `active_model: null` es el valor inicial: muestra la bienvenida con figura procedural y QR, sin abrir la cámara. Al importar se guarda un GLB autocontenido y la selección usa `<uuid>/model.glb`; también se conservan los paquetes OBJ/glTF/GLB de instalaciones anteriores. La selección antigua `capitell.obj` se migra a `null`; no se borran modelos del usuario.
+
+`GESTUR_PORTAL_URL` permite indicar la URL pública local del QR cuando se usa un proxy o una dirección distinta. Sin esa variable se detecta la dirección del punto de acceso o la LAN y se usa el puerto 3000. Nunca se añade la clave de administración al QR.
 
 ## Valores iniciales para Raspberry Pi 5
 
 - Cámara: 640 × 480, inferencia de cabeza a un máximo de 24 Hz y manos a 15 Hz cuando están activadas.
-- Manos desactivadas de inicio para mantener el comportamiento de Capitell y reducir el trabajo. Activarlas permite usar inclinación de la palma y pinza.
+- Manos desactivadas de inicio para reducir el trabajo. Activarlas permite usar inclinación de la palma y pinza.
 - Renderizado: 60 FPS como objetivo, antialiasing MSAA de 2 muestras, pantalla completa y cursor oculto. Son objetivos configurables; el rendimiento real depende del modelo, la cámara y la Raspberry Pi.
 - Suavizado del seguimiento: 60 ms. Suavizado de los controles: 90 ms; el zoom usa un tercio para conservar su respuesta más rápida.
 
@@ -15,7 +17,7 @@ Los cambios de controles se aplican al recargar la configuración. Los ajustes d
 
 ## Asignaciones de movimientos
 
-`controls.mappings` es una lista ordenada. Cada elemento tiene `id`, `input`, `output`, `mode`, `enabled`, `scale`, `invert` y `center`. Si se habilitan varias asignaciones para una misma salida, la última de la lista decide su valor. El campo `id` es único y admite letras, números, guiones y guiones bajos. Se permiten hasta 32 asignaciones.
+`controls.mappings` es una lista ordenada. Cada elemento tiene `id`, `input`, `output`, `mode`, `enabled`, `scale`, `invert` y `center`. Cada salida admite una sola asignación activa; los duplicados se rechazan. El campo `id` es único y admite letras, números, guiones y guiones bajos. Se permiten hasta 32 asignaciones.
 
 | Entrada | Valor |
 | --- | --- |
@@ -53,4 +55,4 @@ Ejemplo de una asignación adicional para girar con la palma derecha:
 }
 ```
 
-Hay que activar `tracking.use_hands` y desactivar la asignación anterior que controle `rotation_roll`, o colocar ésta después. Para ampliar al cerrar la pinza, usar `right_hand_pinch`, salida `scale_uniform`, modo `absolute`, `scale: 2`, `center: 0.5` e `invert: true`.
+Hay que activar `tracking.use_hands` y desactivar la asignación anterior que controle `rotation_roll`, antes de guardar. Para ampliar al cerrar la pinza, usar `right_hand_pinch`, salida `scale_uniform`, modo `absolute`, `scale: 2`, `center: 0.5` e `invert: true`.

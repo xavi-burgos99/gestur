@@ -83,15 +83,7 @@ export async function createStore({
     return config;
   }
   async function listModels() {
-    const entries = [
-      {
-        id: "capitell.obj",
-        name: "Capitel",
-        builtin: true,
-        format: "OBJ",
-        size: (await stat(path.join(root, "capitell.obj"))).size,
-      },
-    ];
+    const entries = [];
     for (const directory of (await readdir(modelsDir)).filter((n) =>
       /^[a-f0-9-]{36}$/.test(n),
     )) {
@@ -102,16 +94,23 @@ export async function createStore({
             "utf8",
           ),
         );
-        const info = await stat(
-          path.join(modelsDir, directory, metadata.entrypoint),
-        );
+        if (typeof metadata.entrypoint !== "string") continue;
+        const packageRoot = path.join(modelsDir, directory);
+        const modelPath = path.resolve(packageRoot, metadata.entrypoint);
+        if (!modelPath.startsWith(packageRoot + path.sep)) continue;
+        const info = await stat(modelPath);
         if (!info.isFile()) continue;
         entries.push({
           id: `${directory}/${metadata.entrypoint}`,
           name: metadata.name,
           builtin: false,
           format: path.extname(metadata.entrypoint).slice(1).toUpperCase(),
+          sourceFormat: metadata.sourceFormat,
           size: metadata.size,
+          triangles: metadata.triangles,
+          originalTriangles: metadata.originalTriangles,
+          simplified: metadata.simplified === true,
+          warnings: Array.isArray(metadata.warnings) ? metadata.warnings : [],
         });
       } catch {
         /* Incomplete imports are never listed. */
@@ -121,7 +120,14 @@ export async function createStore({
   }
   async function read() {
     try {
-      return check(JSON.parse(await readFile(configPath, "utf8")));
+      const saved = JSON.parse(await readFile(configPath, "utf8"));
+      // Retire only the former bundled default. User imports remain untouched.
+      if (saved.schema_version === 1 && saved.active_model === "capitell.obj") {
+        saved.active_model = null;
+        check(saved);
+        await atomicJson(configPath, saved);
+      }
+      return check(saved);
     } catch (error) {
       if (error.code !== "ENOENT")
         throw new ApiError(
@@ -136,7 +142,10 @@ export async function createStore({
   async function update(fn) {
     const result = queue.then(async () => {
       const next = check(await fn(await read()));
-      if (!(await listModels()).some((m) => m.id === next.active_model))
+      if (
+        next.active_model !== null &&
+        !(await listModels()).some((m) => m.id === next.active_model)
+      )
         throw new ApiError(400, "Selecciona un modelo disponible.");
       await atomicJson(configPath, next);
       return next;

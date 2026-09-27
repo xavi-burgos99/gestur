@@ -44,6 +44,7 @@ install_gestur() {
             --exclude=.git --exclude=.venv --exclude=.bootstrap --exclude=.python \
             --exclude=node_modules --exclude=dist --exclude=__pycache__ \
             --exclude=.pytest_cache --exclude=data --exclude=models \
+            --exclude=models_compressed --exclude='capitell.*' --exclude=.dev-data \
             --exclude=.cache --exclude=artifacts --exclude='*.local.json' \
             "$GESTUR_SOURCE/" "$GESTUR_PREFIX/"
     fi

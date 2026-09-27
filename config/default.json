@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_model": "capitell.obj",
+  "active_model": null,
   "tracking": {
     "use_pose": true,
     "use_hands": false,

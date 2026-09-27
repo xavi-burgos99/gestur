@@ -83,10 +83,11 @@ runuser -u gestur-portal -- env PATH="$BUILD_PATH" npm_config_cache="$TASK_BUILD
 rm -rf "$INSTALL_ROOT/portal/node_modules" "$INSTALL_ROOT/portal/dist"
 cp -a "$TASK_BUILD/node_modules" "$TASK_BUILD/dist" "$INSTALL_ROOT/portal/"
 chown -R root:root "$INSTALL_ROOT/portal"
-# Use the final production dependencies, service account and real isolation.
+# Check final dependencies early. ExecStartPre repeats this under the complete
+# service sandbox; a successful runuser check alone does not prove that works.
 runuser -u gestur-portal -- env PATH="$BUILD_PATH" GESTUR_PYTHON="$INSTALL_ROOT/.venv/bin/python" \
     "$NODE_BIN" "$INSTALL_ROOT/scripts/check-importer.mjs"
-sed "s|ExecStart=/usr/bin/node |ExecStart=$NODE_BIN |" "$INSTALL_ROOT/deployment/gestur-portal.service" > /etc/systemd/system/gestur-portal.service
+sed -e "s|^ExecStart=/usr/bin/node |ExecStart=$NODE_BIN |" -e "s|^ExecStartPre=/usr/bin/node |ExecStartPre=$NODE_BIN |" "$INSTALL_ROOT/deployment/gestur-portal.service" > /etc/systemd/system/gestur-portal.service
 chown root:root /etc/systemd/system/gestur-portal.service
 chmod 644 /etc/systemd/system/gestur-portal.service
 # This creates an open GESTUR-XXXX AP only when no prior AP was configured.

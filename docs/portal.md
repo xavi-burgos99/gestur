@@ -57,6 +57,10 @@ El backend no es root. Su regla sudo permite solo `gestur-wifi status` y `gestur
 
 La unidad conserva la elevación de ese helper: no activa `NoNewPrivileges` ni limita el conjunto de capacidades a la de abrir puertos. Antes de ejecutar el conversor aislado, `setpriv` de `util-linux` elimina las capacidades heredables y ambientales solo de ese proceso hijo; así bubblewrap arranca sin heredar el permiso HTTP y mantiene sus espacios de nombres, `--cap-drop ALL` y límites de recursos. No se conceden capacidades al binario de Node ni se cambian los puertos privilegiados del sistema.
 
+Los conversores reciben un directorio `/proc` vacío y conservan el espacio de nombres de PID. Así no ven los procesos del host ni necesitan montar procfs dentro de la unidad. En el kernel de la Pi probada, ese montaje fallaba porque `ProtectKernelTunables` crea submontajes protegidos en `/proc` y Linux impide volver a exponerlos desde un espacio de nombres sin privilegios. La unidad conserva `ProtectKernelTunables=true` y sus demás protecciones. Se comprobó esta configuración en la Pi con Assimp, Node, Sharp y meshoptimizer. Fuentes: [`mount_too_revealing` en Linux](https://github.com/torvalds/linux/blob/v6.18/fs/namespace.c#L5785-L5860) y [submontajes de systemd](https://github.com/systemd/systemd/blob/v257/src/core/namespace.c#L131-L154).
+
+Antes de abrir el puerto HTTP, `ExecStartPre` ejecuta `check-importer.mjs` con las mismas restricciones y credenciales del servicio. Comprueba Assimp, las dependencias de texturas y simplificación, y la carga del GLB en Panda3D. Si falla, el portal no se declara arrancado. El instalador adapta tanto esa comprobación como el servidor a la ruta de Node instalada; la comprobación preliminar mediante `runuser` no sustituye este paso.
+
 ## Desarrollo y verificación
 
 Desde `portal/`:

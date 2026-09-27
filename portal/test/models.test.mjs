@@ -349,6 +349,16 @@ test("Linux sandbox denies host/network access and bounds native converters", as
   ]);
   assert.ok(cmd.args.includes("--unshare-all"));
   assert.ok(cmd.args.includes("--cap-drop"));
+  assert.equal(cmd.args.includes("--proc"), false);
+  assert.ok(
+    cmd.args.some((arg, index) => arg === "--dir" && cmd.args[index + 1] === "/proc"),
+  );
+  assert.equal(
+    cmd.args.some((arg, index) =>
+      ["--bind", "--ro-bind", "--ro-bind-try"].includes(arg) &&
+      cmd.args[index + 1] === "/proc"),
+    false,
+  );
   assert.ok(cmd.args.includes("--as=3221225472"));
   assert.ok(cmd.args.includes("/work/source/a.obj"));
   assert.equal(

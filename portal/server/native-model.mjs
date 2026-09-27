@@ -47,7 +47,10 @@ export async function sandboxCommand(
         "--cap-drop",
         "ALL",
         ...mounts,
-        "--proc",
+        // The service protects parts of its /proc. Linux rejects a new procfs
+        // in a nested user namespace in that case (mount_too_revealing).
+        // These workers need no procfs; keep PID isolation and expose nothing.
+        "--dir",
         "/proc",
         "--dev",
         "/dev",

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Install the checked-out revision, including feature branches. Never pulls main.
 set -euo pipefail
+# Provisioning runs with a private log/state umask; runtimes must remain usable
+# by the unprivileged viewer and portal service accounts.
+umask 022
 GESTUR_SOURCE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 GESTUR_PREFIX=/opt/gestur
 GESTUR_STATE=/var/lib/gestur
@@ -25,8 +28,8 @@ install_gestur() {
         exit 1
     fi
     echo "Instalando la copia local de Gestur desde $GESTUR_SOURCE"
-    apt-get update
-    apt-get install -y --no-install-recommends \
+    apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o APT::Update::Error-Mode=any update
+    apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 install -y --no-install-recommends \
         ca-certificates curl rsync python3 python3-venv \
         xserver-xorg xinit openbox x11-xserver-utils \
         mesa-utils libgl1-mesa-dri libglx-mesa0 libegl1 libgles2 \
@@ -68,12 +71,16 @@ install_gestur() {
     "$GESTUR_PREFIX/.venv/bin/python" "$GESTUR_PREFIX/scripts/provision_models.py"
     chown -R root:root "$GESTUR_PREFIX"
     if [[ ! -f "$GESTUR_STATE/config.json" ]]; then
-        install -o gestur -g gestur -m 660 "$GESTUR_PREFIX/config/default.json" "$GESTUR_STATE/config.json"
+        TASK_CONFIG=$(mktemp "$GESTUR_STATE/.config.XXXXXX")
+        install -o gestur -g gestur -m 660 "$GESTUR_PREFIX/config/default.json" "$TASK_CONFIG"
+        mv -T "$TASK_CONFIG" "$GESTUR_STATE/config.json"
     fi
     # Validate without opening a camera or changing existing parameters.
     (cd "$GESTUR_PREFIX" && .venv/bin/python -c \
         'from runtime_config import load_config; load_config("/var/lib/gestur/config.json")')
 
+    # Complete all downloads and portal checks before enabling the kiosk login.
+    bash "$GESTUR_PREFIX/scripts/install-portal.sh" "$GESTUR_PREFIX"
     install -o root -g root -m 755 "$GESTUR_PREFIX/scripts/kiosk-session.sh" /usr/local/bin/gestur-session
     install -d /etc/systemd/system/getty@tty1.service.d
     if [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf ]] && \
@@ -101,13 +108,17 @@ PROFILE
     chown gestur:gestur /home/gestur/.bash_profile
     # Use stock KMS/Mesa. No gpu_mem edits, experimental firmware or full OS upgrade.
     systemctl daemon-reload
-    bash "$GESTUR_PREFIX/scripts/install-portal.sh" "$GESTUR_PREFIX"
     echo "Instalación completada. Reinicia para arrancar el expositor."
     echo "Configuración conservada en $GESTUR_STATE/config.json"
 }
 
 uninstall_gestur() {
     require_host uninstall
+    # Also cancel retries if uninstalling after an interrupted first boot.
+    if [[ -f /etc/systemd/system/gestur-first-boot.timer ]]; then
+        systemctl disable --now gestur-first-boot.timer
+        systemctl stop gestur-first-boot.service
+    fi
     if [[ -f /etc/systemd/system/gestur-portal.service ]]; then
         systemctl disable --now gestur-portal.service
         rm -f /etc/systemd/system/gestur-portal.service

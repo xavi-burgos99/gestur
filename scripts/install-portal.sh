@@ -1,6 +1,7 @@
 #!/bin/bash
 # Run as root after the base runtime installer: scripts/install-portal.sh /opt/gestur
 set -euo pipefail
+umask 022
 INSTALL_ROOT=${1:-/opt/gestur}
 if [[ $(id -u) != 0 ]]; then echo 'Ejecuta este instalador como root.' >&2; exit 1; fi
 if [[ "$INSTALL_ROOT" != /opt/gestur ]]; then echo 'La instalación del portal requiere /opt/gestur.' >&2; exit 1; fi
@@ -10,8 +11,8 @@ TASK_BUILD=''
 TASK_SUDOERS=''
 cleanup() { [[ -z "$TASK_NODE_TEMP" ]] || rm -rf "$TASK_NODE_TEMP"; [[ -z "$TASK_BUILD" ]] || rm -rf "$TASK_BUILD"; [[ -z "$TASK_SUDOERS" ]] || rm -f "$TASK_SUDOERS"; }
 trap cleanup EXIT
-apt-get update
-apt-get install -y --no-install-recommends network-manager dnsmasq-base avahi-daemon python3-dbus sudo ca-certificates curl xz-utils rfkill \
+apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o APT::Update::Error-Mode=any update
+apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 install -y --no-install-recommends network-manager dnsmasq-base avahi-daemon python3-dbus sudo ca-certificates curl xz-utils rfkill \
     assimp-utils bubblewrap
 systemctl enable --now NetworkManager
 systemctl enable --now avahi-daemon
@@ -19,7 +20,8 @@ systemctl enable --now avahi-daemon
 # exact upstream release, checking the official SHA256 manifest (no remote shell).
 TASK_EXISTING_NODE=/usr/bin/node
 if [[ -x /opt/gestur-node/bin/node ]]; then TASK_EXISTING_NODE=/opt/gestur-node/bin/node; fi
-if ! "$TASK_EXISTING_NODE" -e 'let [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||a===22&&b>=12?0:1)' >/dev/null 2>&1; then
+if ! "$TASK_EXISTING_NODE" -e 'let [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||a===22&&b>=12?0:1)' >/dev/null 2>&1 || \
+   { [[ "$TASK_EXISTING_NODE" == /opt/gestur-node/bin/node ]] && ! env PATH="/opt/gestur-node/bin:$PATH" /opt/gestur-node/bin/npm --version >/dev/null 2>&1; }; then
     NODE_VERSION=v22.23.3
     case $(dpkg --print-architecture) in arm64) NODE_ARCH=arm64;; amd64) NODE_ARCH=x64;; *) echo 'Se requiere Raspberry Pi OS de 64 bits.' >&2; exit 1;; esac
     TASK_NODE_TEMP=$(mktemp -d)
@@ -36,7 +38,7 @@ if [[ -x /opt/gestur-node/bin/node ]]; then
 else
     NODE_BIN=/usr/bin/node
     BUILD_PATH=/usr/local/bin:/usr/bin:/bin
-    if ! command -v npm >/dev/null; then apt-get install -y npm; fi
+    if ! command -v npm >/dev/null; then apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 install -y npm; fi
 fi
 getent group gestur >/dev/null || groupadd --system gestur
 getent group gestur-portal >/dev/null || groupadd --system gestur-portal
@@ -52,9 +54,15 @@ runuser -u gestur-portal -- bwrap --unshare-all --die-with-parent \
 }
 install -d -o gestur -g gestur -m 2770 /var/lib/gestur /var/lib/gestur/models
 install -d -o root -g root -m 755 /etc/gestur /usr/local/libexec
-if [[ ! -f /var/lib/gestur/config.json ]]; then install -o gestur -g gestur -m 660 "$INSTALL_ROOT/config/default.json" /var/lib/gestur/config.json; fi
+if [[ ! -f /var/lib/gestur/config.json ]]; then
+    TASK_CONFIG=$(mktemp /var/lib/gestur/.config.XXXXXX)
+    install -o gestur -g gestur -m 660 "$INSTALL_ROOT/config/default.json" "$TASK_CONFIG"
+    mv -T "$TASK_CONFIG" /var/lib/gestur/config.json
+fi
 if [[ ! -s /etc/gestur/portal-token ]]; then
-    /usr/bin/python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > /etc/gestur/portal-token
+    TASK_TOKEN=$(mktemp /etc/gestur/.portal-token.XXXXXX)
+    /usr/bin/python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > "$TASK_TOKEN"
+    mv -T "$TASK_TOKEN" /etc/gestur/portal-token
 fi
 chown root:gestur-portal /etc/gestur/portal-token
 chmod 640 /etc/gestur/portal-token
@@ -85,5 +93,9 @@ systemctl daemon-reload
 systemctl enable --now gestur-portal
 systemctl restart gestur-portal
 echo 'Portal instalado: http://10.42.0.1:3000 (o IP actual del dispositivo).'
-echo 'Clave de administración (guárdala):'
-cat /etc/gestur/portal-token
+if [[ ${GESTUR_UNATTENDED:-0} == 1 ]]; then
+    echo 'Consulta la clave de administración con: sudo cat /etc/gestur/portal-token'
+else
+    echo 'Clave de administración (guárdala):'
+    cat /etc/gestur/portal-token
+fi

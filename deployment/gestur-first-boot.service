@@ -1,0 +1,19 @@
+[Unit]
+Description=Install GESTUR on the first Raspberry Pi boot
+Wants=network-online.target
+After=multi-user.target network-online.target userconfig.service cloud-final.service
+ConditionPathExists=/etc/gestur/first-boot.json
+ConditionPathExists=!/var/lib/gestur-first-boot/complete.json
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/gestur-bootstrap/scripts/first-boot.py
+TimeoutStartSec=0
+Restart=on-failure
+RestartSec=120
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+# Deliberately no WantedBy=multi-user.target: cloud-final is ordered after that
+# target. The timer activates us independently, without blocking normal boot.

@@ -21,6 +21,8 @@ El instalador despliega **la copia local de la rama elegida** en `/opt/gestur`; 
 - Registro del expositor: `/var/log/gestur/viewer.log`.
 - `sudo bash gestur.sh uninstall` retira el arranque automático y conserva los datos.
 
+También puedes dejar una tarjeta o imagen de **Raspberry Pi OS Lite de 64 bits** preparada para instalar Gestur automáticamente en el primer arranque. `scripts/prepare-image.py` incorpora esta revisión a la raíz montada; la Pi instala con Internet por Ethernet, reintenta si falla y reinicia al terminar. Después muestra la bienvenida con QR y crea su red `GESTUR-XXXX`, sin modelos 3D iniciales. Consulta [la preparación de la imagen y el primer arranque](docs/first-boot.md).
+
 ## Portal de administración
 
 Esta rama incorpora las mejoras de rendimiento y añade un portal **React + Mantine + Node/Fastify**, con componentes locales que funcionan sin Internet. El instalador también prepara Node, el servicio web y el punto de acceso.

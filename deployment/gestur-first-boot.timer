@@ -1,0 +1,12 @@
+[Unit]
+Description=Start GESTUR provisioning after initial OS setup
+ConditionPathExists=/etc/gestur/first-boot.json
+ConditionPathExists=!/var/lib/gestur-first-boot/complete.json
+
+[Timer]
+OnBootSec=30s
+AccuracySec=5s
+Unit=gestur-first-boot.service
+
+[Install]
+WantedBy=timers.target

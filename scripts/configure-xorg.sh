@@ -17,5 +17,8 @@ case "${1:-}" in
     uninstall)
         rm -f -- "$XORG_TARGET"
         ;;
-    *) echo "Uso: bash $0 {install|uninstall} [raíz de la imagen]" >&2; exit 1 ;;
+    *)
+        echo "Uso: bash $0 {install|uninstall} [raíz de la imagen]" >&2
+        exit 1
+        ;;
 esac

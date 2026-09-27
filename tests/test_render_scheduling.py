@@ -1,4 +1,5 @@
 """Scheduling invariants plus framebuffer checks against real Panda3D."""
+
 import pytest
 
 from render_scheduler import RenderCadence
@@ -25,8 +26,11 @@ def test_welcome_has_its_own_cadence_and_respects_lower_target():
 
 def test_clock_jitter_does_not_drop_welcome_to_twenty_fps():
     cadence = RenderCadence()
-    draws = [frame for frame in range(180)
-             if cadence.due(frame / 60 + (-.00005 if frame % 2 else .00005), welcome=True)]
+    draws = [
+        frame
+        for frame in range(180)
+        if cadence.due(frame / 60 + (-0.00005 if frame % 2 else 0.00005), welcome=True)
+    ]
     assert 90 <= len(draws) <= 92
     assert all(right - left == 2 for left, right in zip(draws[2:], draws[3:]))
 
@@ -35,6 +39,7 @@ def test_clock_jitter_does_not_drop_welcome_to_twenty_fps():
 def offscreen_viewer(tmp_path, monkeypatch):
     core = pytest.importorskip("panda3d.core")
     from visualizer import ControlledObjViewer
+
     monkeypatch.setenv("GESTUR_PORTAL_URL", "http://10.42.0.1:3000")
     # A textured card facing the exhibition camera, with no external assets.
     root = core.NodePath("fixture")
@@ -44,7 +49,9 @@ def offscreen_viewer(tmp_path, monkeypatch):
     node.set_p(90)
     texture = core.Texture("fixture-texture")
     texture.setup_2d_texture(2, 2, core.Texture.T_unsigned_byte, core.Texture.F_rgb)
-    texture.set_ram_image(bytes((60, 180, 120, 120, 210, 80, 200, 100, 40, 30, 130, 220)))
+    texture.set_ram_image(
+        bytes((60, 180, 120, 120, 210, 80, 200, 100, 40, 30, 130, 220))
+    )
     node.set_texture(texture)
     path = tmp_path / "fixture.bam"
     root.write_bam_file(str(path))
@@ -63,7 +70,9 @@ def offscreen_viewer(tmp_path, monkeypatch):
         frame[0] += 1
 
     try:
-        assert viewer.win is not None, "Panda3D must create an actual offscreen framebuffer"
+        assert viewer.win is not None, (
+            "Panda3D must create an actual offscreen framebuffer"
+        )
         yield viewer, step, path
     finally:
         viewer.taskMgr.remove("test-control")
@@ -78,7 +87,9 @@ def framebuffer(viewer):
     return bytes(texture.get_ram_image())
 
 
-def test_real_framebuffer_survives_idle_and_wakes_in_same_control_tick(offscreen_viewer):
+def test_real_framebuffer_survives_idle_and_wakes_in_same_control_tick(
+    offscreen_viewer,
+):
     viewer, step, _ = offscreen_viewer
     control_ticks = []
 
@@ -104,7 +115,9 @@ def test_real_framebuffer_survives_idle_and_wakes_in_same_control_tick(offscreen
     assert viewer.render_metrics.frames == drawn + 1
     assert framebuffer(viewer) != original
     assert not viewer.update_model(rotation=[25, 0, 0])
-    assert [(t.get_x_size(), t.get_y_size()) for t in viewer.model.find_all_textures()] == [(2, 2)]
+    assert [
+        (t.get_x_size(), t.get_y_size()) for t in viewer.model.find_all_textures()
+    ] == [(2, 2)]
     assert (viewer.win.get_x_size(), viewer.win.get_y_size()) == (1920, 1080)
     assert viewer.win.get_fb_properties().get_multisamples() == 2
     for _ in range(56):
@@ -115,7 +128,9 @@ def test_real_framebuffer_survives_idle_and_wakes_in_same_control_tick(offscreen
     assert report["skipped_draws"] == 60 - report["frames"]
 
 
-def test_real_framebuffer_model_welcome_and_url_changes_are_drawn(offscreen_viewer, monkeypatch):
+def test_real_framebuffer_model_welcome_and_url_changes_are_drawn(
+    offscreen_viewer, monkeypatch
+):
     viewer, step, path = offscreen_viewer
     step()
     step()
@@ -177,11 +192,13 @@ def test_real_buffer_resize_wakes_an_idle_renderer(offscreen_viewer):
     assert len(set(bytes(shot.get_ram_image()))) > 10
 
 
-def test_floating_draws_thirty_fps_without_slowing_controls_and_wakes_immediately(offscreen_viewer):
+def test_floating_draws_thirty_fps_without_slowing_controls_and_wakes_immediately(
+    offscreen_viewer,
+):
     viewer, step, _ = offscreen_viewer
     viewer.set_idle_animation(True)
     for frame in range(60):
-        viewer.update_model(rotation=[frame * .2, 0, 0])
+        viewer.update_model(rotation=[frame * 0.2, 0, 0])
         step()
     report = viewer.get_render_status()
     assert report["control_ticks"] == 60

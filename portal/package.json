@@ -10,7 +10,9 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "start": "node server/index.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

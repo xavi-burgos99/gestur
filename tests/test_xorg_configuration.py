@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/configure-xorg.sh"
 
@@ -16,7 +15,15 @@ def configure(action, image_root):
     # First-boot provisioning uses a private umask. Xorg configuration must
     # still be readable by the unprivileged kiosk user after installation.
     return subprocess.run(
-        ["bash", "-c", 'umask 077; bash "$1" "$2" "$3"', "bash", str(SCRIPT), action, str(image_root)],
+        [
+            "bash",
+            "-c",
+            'umask 077; bash "$1" "$2" "$3"',
+            "bash",
+            str(SCRIPT),
+            action,
+            str(image_root),
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -48,12 +55,17 @@ def test_install_reinstall_and_uninstall_preserve_other_xorg_configuration(tmp_p
     assert vendor.read_bytes() == original
 
 
-@pytest.mark.parametrize("drm_devices", [
-    [("card0", "v3d"), ("card1", "vc4")],
-    [("card0", "vc4"), ("card1", "v3d")],
-    [("card0", "simpledrm"), ("card1", "v3d"), ("card2", "vc4")],
-])
-def test_display_selection_matches_drm_driver_independently_of_card_order(tmp_path, drm_devices):
+@pytest.mark.parametrize(
+    "drm_devices",
+    [
+        [("card0", "v3d"), ("card1", "vc4")],
+        [("card0", "vc4"), ("card1", "v3d")],
+        [("card0", "simpledrm"), ("card1", "v3d"), ("card2", "vc4")],
+    ],
+)
+def test_display_selection_matches_drm_driver_independently_of_card_order(
+    tmp_path, drm_devices
+):
     configure("install", tmp_path)
     text = (tmp_path / "etc/X11/xorg.conf.d/99-gestur-vc4.conf").read_text()
     directives = [shlex.split(line, comments=True) for line in text.splitlines()]
@@ -67,7 +79,9 @@ def test_display_selection_matches_drm_driver_independently_of_card_order(tmp_pa
 
     # Xorg obtains this name from drmGetVersion, not the sysfs platform driver
     # (vc4-drm). Its OutputClass MatchDriver compares this string exactly.
-    selected = [card for card, driver in drm_devices if driver == options["MatchDriver"][0]]
+    selected = [
+        card for card, driver in drm_devices if driver == options["MatchDriver"][0]
+    ]
     assert selected == [card for card, driver in drm_devices if driver == "vc4"]
     assert len(selected) == 1
 

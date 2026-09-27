@@ -1,9 +1,11 @@
 # Pruebas experimentales
 
 Scripts usados en las [mediciones de Raspberry Pi 5](../../docs/pi5-validation.md).
-No se importan desde la aplicación ni cambian sus dependencias. Los scripts de
-medición y exportación se conservan byte por byte; el
-[manifiesto de resultados](../../docs/benchmarks/pi5/manifest.json) registra sus hashes.
+No se importan desde la aplicación ni cambian sus dependencias. El
+[manifiesto de resultados](../../docs/benchmarks/pi5/manifest.json) conserva
+los hashes y la revisión usados en cada medición. El código propio actual se ha
+formateado y ordenado; para reproducir exactamente una medición histórica, usa
+su revisión registrada. El código de terceros conserva sus bytes y licencia.
 
 ## Nuevas entradas y gráficos
 

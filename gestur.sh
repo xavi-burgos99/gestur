@@ -24,7 +24,7 @@ require_host() {
 install_gestur() {
     require_host install
     if systemctl is-active --quiet display-manager.service || \
-       systemctl is-enabled --quiet display-manager.service; then
+        systemctl is-enabled --quiet display-manager.service; then
         echo "Gestur necesita una sesión de expositor exclusiva en tty1/:0." >&2
         echo "Usa Raspberry Pi OS Lite o desactiva antes tu gestor de escritorio." >&2
         exit 1
@@ -49,7 +49,9 @@ install_gestur() {
         rsync -a --chown=root:root \
             --exclude=.git --exclude=.venv --exclude=.bootstrap --exclude=.python \
             --exclude=node_modules --exclude=dist --exclude=__pycache__ \
-            --exclude=.pytest_cache --exclude=data --exclude=models \
+            --exclude=.pytest_cache --exclude=.ruff_cache --exclude=.coverage \
+            --exclude='.coverage.*' --exclude=htmlcov --exclude=coverage.xml \
+            --exclude=data --exclude=models \
             --exclude=models_compressed --exclude='capitell.*' --exclude=.dev-data \
             --exclude=.cache --exclude=artifacts --exclude='*.local.json' \
             "$GESTUR_SOURCE/" "$GESTUR_PREFIX/"
@@ -63,7 +65,7 @@ install_gestur() {
     export UV_PYTHON_BIN_DIR="$GESTUR_PREFIX/.python/bin"
     "$GESTUR_PREFIX/.bootstrap/bin/uv" python install 3.12.14
     if [[ -x "$GESTUR_PREFIX/.venv/bin/python" ]] && \
-       ! "$GESTUR_PREFIX/.venv/bin/python" -c 'import sys; assert sys.version_info[:2] == (3, 12)'; then
+        ! "$GESTUR_PREFIX/.venv/bin/python" -c 'import sys; assert sys.version_info[:2] == (3, 12)'; then
         mv "$GESTUR_PREFIX/.venv" "$GESTUR_PREFIX/.venv-backup-$(date +%s)"
     fi
     if [[ ! -x "$GESTUR_PREFIX/.venv/bin/python" ]]; then
@@ -90,7 +92,7 @@ install_gestur() {
     install -o root -g root -m 755 "$GESTUR_PREFIX/scripts/kiosk-session.sh" /usr/local/bin/gestur-session
     install -d /etc/systemd/system/getty@tty1.service.d
     if [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf ]] && \
-       [[ ! -f /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur ]]; then
+        [[ ! -f /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur ]]; then
         cp -p /etc/systemd/system/getty@tty1.service.d/override.conf \
             /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur
     fi
@@ -130,12 +132,12 @@ uninstall_gestur() {
         rm -f /etc/systemd/system/gestur-portal.service
     fi
     rm -f /etc/sudoers.d/gestur-wifi /usr/local/libexec/gestur-wifi \
-          /etc/sudoers.d/gestur-device /usr/local/libexec/gestur-device
+        /etc/sudoers.d/gestur-device /usr/local/libexec/gestur-device
     if [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur ]]; then
         mv /etc/systemd/system/getty@tty1.service.d/override.conf.before-gestur \
             /etc/systemd/system/getty@tty1.service.d/override.conf
     elif [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf ]] && \
-         grep -q -- '--autologin gestur' /etc/systemd/system/getty@tty1.service.d/override.conf; then
+        grep -q -- '--autologin gestur' /etc/systemd/system/getty@tty1.service.d/override.conf; then
         rm /etc/systemd/system/getty@tty1.service.d/override.conf
     fi
     if [[ -f /home/gestur/.bash_profile ]]; then
@@ -149,7 +151,9 @@ uninstall_gestur() {
 
 main() {
     local action=${1:-}
-    if [[ $# -gt 0 ]]; then shift; fi
+    if [[ $# -gt 0 ]]; then
+        shift
+    fi
     case "$action" in
         install)
             # Validate before touching packages, files, networking or users.
@@ -162,11 +166,19 @@ main() {
             install_gestur "$@" </dev/null
             ;;
         uninstall)
-            if [[ $# != 0 ]]; then echo 'uninstall no admite opciones.' >&2; return 1; fi
+            if [[ $# != 0 ]]; then
+                echo 'uninstall no admite opciones.' >&2
+                return 1
+            fi
             uninstall_gestur
             ;;
-        *) echo "Uso: sudo bash $0 install [--hostname nombre] | uninstall" >&2; return 1 ;;
+        *)
+            echo "Uso: sudo bash $0 install [--hostname nombre] | uninstall" >&2
+            return 1
+            ;;
     esac
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

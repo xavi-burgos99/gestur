@@ -7,19 +7,20 @@ original open state is attempted and verified in finally. Use Ethernet because
 Wi-Fi is restarted.
 No credentials or literal SSIDs are written to the result.
 """
+
 import argparse
 import http.cookiejar
 import json
 import os
-from pathlib import Path
 import re
 import secrets
 import signal
 import sys
 import time
 import urllib.error
-import urllib.request
 import urllib.parse
+import urllib.request
+from pathlib import Path
 
 BASE_URL = "http://127.0.0.1"
 TOKEN_PATH = Path("/etc/gestur/portal-token")
@@ -48,8 +49,12 @@ class API:
         if body is not None:
             data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(self.base_url + "/api/" + endpoint,
-                                         data=data, headers=headers, method=method)
+        request = urllib.request.Request(
+            self.base_url + "/api/" + endpoint,
+            data=data,
+            headers=headers,
+            method=method,
+        )
         try:
             with self.opener.open(request, timeout=timeout) as response:
                 if response.status != expected:
@@ -81,22 +86,27 @@ def wait_ready(api, timeout=READINESS_TIMEOUT):
     while time.monotonic() < deadline:
         remaining = deadline - time.monotonic()
         try:
-            state = api.request("GET", "session", timeout=min(2, max(.01, remaining)))
+            state = api.request("GET", "session", timeout=min(2, max(0.01, remaining)))
         except SmokeFailure as error:
             if str(error) != "connection_failed":
                 raise
         else:
-            require(type(state.get("authenticated")) is bool, "invalid_readiness_response")
+            require(
+                type(state.get("authenticated")) is bool, "invalid_readiness_response"
+            )
             return
         remaining = deadline - time.monotonic()
         if remaining > 0:
-            time.sleep(min(.25, remaining))
+            time.sleep(min(0.25, remaining))
     raise SmokeFailure("portal_readiness_timeout_15s")
 
 
 def wifi_is(state, ssid, secured):
-    return (state.get("ssid") == ssid and state.get("secured") is secured
-            and state.get("active") is True)
+    return (
+        state.get("ssid") == ssid
+        and state.get("secured") is secured
+        and state.get("active") is True
+    )
 
 
 def wait_job(api, ssid, secured, *, allow_failed=False, timeout=JOB_TIMEOUT):
@@ -104,7 +114,7 @@ def wait_job(api, ssid, secured, *, allow_failed=False, timeout=JOB_TIMEOUT):
     while time.monotonic() < deadline:
         remaining = deadline - time.monotonic()
         try:
-            state = api.request("GET", "wifi", timeout=min(10, max(.1, remaining)))
+            state = api.request("GET", "wifi", timeout=min(10, max(0.1, remaining)))
         except SmokeFailure as error:
             if str(error) != "connection_failed":
                 raise
@@ -126,11 +136,20 @@ def wait_job(api, ssid, secured, *, allow_failed=False, timeout=JOB_TIMEOUT):
 
 def apply_wifi(api, ssid, password):
     started = time.monotonic()
-    result = api.request("PUT", "wifi", {"ssid": ssid, "password": password}, expected=202)
+    result = api.request(
+        "PUT", "wifi", {"ssid": ssid, "password": password}, expected=202
+    )
     job = result.get("job") or {}
-    require(job.get("state") == "pending" and job.get("ssid") == ssid,
-            "wifi_job_not_accepted")
-    wait_job(api, ssid, password is not None, timeout=max(.1, JOB_TIMEOUT - (time.monotonic() - started)))
+    require(
+        job.get("state") == "pending" and job.get("ssid") == ssid,
+        "wifi_job_not_accepted",
+    )
+    wait_job(
+        api,
+        ssid,
+        password is not None,
+        timeout=max(0.1, JOB_TIMEOUT - (time.monotonic() - started)),
+    )
 
 
 def run(api, token):
@@ -153,39 +172,63 @@ def run(api, token):
         require(session.get("authenticated") is True, "login_failed")
         authenticated = True
         token = None
-        require(api.request("GET", "session").get("authenticated") is True,
-                "session_cookie_not_retained")
+        require(
+            api.request("GET", "session").get("authenticated") is True,
+            "session_cookie_not_retained",
+        )
         check("login_cookie_session")
 
         models = api.request("GET", "models")
-        require(models.get("models") == [] and models.get("active") is None,
-                "expected_empty_model_library")
+        require(
+            models.get("models") == [] and models.get("active") is None,
+            "expected_empty_model_library",
+        )
         check("models_empty", count=0, active=None)
 
         runtime = api.request("GET", "runtime")
         require(runtime.get("online") is True, "runtime_offline")
-        require(runtime.get("selected_model") is None and runtime.get("rendered_model") is None,
-                "unexpected_runtime_model")
+        require(
+            runtime.get("selected_model") is None
+            and runtime.get("rendered_model") is None,
+            "unexpected_runtime_model",
+        )
         require(runtime.get("error") is None, "runtime_reports_error")
         check("runtime_online", online=True, render_fps=runtime.get("render_fps"))
 
         baseline_config = api.request("GET", "config")
-        current, defaults = baseline_config.get("config"), baseline_config.get("defaults")
+        current, defaults = (
+            baseline_config.get("config"),
+            baseline_config.get("defaults"),
+        )
         for item in (current, defaults):
-            require(isinstance(item, dict) and item.get("schema_version") == 1,
-                    "invalid_configuration_response")
+            require(
+                isinstance(item, dict) and item.get("schema_version") == 1,
+                "invalid_configuration_response",
+            )
             require(item.get("active_model") is None, "unexpected_config_model")
-            require(all(isinstance(item.get(key), dict) for key in ("tracking", "render", "controls")),
-                    "missing_configuration_sections")
+            require(
+                all(
+                    isinstance(item.get(key), dict)
+                    for key in ("tracking", "render", "controls")
+                ),
+                "missing_configuration_sections",
+            )
         check("configuration_read", current_equals_defaults=current == defaults)
 
         initial = api.request("GET", "wifi")
         ssid = initial.get("ssid")
-        require(isinstance(ssid, str) and SSID_PATTERN.fullmatch(ssid),
-                "initial_access_point_not_default_gestur_ssid")
-        require(wifi_is(initial, ssid, False), "initial_access_point_not_expected_open_active")
-        require((initial.get("job") or {}).get("state") not in ("pending", "applying"),
-                "preexisting_wifi_job")
+        require(
+            isinstance(ssid, str) and SSID_PATTERN.fullmatch(ssid),
+            "initial_access_point_not_default_gestur_ssid",
+        )
+        require(
+            wifi_is(initial, ssid, False),
+            "initial_access_point_not_expected_open_active",
+        )
+        require(
+            (initial.get("job") or {}).get("state") not in ("pending", "applying"),
+            "preexisting_wifi_job",
+        )
         original_ssid = initial["ssid"]
         check("wifi_initial", ssid=original_ssid, secured=False, active=True)
 
@@ -221,15 +264,22 @@ def run(api, token):
                 report["restore_failure"] = "could_not_verify_open_active_original_ssid"
         if baseline_config is not None:
             try:
-                require(api.request("GET", "config") == baseline_config, "configuration_changed")
+                require(
+                    api.request("GET", "config") == baseline_config,
+                    "configuration_changed",
+                )
                 check("configuration_unchanged")
             except BaseException:
                 report["ok"] = False
-                report["config_check_failure"] = "could_not_verify_configuration_unchanged"
+                report["config_check_failure"] = (
+                    "could_not_verify_configuration_unchanged"
+                )
         if authenticated:
             try:
-                require(api.request("DELETE", "session").get("authenticated") is False,
-                        "logout_failed")
+                require(
+                    api.request("DELETE", "session").get("authenticated") is False,
+                    "logout_failed",
+                )
                 check("session_logout")
             except BaseException:
                 report["ok"] = False
@@ -241,16 +291,27 @@ def run(api, token):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-url", default=BASE_URL, help="Local HTTP portal; default port 80")
+    parser.add_argument(
+        "--base-url", default=BASE_URL, help="Local HTTP portal; default port 80"
+    )
     parser.add_argument("--token-file", type=Path, default=TOKEN_PATH)
     args = parser.parse_args()
     url = urllib.parse.urlsplit(args.base_url)
-    if (url.scheme != "http" or url.hostname not in ("127.0.0.1", "localhost", "::1")
-            or url.username or url.password or url.query or url.fragment or url.path not in ("", "/")):
+    if (
+        url.scheme != "http"
+        or url.hostname not in ("127.0.0.1", "localhost", "::1")
+        or url.username
+        or url.password
+        or url.query
+        or url.fragment
+        or url.path not in ("", "/")
+    ):
         parser.error("--base-url must be local HTTP without credentials or a path")
+
     # Convert a normal termination into a finally path, including Wi-Fi cleanup.
     def interrupted(signum, frame):
         raise KeyboardInterrupt
+
     signal.signal(signal.SIGTERM, interrupted)
     if os.geteuid() != 0:
         report = {"ok": False, "failure": "run_locally_as_root"}

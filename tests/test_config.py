@@ -1,11 +1,17 @@
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
-from runtime_config import (ConfigReloader, ConfigurationError, default_config,
-                            load_config, save_config, validate_config)
 from control_system import create_control_system
+from runtime_config import (
+    ConfigReloader,
+    ConfigurationError,
+    default_config,
+    load_config,
+    save_config,
+    validate_config,
+)
 
 
 class ConfigTests(unittest.TestCase):
@@ -62,7 +68,10 @@ class ConfigTests(unittest.TestCase):
                         save_config(config, path)
                         self.assertEqual(load_config(path), config)
             valid_bytes = path.read_bytes()
-            for section, field in (("render", "ambient_light"), ("controls", "idle_mode")):
+            for section, field in (
+                ("render", "ambient_light"),
+                ("controls", "idle_mode"),
+            ):
                 for value in (None, "", "automatic", 1, False, [], {}):
                     with self.subTest(field=field, value=value):
                         config = default_config()
@@ -72,8 +81,12 @@ class ConfigTests(unittest.TestCase):
                         self.assertEqual(path.read_bytes(), valid_bytes)
 
     def test_legacy_lighting_presets_migrate_without_changing_user_exposure(self):
-        for old, new in (("soft", "studio"), ("warm", "sunset"),
-                         ("cool", "gallery"), ("contrast", "rim")):
+        for old, new in (
+            ("soft", "studio"),
+            ("warm", "sunset"),
+            ("cool", "gallery"),
+            ("contrast", "rim"),
+        ):
             with self.subTest(old=old):
                 legacy = default_config()
                 legacy["render"]["ambient_light"] = old
@@ -112,11 +125,18 @@ class ConfigTests(unittest.TestCase):
 
     def test_missing_file_uses_defaults(self):
         with tempfile.TemporaryDirectory() as directory:
-            self.assertEqual(load_config(Path(directory) / "absent.json"), default_config())
+            self.assertEqual(
+                load_config(Path(directory) / "absent.json"), default_config()
+            )
 
     def test_malformed_unsafe_or_unsupported_configuration_is_rejected(self):
-        cases = [("active_model", "../secret.obj"), ("active_model", "/tmp/test.obj"),
-                 ("active_model", "a/../../x.obj"), ("schema_version", 2), ("schema_version", True)]
+        cases = [
+            ("active_model", "../secret.obj"),
+            ("active_model", "/tmp/test.obj"),
+            ("active_model", "a/../../x.obj"),
+            ("schema_version", 2),
+            ("schema_version", True),
+        ]
         for key, value in cases:
             with self.subTest(value=value):
                 config = default_config()
@@ -130,7 +150,12 @@ class ConfigTests(unittest.TestCase):
                 validate_config(config)
 
     def test_safe_archive_entrypoints_are_supported(self):
-        for model in (None, "a123/model.obj", "a123/sculpture/Capital.gltf", "a123/Capital.glb"):
+        for model in (
+            None,
+            "a123/model.obj",
+            "a123/sculpture/Capital.gltf",
+            "a123/Capital.glb",
+        ):
             config = default_config()
             config["active_model"] = model
             self.assertEqual(validate_config(config)["active_model"], model)
@@ -138,7 +163,10 @@ class ConfigTests(unittest.TestCase):
     def test_legacy_bundled_selection_becomes_empty_but_imports_survive(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
-            for selected, expected in (("capitell.obj", None), ("package/capitell.obj", "package/capitell.obj")):
+            for selected, expected in (
+                ("capitell.obj", None),
+                ("package/capitell.obj", "package/capitell.obj"),
+            ):
                 config = default_config()
                 config["active_model"] = selected
                 path.write_text(json.dumps(config), encoding="utf-8")
@@ -191,19 +219,45 @@ class ConfigTests(unittest.TestCase):
             reloader = ConfigReloader(path)
             config = default_config()
             config["controls"]["mappings"] = [
-                {"id": side, "input": f"{side}_hand_roll", "output": output,
-                 "mode": "absolute", "enabled": True, "scale": 180, "center": .5, "invert": False}
-                for side, output in (("left", "rotation_roll"), ("right", "rotation_yaw"))
+                {
+                    "id": side,
+                    "input": f"{side}_hand_roll",
+                    "output": output,
+                    "mode": "absolute",
+                    "enabled": True,
+                    "scale": 180,
+                    "center": 0.5,
+                    "invert": False,
+                }
+                for side, output in (
+                    ("left", "rotation_roll"),
+                    ("right", "rotation_yaw"),
+                )
             ]
             save_config(config, path)
             self.assertEqual(reloader.reload_if_changed(), config)
             self.assertEqual(load_config(path), config)
 
     def test_new_gestures_save_reload_and_build_runtime_controls(self):
-        inputs = ("head_pitch", "head_yaw", "head_roll", "left_hand_x", "left_hand_y",
-                  "right_hand_x", "right_hand_y", "left_hand_openness", "right_hand_openness",
-                  "torso_x", "torso_y", "torso_scale", "torso_pitch", "torso_yaw", "torso_roll",
-                  "left_hand_scale", "right_hand_scale")
+        inputs = (
+            "head_pitch",
+            "head_yaw",
+            "head_roll",
+            "left_hand_x",
+            "left_hand_y",
+            "right_hand_x",
+            "right_hand_y",
+            "left_hand_openness",
+            "right_hand_openness",
+            "torso_x",
+            "torso_y",
+            "torso_scale",
+            "torso_pitch",
+            "torso_yaw",
+            "torso_roll",
+            "left_hand_scale",
+            "right_hand_scale",
+        )
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             save_config(default_config(), path)
@@ -211,16 +265,27 @@ class ConfigTests(unittest.TestCase):
             for input_name in inputs:
                 with self.subTest(input=input_name):
                     config = default_config()
-                    config["controls"]["mappings"] = [{"id": "new_input", "input": input_name,
-                        "output": "position_x", "mode": "absolute", "enabled": True,
-                        "scale": 2, "invert": False, "center": 0.5}]
+                    config["controls"]["mappings"] = [
+                        {
+                            "id": "new_input",
+                            "input": input_name,
+                            "output": "position_x",
+                            "mode": "absolute",
+                            "enabled": True,
+                            "scale": 2,
+                            "invert": False,
+                            "center": 0.5,
+                        }
+                    ]
                     save_config(config, path)
                     reloaded = reloader.reload_if_changed()
                     self.assertEqual(reloaded, config)
                     part, field = input_name.rsplit("_", 1)
                     value = 90 if field in ("pitch", "yaw", "roll") else 0.75
                     runtime = create_control_system(reloaded)
-                    output = runtime.process_input({part: {"detected": True, field: value}})
+                    output = runtime.process_input(
+                        {part: {"detected": True, field: value}}
+                    )
                     self.assertAlmostEqual(output["position"][0], 0.5)
 
     def test_unmeasured_depth_inputs_are_rejected(self):
@@ -238,13 +303,16 @@ if __name__ == "__main__":
 
 def test_duplicate_enabled_outputs_match_portal_validation():
     from runtime_config import ConfigurationError, default_config, validate_config
+
     config = default_config()
-    config['controls']['mappings'][1]['output'] = config['controls']['mappings'][0]['output']
+    config["controls"]["mappings"][1]["output"] = config["controls"]["mappings"][0][
+        "output"
+    ]
     try:
         validate_config(config)
     except ConfigurationError:
         pass
     else:
-        raise AssertionError('Duplicate enabled movements must be rejected')
-    config['controls']['mappings'][1]['enabled'] = False
+        raise AssertionError("Duplicate enabled movements must be rejected")
+    config["controls"]["mappings"][1]["enabled"] = False
     validate_config(config)

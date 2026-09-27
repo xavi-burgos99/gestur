@@ -51,6 +51,10 @@ export async function createApp(options) {
   });
   let receivingUpload = false;
   let mutatingModels = false;
+  const modelBusy = () =>
+    receivingUpload ||
+    mutatingModels ||
+    ["processing", "awaiting_decision"].includes(importer.current()?.state);
   try {
     deviceJob = JSON.parse(await readFile(deviceJobFile, "utf8"));
   } catch {}
@@ -263,9 +267,7 @@ export async function createApp(options) {
     const blocked = () =>
       activeMutations > 0 ||
       ["pending", "applying"].includes(job?.state) ||
-      receivingUpload ||
-      mutatingModels ||
-      ["processing", "awaiting_decision"].includes(importer.current()?.state);
+      modelBusy();
     if (deviceBusy() || blocked())
       throw new ApiError(
         409,
@@ -341,15 +343,13 @@ export async function createApp(options) {
         deviceOperations.add(operation);
       }, deviceDelayMs);
       timers.add(timer);
-      return reply
-        .code(202)
-        .send({
-          job: deviceJob,
-          hostname: deviceJob.hostname,
-          ssid: deviceJob.ssid,
-          portal_url: deviceJob.portal_url,
-          reboot: true,
-        });
+      return reply.code(202).send({
+        job: deviceJob,
+        hostname: deviceJob.hostname,
+        ssid: deviceJob.ssid,
+        portal_url: deviceJob.portal_url,
+        reboot: true,
+      });
     } catch (error) {
       // A failed preflight/persist must not leave the portal locked forever.
       if (deviceJob?.state === "pending") deviceJob = null;
@@ -415,11 +415,7 @@ export async function createApp(options) {
   });
   app.get("/api/models", async () => store.catalog());
   async function mutateModel(action, body) {
-    if (
-      receivingUpload ||
-      mutatingModels ||
-      ["processing", "awaiting_decision"].includes(importer.current()?.state)
-    )
+    if (modelBusy())
       throw new ApiError(
         409,
         "Espera a que termine la importación o el cambio del modelo.",
@@ -438,11 +434,7 @@ export async function createApp(options) {
     mutateModel(store.deleteModel, request.body),
   );
   app.post("/api/models", async (request, reply) => {
-    if (
-      receivingUpload ||
-      mutatingModels ||
-      ["processing", "awaiting_decision"].includes(importer.current()?.state)
-    )
+    if (modelBusy())
       throw new ApiError(409, "Ya se está recibiendo otro archivo.");
     receivingUpload = true;
     try {

@@ -6,7 +6,10 @@ export DEBIAN_FRONTEND=noninteractive
 export PIP_NO_INPUT=1
 exec </dev/null
 INSTALL_ROOT=/opt/gestur
-if [[ $# -gt 0 && "$1" != --* ]]; then INSTALL_ROOT=$1; shift; fi
+if [[ $# -gt 0 && "$1" != --* ]]; then
+    INSTALL_ROOT=$1
+    shift
+fi
 TASK_HOSTNAME=''
 if [[ $# -gt 0 ]]; then
     if [[ $# != 2 || "$1" != --hostname || ! "$2" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
@@ -15,13 +18,26 @@ if [[ $# -gt 0 ]]; then
     fi
     TASK_HOSTNAME=$2
 fi
-if [[ $(id -u) != 0 ]]; then echo 'Ejecuta este instalador como root.' >&2; exit 1; fi
-if [[ "$INSTALL_ROOT" != /opt/gestur ]]; then echo 'La instalación del portal requiere /opt/gestur.' >&2; exit 1; fi
-if [[ $(uname -s) != Linux ]]; then echo 'El portal de dispositivo se instala en Raspberry Pi OS.' >&2; exit 1; fi
+if [[ $(id -u) != 0 ]]; then
+    echo 'Ejecuta este instalador como root.' >&2
+    exit 1
+fi
+if [[ "$INSTALL_ROOT" != /opt/gestur ]]; then
+    echo 'La instalación del portal requiere /opt/gestur.' >&2
+    exit 1
+fi
+if [[ $(uname -s) != Linux ]]; then
+    echo 'El portal de dispositivo se instala en Raspberry Pi OS.' >&2
+    exit 1
+fi
 TASK_NODE_TEMP=''
 TASK_BUILD=''
 TASK_SUDOERS=''
-cleanup() { [[ -z "$TASK_NODE_TEMP" ]] || rm -rf "$TASK_NODE_TEMP"; [[ -z "$TASK_BUILD" ]] || rm -rf "$TASK_BUILD"; [[ -z "$TASK_SUDOERS" ]] || rm -f "$TASK_SUDOERS"; }
+cleanup() {
+    [[ -z "$TASK_NODE_TEMP" ]] || rm -rf "$TASK_NODE_TEMP"
+    [[ -z "$TASK_BUILD" ]] || rm -rf "$TASK_BUILD"
+    [[ -z "$TASK_SUDOERS" ]] || rm -f "$TASK_SUDOERS"
+}
 trap cleanup EXIT
 apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o APT::Update::Error-Mode=any update
 apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 \
@@ -32,16 +48,34 @@ systemctl enable --now avahi-daemon
 # Prefer the distribution package when sufficiently recent. Otherwise install an
 # exact upstream release, checking the official SHA256 manifest (no remote shell).
 TASK_EXISTING_NODE=/usr/bin/node
-if [[ -x /opt/gestur-node/bin/node ]]; then TASK_EXISTING_NODE=/opt/gestur-node/bin/node; fi
+if [[ -x /opt/gestur-node/bin/node ]]; then
+    TASK_EXISTING_NODE=/opt/gestur-node/bin/node
+fi
 if ! "$TASK_EXISTING_NODE" -e 'let [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||a===22&&b>=12?0:1)' >/dev/null 2>&1 || \
-   { [[ "$TASK_EXISTING_NODE" == /opt/gestur-node/bin/node ]] && ! env PATH="/opt/gestur-node/bin:$PATH" /opt/gestur-node/bin/npm --version >/dev/null 2>&1; }; then
+    { [[ "$TASK_EXISTING_NODE" == /opt/gestur-node/bin/node ]] && ! env PATH="/opt/gestur-node/bin:$PATH" /opt/gestur-node/bin/npm --version >/dev/null 2>&1; }; then
     NODE_VERSION=v22.23.3
-    case $(dpkg --print-architecture) in arm64) NODE_ARCH=arm64;; amd64) NODE_ARCH=x64;; *) echo 'Se requiere Raspberry Pi OS de 64 bits.' >&2; exit 1;; esac
+    case $(dpkg --print-architecture) in
+        arm64)
+            NODE_ARCH=arm64
+            ;;
+        amd64)
+            NODE_ARCH=x64
+            ;;
+        *)
+            echo 'Se requiere Raspberry Pi OS de 64 bits.' >&2
+            exit 1
+            ;;
+    esac
     TASK_NODE_TEMP=$(mktemp -d)
     NODE_ARCHIVE="node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
     curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 "https://nodejs.org/dist/${NODE_VERSION}/${NODE_ARCHIVE}" -o "$TASK_NODE_TEMP/$NODE_ARCHIVE"
     curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" -o "$TASK_NODE_TEMP/SHASUMS256.txt"
-    (cd "$TASK_NODE_TEMP"; awk -v file="$NODE_ARCHIVE" '$2 == file { print }' SHASUMS256.txt > selected.sha256; test -s selected.sha256; sha256sum --check selected.sha256)
+    (
+        cd "$TASK_NODE_TEMP"
+        awk -v file="$NODE_ARCHIVE" '$2 == file { print }' SHASUMS256.txt > selected.sha256
+        test -s selected.sha256
+        sha256sum --check selected.sha256
+    )
     mkdir -p /opt/gestur-node
     tar -xJf "$TASK_NODE_TEMP/$NODE_ARCHIVE" -C /opt/gestur-node --strip-components=1 --no-same-owner
 fi
@@ -78,7 +112,10 @@ fi
 # An old token identifies an existing installation, even after interrupted
 # upgrades. New installs create no token, so retries stay pending onboarding.
 TASK_FRESH=true
-if [[ -L /etc/gestur/portal-token ]]; then echo 'La clave anterior no puede ser un enlace.' >&2; exit 1; fi
+if [[ -L /etc/gestur/portal-token ]]; then
+    echo 'La clave anterior no puede ser un enlace.' >&2
+    exit 1
+fi
 if [[ -e /etc/gestur/portal-token ]]; then
     TASK_FRESH=false
     chown root:gestur-portal /etc/gestur/portal-token
@@ -98,7 +135,7 @@ install -o root -g root -m 440 "$TASK_SUDOERS" /etc/sudoers.d/gestur-device
 # Retired illustrations are archived in docs; upgrades must not republish the
 # copies left by the previous installer in the public directory.
 rm -f "$INSTALL_ROOT/portal/public/motion-icons/head-base.png" \
-      "$INSTALL_ROOT/portal/public/motion-icons/hand-base.png"
+    "$INSTALL_ROOT/portal/public/motion-icons/hand-base.png"
 TASK_BUILD=$(mktemp -d)
 cp -a "$INSTALL_ROOT/portal/." "$TASK_BUILD/"
 chown -R gestur-portal:gestur-portal "$TASK_BUILD"

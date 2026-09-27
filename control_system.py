@@ -3,6 +3,7 @@
 The render thread owns these objects; detector callbacks only replace snapshots.
 All timing uses a monotonic clock, which can be replaced in deterministic tests.
 """
+
 import math
 import time
 from abc import ABC, abstractmethod
@@ -20,7 +21,9 @@ def _shortest_delta(target, current, period):
     return (target - current + period / 2) % period - period / 2
 
 
-_OUTPUT_CHANNELS = [(kind, axis) for kind in ("position", "rotation") for axis in range(3)] + [("scale", None)]
+_OUTPUT_CHANNELS = [
+    (kind, axis) for kind in ("position", "rotation") for axis in range(3)
+] + [("scale", None)]
 
 
 def _neutral_output():
@@ -28,7 +31,11 @@ def _neutral_output():
 
 
 def _copy_output(output):
-    return {"position": list(output["position"]), "rotation": list(output["rotation"]), "scale": output["scale"]}
+    return {
+        "position": list(output["position"]),
+        "rotation": list(output["rotation"]),
+        "scale": output["scale"],
+    }
 
 
 def _component(output, channel):
@@ -63,9 +70,18 @@ class ExponentialSmoother(Smoother):
     reacquisition stay continuous even when input sensitivity changes.
     linear_decay returns scalar outputs to their numeric center without wrapping.
     """
-    def __init__(self, alpha=0.3, decay_rate=0.1, center_value=0.5,
-                 smoothing_ms=None, clock=time.monotonic, period=None,
-                 decay_period=None, linear_decay=False):
+
+    def __init__(
+        self,
+        alpha=0.3,
+        decay_rate=0.1,
+        center_value=0.5,
+        smoothing_ms=None,
+        clock=time.monotonic,
+        period=None,
+        decay_period=None,
+        linear_decay=False,
+    ):
         self.alpha = alpha
         self.decay_rate = decay_rate
         self.center_value = center_value
@@ -74,8 +90,11 @@ class ExponentialSmoother(Smoother):
         self.decay_period = period if decay_period is None else decay_period
         self.linear_decay = linear_decay
         self.align_reacquisition = decay_period is not None and not linear_decay
-        self.time_constant = (smoothing_ms / 1000.0 if smoothing_ms is not None
-                              else self._time_constant(alpha))
+        self.time_constant = (
+            smoothing_ms / 1000.0
+            if smoothing_ms is not None
+            else self._time_constant(alpha)
+        )
         self.decay_constant = self._time_constant(decay_rate)
         self.reset()
 
@@ -90,7 +109,9 @@ class ExponentialSmoother(Smoother):
         value = _number(value)
         if value is not None and not self.has_data:
             if self.align_reacquisition:
-                aligned = self.smoothed_value + _shortest_delta(value, self.smoothed_value, self.decay_period)
+                aligned = self.smoothed_value + _shortest_delta(
+                    value, self.smoothed_value, self.decay_period
+                )
                 self.input_offset = aligned - value
                 value = aligned
             self.smoothed_value = value
@@ -102,8 +123,11 @@ class ExponentialSmoother(Smoother):
         period = self.period
         if value is None:
             period = None if self.linear_decay else self.decay_period
-        delta = (target - self.smoothed_value if period is None
-                 else _shortest_delta(target, self.smoothed_value, period))
+        delta = (
+            target - self.smoothed_value
+            if period is None
+            else _shortest_delta(target, self.smoothed_value, period)
+        )
         self.smoothed_value += weight * delta
         if value is not None:
             self.has_data = True
@@ -125,10 +149,18 @@ class ExponentialSmoother(Smoother):
 
 
 class HybridRotationController:
-    def __init__(self, max_degrees=30.0, left_threshold=0.25, right_threshold=0.75,
-                 continuous_speed_degrees_per_second=45.0, center=0.5, invert=False,
-                 reset_timeout_seconds=3.0, reset_duration_seconds=1.0,
-                 clock=time.monotonic):
+    def __init__(
+        self,
+        max_degrees=30.0,
+        left_threshold=0.25,
+        right_threshold=0.75,
+        continuous_speed_degrees_per_second=45.0,
+        center=0.5,
+        invert=False,
+        reset_timeout_seconds=3.0,
+        reset_duration_seconds=1.0,
+        clock=time.monotonic,
+    ):
         self.max_degrees = max_degrees
         self.left_threshold = left_threshold
         self.right_threshold = right_threshold
@@ -152,10 +184,11 @@ class HybridRotationController:
         self._has_input = False
 
     def _proportional(self, value):
-        offset = (_clamp(value, self.left_threshold, self.right_threshold) - self.center)
+        offset = _clamp(value, self.left_threshold, self.right_threshold) - self.center
         sign = -1 if self.invert else 1
-        return _clamp(offset * 2.0 * self.max_degrees * sign,
-                      -self.max_degrees, self.max_degrees)
+        return _clamp(
+            offset * 2.0 * self.max_degrees * sign, -self.max_degrees, self.max_degrees
+        )
 
     def hold(self, now=None):
         """Stop angular velocity immediately during a brief tracking loss."""
@@ -175,10 +208,16 @@ class HybridRotationController:
                 self.is_resetting = True
                 self.reset_start_time = now
                 self.reset_start_rotation = self.current_rotation
-                self.reset_target_rotation = self.current_rotation + _shortest_delta(0.0, self.current_rotation, 360.0)
-            progress = _clamp((now - self.reset_start_time) / self.reset_duration_seconds, 0.0, 1.0)
+                self.reset_target_rotation = self.current_rotation + _shortest_delta(
+                    0.0, self.current_rotation, 360.0
+                )
+            progress = _clamp(
+                (now - self.reset_start_time) / self.reset_duration_seconds, 0.0, 1.0
+            )
             eased = progress * progress * (3.0 - 2.0 * progress)
-            self.current_rotation = self.reset_start_rotation + eased * (self.reset_target_rotation - self.reset_start_rotation)
+            self.current_rotation = self.reset_start_rotation + eased * (
+                self.reset_target_rotation - self.reset_start_rotation
+            )
             self.continuous_rotation = self.current_rotation
             self.proportional_rotation_at_threshold = 0.0
             self.is_in_continuous_mode = False
@@ -195,18 +234,33 @@ class HybridRotationController:
         self.is_resetting = False
         self._held = False
         self._has_input = True
-        self.is_in_continuous_mode = value < self.left_threshold or value > self.right_threshold
-        self.continuous_direction = -1 if value < self.left_threshold else 1 if value > self.right_threshold else 0
+        self.is_in_continuous_mode = (
+            value < self.left_threshold or value > self.right_threshold
+        )
+        self.continuous_direction = (
+            -1
+            if value < self.left_threshold
+            else 1
+            if value > self.right_threshold
+            else 0
+        )
         self.proportional_rotation_at_threshold = proportional
-        speed = self.max_continuous_speed * self.calculate_continuous_speed_factor(value)
-        self.continuous_rotation += self.continuous_direction * speed * elapsed * (-1 if self.invert else 1)
+        speed = self.max_continuous_speed * self.calculate_continuous_speed_factor(
+            value
+        )
+        self.continuous_rotation += (
+            self.continuous_direction * speed * elapsed * (-1 if self.invert else 1)
+        )
         # Keep rotations unwrapped: wrapping at 360 can make interpolators spin.
         self.current_rotation = self.continuous_rotation + proportional
         return self.current_rotation
 
     def calculate_continuous_speed_factor(self, head_x_value):
         if head_x_value > self.right_threshold:
-            return min(1.0, (head_x_value - self.right_threshold) / (1.0 - self.right_threshold))
+            return min(
+                1.0,
+                (head_x_value - self.right_threshold) / (1.0 - self.right_threshold),
+            )
         if head_x_value < self.left_threshold:
             return min(1.0, (self.left_threshold - head_x_value) / self.left_threshold)
         return 0.0
@@ -226,18 +280,30 @@ class DataProcessor:
         result["both_detected"] = result["left_detected"] and result["right_detected"]
         result["count"] = int(result["left_detected"]) + int(result["right_detected"])
         for axis in ("x", "y"):
-            valid = [result[f"{side}_{axis}"] for side in ("left", "right") if result[f"{side}_{axis}"] is not None]
+            valid = [
+                result[f"{side}_{axis}"]
+                for side in ("left", "right")
+                if result[f"{side}_{axis}"] is not None
+            ]
             result[f"center_{axis}"] = sum(valid) / len(valid) if valid else None
         result.update(distance=None, separation_x=None, separation_y=None)
-        if result["both_detected"] and all(result[f"{side}_{axis}"] is not None for side in ("left", "right") for axis in ("x", "y")):
+        if result["both_detected"] and all(
+            result[f"{side}_{axis}"] is not None
+            for side in ("left", "right")
+            for axis in ("x", "y")
+        ):
             dx = result["right_x"] - result["left_x"]
             dy = result["right_y"] - result["left_y"]
-            result.update(distance=math.hypot(dx, dy), separation_x=abs(dx), separation_y=abs(dy))
+            result.update(
+                distance=math.hypot(dx, dy), separation_x=abs(dx), separation_y=abs(dy)
+            )
         return result
 
 
 class ControlMapping:
-    def __init__(self, name, input_extractor, output_applier, smoother=None, enabled=True):
+    def __init__(
+        self, name, input_extractor, output_applier, smoother=None, enabled=True
+    ):
         self.name = name
         self.input_extractor = input_extractor
         self.output_applier = output_applier
@@ -260,8 +326,16 @@ class ControlMapping:
 
 
 class HybridRotationMapping:
-    def __init__(self, name, rotation_controller, smoother=None, enabled=True,
-                 input_extractor=None, output_axis=2, clock=time.monotonic):
+    def __init__(
+        self,
+        name,
+        rotation_controller,
+        smoother=None,
+        enabled=True,
+        input_extractor=None,
+        output_axis=2,
+        clock=time.monotonic,
+    ):
         self.name = name
         self.rotation_controller = rotation_controller
         self.smoother = smoother
@@ -299,14 +373,23 @@ class HybridRotationMapping:
         else:
             if self.smoother:
                 self.smoother.update(None, now)
-            elapsed = math.inf if self.last_real_detection_time is None else now - self.last_real_detection_time
-            rotation = (self.rotation_controller.update(None, now) if elapsed >= self.reset_timeout_seconds
-                        else self.rotation_controller.hold(now))
+            elapsed = (
+                math.inf
+                if self.last_real_detection_time is None
+                else now - self.last_real_detection_time
+            )
+            rotation = (
+                self.rotation_controller.update(None, now)
+                if elapsed >= self.reset_timeout_seconds
+                else self.rotation_controller.hold(now)
+            )
         output_state["rotation"][self.output_axis] = rotation
 
 
 class ControlSystem:
-    def __init__(self, clock=time.monotonic, *, idle_mode="return", reset_timeout_seconds=3.0):
+    def __init__(
+        self, clock=time.monotonic, *, idle_mode="return", reset_timeout_seconds=3.0
+    ):
         self.mappings = []
         self.data_processor = DataProcessor()
         self.clock = clock
@@ -338,22 +421,32 @@ class ControlSystem:
         enriched = self._enrich_input_data(pose_data or {})
         now = self.clock()
         enabled = [mapping for mapping in self.mappings if mapping.enabled]
-        usable = {mapping for mapping in enabled if _number(mapping.input_extractor(enriched)) is not None}
-        controls_vertical = any(mapping.output_key == ("position", 1) for mapping in usable)
+        usable = {
+            mapping
+            for mapping in enabled
+            if _number(mapping.input_extractor(enriched)) is not None
+        }
+        controls_vertical = any(
+            mapping.output_key == ("position", 1) for mapping in usable
+        )
         if usable:
             self._last_usable_input = now
             if self._float_origin is not None:
                 self._bob_return = {"start": now, "from": self._bob_offset}
             self._float_origin = None
         elapsed = max(0.0, now - self._last_usable_input)
-        self._idle_active = not usable and (self.idle_mode == "hold" or elapsed >= self.reset_timeout_seconds)
+        self._idle_active = not usable and (
+            self.idle_mode == "hold" or elapsed >= self.reset_timeout_seconds
+        )
         if self.idle_mode == "return":
             # Preserve the original per-mapping decay and delayed hybrid reset.
             output = _neutral_output()
             for mapping in enabled:
                 mapping.process(enriched, output, now=now)
             if self._adopt_recovery:
-                self._blend_recovery(self._adopt_recovery, output, _OUTPUT_CHANNELS, now)
+                self._blend_recovery(
+                    self._adopt_recovery, output, _OUTPUT_CHANNELS, now
+                )
                 if self._adopt_recovery["finished"]:
                     self._adopt_recovery = None
         else:
@@ -374,7 +467,9 @@ class ControlSystem:
                 mapping.process(enriched, output, now=now)
                 recovery = self._recoveries.get(mapping)
                 if recovery:
-                    channels = [mapping.output_key] if mapping.output_key else _OUTPUT_CHANNELS
+                    channels = (
+                        [mapping.output_key] if mapping.output_key else _OUTPUT_CHANNELS
+                    )
                     self._blend_recovery(recovery, output, channels, now)
                     if mapping.output_key == ("position", 1):
                         vertical_recovery = recovery
@@ -384,16 +479,23 @@ class ControlSystem:
                 # The interpolated visible Y contains the starting decoration
                 # in proportion to (1-weight). Keep that part separate from
                 # genuine gesture movement if tracking disappears again early.
-                self._bob_offset = (vertical_recovery["bob_offset"] * (1 - vertical_recovery["weight"])
-                                    if vertical_recovery else 0.0)
+                self._bob_offset = (
+                    vertical_recovery["bob_offset"] * (1 - vertical_recovery["weight"])
+                    if vertical_recovery
+                    else 0.0
+                )
                 self._bob_return = None
-            elif self._bob_offset and self._bob_return is None and self._float_origin is None:
+            elif (
+                self._bob_offset
+                and self._bob_return is None
+                and self._float_origin is None
+            ):
                 self._bob_return = {"start": now, "from": self._bob_offset}
             if self._bob_return is not None:
                 # Decoration is an offset, not a new gesture position. Remove
                 # it smoothly when tracking returns so repeated idle episodes
                 # cannot progressively move an unmapped axis off screen.
-                progress = _clamp((now - self._bob_return["start"]) / .6, 0.0, 1.0)
+                progress = _clamp((now - self._bob_return["start"]) / 0.6, 0.0, 1.0)
                 weight = progress * progress * (3 - 2 * progress)
                 baseline = output["position"][1] - self._bob_offset
                 self._bob_offset = self._bob_return["from"] * (1 - weight)
@@ -411,15 +513,24 @@ class ControlSystem:
                 # after days of idle operation; no frame-rate integration.
                 turn = 7.0 * (phase - 1.0 + math.exp(-phase))
                 output["rotation"][2] = self._float_origin["rotation"][2] + turn % 360.0
-                self._bob_offset = (self._float_bob_start * math.exp(-phase)
-                                    + .12 * (1 - math.exp(-phase)) * math.sin(phase * .7))
-                output["position"][1] = self._float_origin["position"][1] + self._bob_offset
+                self._bob_offset = self._float_bob_start * math.exp(-phase) + 0.12 * (
+                    1 - math.exp(-phase)
+                ) * math.sin(phase * 0.7)
+                output["position"][1] = (
+                    self._float_origin["position"][1] + self._bob_offset
+                )
         self._output = _copy_output(output)
         return output
 
     @staticmethod
     def _new_recovery(output, now):
-        return {"start": now, "output": _copy_output(output), "targets": {}, "duration": None, "finished": False}
+        return {
+            "start": now,
+            "output": _copy_output(output),
+            "targets": {},
+            "duration": None,
+            "finished": False,
+        }
 
     @staticmethod
     def _blend_recovery(recovery, output, channels, now):
@@ -434,7 +545,7 @@ class ControlSystem:
                 longest_turn = max(longest_turn, abs(target - start))
             targets[channel] = target
         if recovery["duration"] is None:
-            recovery["duration"] = max(.35, longest_turn / 90.0)
+            recovery["duration"] = max(0.35, longest_turn / 90.0)
         progress = _clamp((now - recovery["start"]) / recovery["duration"], 0.0, 1.0)
         weight = progress * progress * (3.0 - 2.0 * progress)
         recovery["weight"] = weight
@@ -445,7 +556,9 @@ class ControlSystem:
 
     def adopt_output_state(self, previous):
         """Carry the visible pose across a settings change without sharing filters."""
-        output = _copy_output(previous if isinstance(previous, dict) else previous._output)
+        output = _copy_output(
+            previous if isinstance(previous, dict) else previous._output
+        )
         now = self.clock()
         self._output = output
         self._last_usable_input = now
@@ -454,7 +567,9 @@ class ControlSystem:
         self._bob_return = None
         self._missing = set(self.mappings)
         self._recoveries.clear()
-        self._adopt_recovery = self._new_recovery(output, now) if self.idle_mode == "return" else None
+        self._adopt_recovery = (
+            self._new_recovery(output, now) if self.idle_mode == "return" else None
+        )
         for mapping in self.mappings:
             if isinstance(mapping, HybridRotationMapping):
                 mapping.adopt_rotation(output, now)
@@ -464,12 +579,16 @@ class ControlSystem:
 
     def _enrich_input_data(self, pose_data):
         enriched = pose_data.copy()
-        enriched["hands"] = self.data_processor.process_hands(pose_data.get("left_hand", {}), pose_data.get("right_hand", {}))
+        enriched["hands"] = self.data_processor.process_hands(
+            pose_data.get("left_hand", {}), pose_data.get("right_hand", {})
+        )
         return enriched
 
     def get_mappings_info(self):
-        return [f"{'✓' if mapping.enabled else '✗'} {mapping.name} ({'Hybrid' if isinstance(mapping, HybridRotationMapping) else 'Standard'})"
-                for mapping in self.mappings]
+        return [
+            f"{'✓' if mapping.enabled else '✗'} {mapping.name} ({'Hybrid' if isinstance(mapping, HybridRotationMapping) else 'Standard'})"
+            for mapping in self.mappings
+        ]
 
 
 def create_extractors():
@@ -480,6 +599,7 @@ def create_extractors():
             if value is not None and normalize_rotation:
                 return ((value + 180.0) % 360.0) / 360.0
             return value
+
         return extractor
 
     extractors = {}
@@ -489,7 +609,9 @@ def create_extractors():
         for angle in ("pitch", "yaw", "roll"):
             extractors[f"{part}_{angle}"] = tracked(part, angle, True)
     for field in ("center_x", "center_y", "distance", "separation_x"):
-        extractors[f"hands_{field}"] = lambda data, field=field: _number(data.get("hands", {}).get(field))
+        extractors[f"hands_{field}"] = lambda data, field=field: _number(
+            data.get("hands", {}).get(field)
+        )
     for side in ("left", "right"):
         for angle in ("rotation", "pitch", "yaw", "roll"):
             extractors[f"{side}_hand_{angle}"] = tracked(f"{side}_hand", angle, True)
@@ -503,34 +625,57 @@ def create_appliers(clock=time.monotonic):
         def apply(value, output):
             value = center if value is None else value
             degrees = (value - center) * 2.0 * max_degrees * (-1 if invert else 1)
-            output["rotation"][axis] = degrees if circular else _clamp(degrees, -max_degrees, max_degrees)
+            output["rotation"][axis] = (
+                degrees if circular else _clamp(degrees, -max_degrees, max_degrees)
+            )
+
         return apply
 
     def position(axis, scale=10.0, center=0.5, invert=False):
         def apply(value, output):
             value = center if value is None else value
             output["position"][axis] = (value - center) * scale * (-1 if invert else 1)
+
         return apply
 
     def scale_uniform(min_scale=0.3, max_scale=3.0, center_distance=0.3):
         def apply(value, output):
             value = center_distance if value is None else value
             if value <= center_distance:
-                result = min_scale + value / max(center_distance, 1e-9) * (1.0 - min_scale)
+                result = min_scale + value / max(center_distance, 1e-9) * (
+                    1.0 - min_scale
+                )
             else:
-                result = 1.0 + (value - center_distance) / max(1.0 - center_distance, 1e-9) * (max_scale - 1.0)
+                result = 1.0 + (value - center_distance) / max(
+                    1.0 - center_distance, 1e-9
+                ) * (max_scale - 1.0)
             output["scale"] = _clamp(result, min_scale, max_scale)
+
         return apply
 
-    def scale_stepped_timed(threshold=0.5, small_scale=1.0, large_scale=2.0,
-                            transition_time_ms=200, hysteresis=0.02):
-        state = {"large": False, "value": small_scale, "start": small_scale,
-                 "target": small_scale, "time": clock()}
+    def scale_stepped_timed(
+        threshold=0.5,
+        small_scale=1.0,
+        large_scale=2.0,
+        transition_time_ms=200,
+        hysteresis=0.02,
+    ):
+        state = {
+            "large": False,
+            "value": small_scale,
+            "start": small_scale,
+            "target": small_scale,
+            "time": clock(),
+        }
         duration = transition_time_ms / 1000.0
 
         def apply(value, output):
             now = clock()
-            progress = 1.0 if duration <= 0 else _clamp((now - state["time"]) / duration, 0.0, 1.0)
+            progress = (
+                1.0
+                if duration <= 0
+                else _clamp((now - state["time"]) / duration, 0.0, 1.0)
+            )
             eased = progress * progress * (3 - 2 * progress)
             current = state["start"] + eased * (state["target"] - state["start"])
             large = False if value is None else state["large"]
@@ -546,6 +691,7 @@ def create_appliers(clock=time.monotonic):
                     current = target
             state["value"] = current
             output["scale"] = current
+
         return apply
 
     return {
@@ -562,59 +708,121 @@ def create_appliers(clock=time.monotonic):
 
 def create_control_system(config=None, clock=time.monotonic):
     from runtime_config import default_config, validate_config
+
     config = validate_config(default_config() if config is None else config)
     controls = config["controls"]
-    system = ControlSystem(clock=clock, idle_mode=controls.get("idle_mode", "return"),
-                           reset_timeout_seconds=controls["reset_timeout_seconds"])
+    system = ControlSystem(
+        clock=clock,
+        idle_mode=controls.get("idle_mode", "return"),
+        reset_timeout_seconds=controls["reset_timeout_seconds"],
+    )
     extractors = create_extractors()
     appliers = create_appliers(clock=clock)
     axes = {"rotation_yaw": 0, "rotation_pitch": 1, "rotation_roll": 2}
     for spec in controls["mappings"]:
         circular = spec["input"].endswith(("_rotation", "_pitch", "_yaw", "_roll"))
         # The original zoom responded faster than the head position channels.
-        smoothing = controls["smoothing_ms"] / 3 if spec["mode"] == "stepped" else controls["smoothing_ms"]
+        smoothing = (
+            controls["smoothing_ms"] / 3
+            if spec["mode"] == "stepped"
+            else controls["smoothing_ms"]
+        )
         # Head/torso roll are unoriented lines (180 degrees); other angles wrap
         # at 360 degrees. Neutral return follows a full OUTPUT turn, whose input
         # range changes with sensitivity, independently of the measured period.
-        decay_period = (180.0 / spec["scale"] if circular and spec["mode"] == "absolute"
-                        and spec["output"] in axes and spec["scale"] > 0 else None)
-        smoother = ExponentialSmoother(smoothing_ms=smoothing, decay_rate=0.2,
-                                       center_value=spec["center"], clock=clock,
-                                       period=0.5 if spec["input"] in ("head_roll", "torso_roll") else 1.0 if circular else None,
-                                       decay_period=decay_period,
-                                       linear_decay=circular and spec["output"] not in axes)
+        decay_period = (
+            180.0 / spec["scale"]
+            if circular
+            and spec["mode"] == "absolute"
+            and spec["output"] in axes
+            and spec["scale"] > 0
+            else None
+        )
+        smoother = ExponentialSmoother(
+            smoothing_ms=smoothing,
+            decay_rate=0.2,
+            center_value=spec["center"],
+            clock=clock,
+            period=0.5
+            if spec["input"] in ("head_roll", "torso_roll")
+            else 1.0
+            if circular
+            else None,
+            decay_period=decay_period,
+            linear_decay=circular and spec["output"] not in axes,
+        )
         if spec["mode"] == "hybrid":
-            controller = HybridRotationController(max_degrees=spec["scale"],
-                left_threshold=spec["left_threshold"], right_threshold=spec["right_threshold"],
+            controller = HybridRotationController(
+                max_degrees=spec["scale"],
+                left_threshold=spec["left_threshold"],
+                right_threshold=spec["right_threshold"],
                 continuous_speed_degrees_per_second=spec["continuous_speed"],
-                center=spec["center"], invert=spec["invert"],
+                center=spec["center"],
+                invert=spec["invert"],
                 reset_timeout_seconds=controls["reset_timeout_seconds"],
-                reset_duration_seconds=controls["reset_duration_seconds"], clock=clock)
-            mapping = HybridRotationMapping(spec["id"], controller, smoother, spec["enabled"],
-                input_extractor=extractors[spec["input"]], output_axis=axes[spec["output"]], clock=clock)
+                reset_duration_seconds=controls["reset_duration_seconds"],
+                clock=clock,
+            )
+            mapping = HybridRotationMapping(
+                spec["id"],
+                controller,
+                smoother,
+                spec["enabled"],
+                input_extractor=extractors[spec["input"]],
+                output_axis=axes[spec["output"]],
+                clock=clock,
+            )
         else:
             if spec["mode"] == "stepped":
-                stepped = appliers["scale_stepped"](threshold=spec["threshold"],
-                    small_scale=spec["small_scale"], large_scale=spec["large_scale"],
-                    transition_time_ms=spec["transition_ms"], hysteresis=spec["hysteresis"])
+                stepped = appliers["scale_stepped"](
+                    threshold=spec["threshold"],
+                    small_scale=spec["small_scale"],
+                    large_scale=spec["large_scale"],
+                    transition_time_ms=spec["transition_ms"],
+                    hysteresis=spec["hysteresis"],
+                )
+
                 def apply(value, output, spec=spec, stepped=stepped):
                     # Scale modifies sensitivity around the selected neutral input.
                     if value is not None:
-                        value = spec["center"] + (value - spec["center"]) * spec["scale"] * (-1 if spec["invert"] else 1)
+                        value = spec["center"] + (value - spec["center"]) * spec[
+                            "scale"
+                        ] * (-1 if spec["invert"] else 1)
                     stepped(value, output)
             elif spec["output"] in axes:
-                apply = appliers[spec["output"]](max_degrees=spec["scale"], center=spec["center"],
-                                                   invert=spec["invert"], circular=circular)
+                apply = appliers[spec["output"]](
+                    max_degrees=spec["scale"],
+                    center=spec["center"],
+                    invert=spec["invert"],
+                    circular=circular,
+                )
             elif spec["output"].startswith("position_"):
-                apply = appliers[spec["output"]](scale=spec["scale"], center=spec["center"], invert=spec["invert"])
+                apply = appliers[spec["output"]](
+                    scale=spec["scale"], center=spec["center"], invert=spec["invert"]
+                )
             else:
+
                 def apply(value, output, spec=spec):
                     value = spec["center"] if value is None else value
-                    output["scale"] = _clamp(1.0 + (value - spec["center"]) * spec["scale"] * (-1 if spec["invert"] else 1), 0.1, 5.0)
-            mapping = ControlMapping(spec["id"], extractors[spec["input"]], apply, smoother, spec["enabled"])
-            mapping.output_key = (("rotation", axes[spec["output"]]) if spec["output"] in axes else
-                                  ("position", "xyz".index(spec["output"][-1])) if spec["output"].startswith("position_") else
-                                  ("scale", None))
+                    output["scale"] = _clamp(
+                        1.0
+                        + (value - spec["center"])
+                        * spec["scale"]
+                        * (-1 if spec["invert"] else 1),
+                        0.1,
+                        5.0,
+                    )
+
+            mapping = ControlMapping(
+                spec["id"], extractors[spec["input"]], apply, smoother, spec["enabled"]
+            )
+            mapping.output_key = (
+                ("rotation", axes[spec["output"]])
+                if spec["output"] in axes
+                else ("position", "xyz".index(spec["output"][-1]))
+                if spec["output"].startswith("position_")
+                else ("scale", None)
+            )
         system.add_mapping(mapping)
     return system
 

@@ -12,19 +12,19 @@ import hashlib
 import importlib.metadata
 import json
 import math
-from pathlib import Path
 import platform
 import resource
 import statistics
 import sys
 import time
+from pathlib import Path
 
 
 def summarize(values):
     ordered = sorted(values)
     return {
         "median": round(statistics.median(values), 4),
-        "p95": round(ordered[math.ceil(.95 * len(ordered)) - 1], 4),
+        "p95": round(ordered[math.ceil(0.95 * len(ordered)) - 1], 4),
         "mean": round(statistics.mean(values), 4),
     }
 
@@ -70,13 +70,16 @@ def benchmark(args):
         # not current RSS, system memory, or the model's file size.
         multiplier = 1 if sys.platform == "darwin" else 1024
         report["memory_peak_MB"][stage] = round(
-            resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * multiplier / 1e6, 3)
+            resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * multiplier / 1e6, 3
+        )
 
     memory("startup")
     import_start = time.perf_counter()
     import numpy as np
+
     memory("numpy_import")
     import cv2
+
     cv2.setNumThreads(1)
     memory("opencv_import")
     report["numpy_version"] = np.__version__
@@ -84,29 +87,36 @@ def benchmark(args):
 
     if args.mode == "lite":
         from ai_edge_litert.interpreter import Interpreter
+
         report["runtime_version"] = importlib.metadata.version("ai-edge-litert")
         report["scope"] = "synthetic_tensor_model_only"
         memory("runtime_import")
         report["import_ms"] = round((time.perf_counter() - import_start) * 1000, 3)
         nets, details = [], []
         for stem in ("palm_detection_lite", "hand_landmark_lite"):
-            options = {} if args.threads == "default" else {"num_threads": int(args.threads)}
+            options = (
+                {} if args.threads == "default" else {"num_threads": int(args.threads)}
+            )
             path = args.models_dir / (stem + ".tflite")
             net = Interpreter(model_path=str(path), **options)
             net.allocate_tensors()
             input_info = net.get_input_details()[0]
-            tensor = np.random.default_rng(42).random(tuple(input_info["shape"]), dtype=np.float32)
+            tensor = np.random.default_rng(42).random(
+                tuple(input_info["shape"]), dtype=np.float32
+            )
             net.set_tensor(input_info["index"], tensor)
             nets.append(net)  # Keep BOTH models resident throughout the benchmark.
-            details.append({
-                "model": stem,
-                **fingerprint(path),
-                "input_shape": input_info["shape"].tolist(),
-                "outputs": [
-                    {"name": item["name"], "shape": item["shape"].tolist()}
-                    for item in net.get_output_details()
-                ],
-            })
+            details.append(
+                {
+                    "model": stem,
+                    **fingerprint(path),
+                    "input_shape": input_info["shape"].tolist(),
+                    "outputs": [
+                        {"name": item["name"], "shape": item["shape"].tolist()}
+                        for item in net.get_output_details()
+                    ],
+                }
+            )
         memory("both_models_allocated")
         report["models"], report["benchmarks"] = details, {}
         for net, detail in zip(nets, details):
@@ -115,12 +125,14 @@ def benchmark(args):
             checks = []
             for output in net.get_output_details():
                 value = net.get_tensor(output["index"])
-                checks.append({
-                    "name": output["name"],
-                    "finite": bool(np.isfinite(value).all()),
-                    "first_values": value.flatten()[:3].tolist(),
-                    "sum": float(value.sum()),
-                })
+                checks.append(
+                    {
+                        "name": output["name"],
+                        "finite": bool(np.isfinite(value).all()),
+                        "first_values": value.flatten()[:3].tolist(),
+                        "sum": float(value.sum()),
+                    }
+                )
             detail["output_checks"] = checks
         memory("after_inference")
         report["pipeline_warning"] = (
@@ -131,7 +143,12 @@ def benchmark(args):
     else:
         import mediapipe as mp
         from mediapipe.tasks.python import BaseOptions
-        from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions, RunningMode
+        from mediapipe.tasks.python.vision import (
+            HandLandmarker,
+            HandLandmarkerOptions,
+            RunningMode,
+        )
+
         report["runtime_version"] = mp.__version__
         report["scope"] = "mediapipe_tasks_prepared_image_video"
         memory("runtime_import")
@@ -146,7 +163,9 @@ def benchmark(args):
         report["models"] = [fingerprint(model_path)]
         report["image"] = {**fingerprint(args.image), "prepared_size": [640, 480]}
         options = HandLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=str(model_path), delegate=BaseOptions.Delegate.CPU),
+            base_options=BaseOptions(
+                model_asset_path=str(model_path), delegate=BaseOptions.Delegate.CPU
+            ),
             running_mode=RunningMode.VIDEO,
             num_hands=2,
         )
@@ -161,8 +180,10 @@ def benchmark(args):
 
             timing, _ = measure(invoke, args.frames, args.warmup)
             report["benchmarks"] = {"pipeline": timing}
-            report["hands_count_set"] = sorted(set(counts[args.warmup:]))
-            report["frames_with_two_hands"] = sum(count == 2 for count in counts[args.warmup:])
+            report["hands_count_set"] = sorted(set(counts[args.warmup :]))
+            report["frames_with_two_hands"] = sum(
+                count == 2 for count in counts[args.warmup :]
+            )
             memory("after_inference")
         report["pipeline_warning"] = (
             "Static prepared 640x480 image; decode, resizing, RGB conversion and mp.Image "
@@ -176,13 +197,26 @@ def benchmark(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("lite", "mediapipe"), required=True)
-    parser.add_argument("--models-dir", type=Path, required=True, help="Directory containing the local Lite models.")
-    parser.add_argument("--image", type=Path, help="Static image; required for mediapipe mode only.")
-    parser.add_argument("--threads", choices=("default", "1", "2", "4"), default="default",
-                        help="LiteRT CPU threads. MediaPipe Tasks does not expose this option.")
+    parser.add_argument(
+        "--models-dir",
+        type=Path,
+        required=True,
+        help="Directory containing the local Lite models.",
+    )
+    parser.add_argument(
+        "--image", type=Path, help="Static image; required for mediapipe mode only."
+    )
+    parser.add_argument(
+        "--threads",
+        choices=("default", "1", "2", "4"),
+        default="default",
+        help="LiteRT CPU threads. MediaPipe Tasks does not expose this option.",
+    )
     parser.add_argument("--frames", type=int, default=180)
     parser.add_argument("--warmup", type=int, default=20)
-    parser.add_argument("--output", type=Path, help="Save JSON in addition to printing it.")
+    parser.add_argument(
+        "--output", type=Path, help="Save JSON in addition to printing it."
+    )
     args = parser.parse_args()
     if args.frames < 1 or args.warmup < 0:
         parser.error("frames must be positive and warmup must be non-negative")
@@ -191,9 +225,15 @@ def main():
             parser.error("mediapipe requires --image pointing to a local image")
         if args.threads != "default":
             parser.error("--threads is only available in lite mode")
-    names = ("palm_detection_lite.tflite", "hand_landmark_lite.tflite") if args.mode == "lite" else ("hand_landmarker_lite.task",)
+    names = (
+        ("palm_detection_lite.tflite", "hand_landmark_lite.tflite")
+        if args.mode == "lite"
+        else ("hand_landmarker_lite.task",)
+    )
     if not all((args.models_dir / name).is_file() for name in names):
-        parser.error("models-dir is missing one or more required files: " + ", ".join(names))
+        parser.error(
+            "models-dir is missing one or more required files: " + ", ".join(names)
+        )
     report = benchmark(args)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

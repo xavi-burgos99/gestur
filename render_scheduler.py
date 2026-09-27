@@ -37,7 +37,7 @@ class RenderCadence:
         # last draw accumulates clock jitter and drops a nominal 30 Hz scene to
         # 20-25 Hz under a 60 Hz task loop. A 1 ms tolerance avoids that extra
         # control tick without materially changing the refresh budget.
-        tolerance = min(.001, .1 / self.target_fps)
+        tolerance = min(0.001, 0.1 / self.target_fps)
         if self.next_refresh is None or now + tolerance >= self.next_refresh:
             self.last_draw = now
             if self.next_refresh is None:

@@ -1,57 +1,117 @@
 """Panda3D viewer. All scene changes belong to the application's render thread."""
-import math
+
 import ipaddress
+import math
 import os
-from pathlib import Path
 import socket
 import sys
 import time
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
-    AmbientLight, AntialiasAttrib, CardMaker, ClockObject, DirectionalLight, DynamicTextFont,
-    Filename, Geom, GeomNode, GeomTriangles, GeomVertexData, GeomVertexFormat,
-    GeomVertexWriter, PerspectiveLens, PythonCallbackObject, Spotlight, TextNode,
-    Texture, TextureStage, TransparencyAttrib, WindowProperties, loadPrcFileData,
+    AmbientLight,
+    AntialiasAttrib,
+    CardMaker,
+    ClockObject,
+    DirectionalLight,
+    DynamicTextFont,
+    Filename,
+    Geom,
+    GeomNode,
+    GeomTriangles,
+    GeomVertexData,
+    GeomVertexFormat,
+    GeomVertexWriter,
+    PerspectiveLens,
+    PythonCallbackObject,
+    Spotlight,
+    TextNode,
+    Texture,
+    TextureStage,
+    TransparencyAttrib,
+    WindowProperties,
+    loadPrcFileData,
 )
 
 from render_scheduler import RenderCadence
-from runtime_state import FrameMetrics
 from runtime_config import validate_model_orientation, validate_model_url
-
+from runtime_state import FrameMetrics
 
 # Positions are in the fixed exhibition camera's frame: X right, Y away
 # from the viewer, Z up. These are distinct light rigs, not exposure filters.
 # Each rig uses at most three lights, without shadow maps or extra render passes.
 MODEL_LIGHT_PRESETS = {
     "studio": {
-        "ambient": (.4, .4, .4, 1),
+        "ambient": (0.4, 0.4, 0.4, 1),
         "lights": (
-            {"role": "key", "type": "directional", "color": (1.6, 1.6, 1.6, 1), "position": (-8, -10, 10)},
-            {"role": "fill", "type": "directional", "color": (.8, .8, .8, 1), "position": (10, -7, 1)},
+            {
+                "role": "key",
+                "type": "directional",
+                "color": (1.6, 1.6, 1.6, 1),
+                "position": (-8, -10, 10),
+            },
+            {
+                "role": "fill",
+                "type": "directional",
+                "color": (0.8, 0.8, 0.8, 1),
+                "position": (10, -7, 1),
+            },
         ),
     },
     "gallery": {
-        "ambient": (.25, .25, .25, 1),
+        "ambient": (0.25, 0.25, 0.25, 1),
         "lights": (
-            {"role": "key", "type": "spot", "color": (3.2, 3.05, 2.83, 1), "position": (-3, -8, 16),
-             "fov": 40, "exponent": 6, "attenuation": (1, 0, .001)},
-            {"role": "fill", "type": "directional", "color": (.22, .25, .28, 1), "position": (8, -4, -2)},
+            {
+                "role": "key",
+                "type": "spot",
+                "color": (3.2, 3.05, 2.83, 1),
+                "position": (-3, -8, 16),
+                "fov": 40,
+                "exponent": 6,
+                "attenuation": (1, 0, 0.001),
+            },
+            {
+                "role": "fill",
+                "type": "directional",
+                "color": (0.22, 0.25, 0.28, 1),
+                "position": (8, -4, -2),
+            },
         ),
     },
     "sunset": {
-        "ambient": (.2, .24, .32, 1),
+        "ambient": (0.2, 0.24, 0.32, 1),
         "lights": (
-            {"role": "key", "type": "directional", "color": (2.5, 1.25, .55, 1), "position": (-14, -4, 2)},
-            {"role": "fill", "type": "directional", "color": (.35, .45, .65, 1), "position": (7, -10, 7)},
+            {
+                "role": "key",
+                "type": "directional",
+                "color": (2.5, 1.25, 0.55, 1),
+                "position": (-14, -4, 2),
+            },
+            {
+                "role": "fill",
+                "type": "directional",
+                "color": (0.35, 0.45, 0.65, 1),
+                "position": (7, -10, 7),
+            },
         ),
     },
     "rim": {
-        "ambient": (.2, .21, .23, 1),
+        "ambient": (0.2, 0.21, 0.23, 1),
         "lights": (
-            {"role": "rim", "type": "directional", "color": (2.1, 2.2, 2.4, 1), "position": (12, 3, 5)},
-            {"role": "fill", "type": "directional", "color": (.5, .55, .65, 1), "position": (-2, -12, 0)},
+            {
+                "role": "rim",
+                "type": "directional",
+                "color": (2.1, 2.2, 2.4, 1),
+                "position": (12, 3, 5),
+            },
+            {
+                "role": "fill",
+                "type": "directional",
+                "color": (0.5, 0.55, 0.65, 1),
+                "position": (-2, -12, 0),
+            },
         ),
     },
 }
@@ -66,7 +126,9 @@ def _validate_exposure(value):
 def _usable_ipv4(address):
     try:
         ip = ipaddress.IPv4Address(address)
-        return not (ip.is_loopback or ip.is_unspecified or ip.is_multicast or ip.is_link_local)
+        return not (
+            ip.is_loopback or ip.is_unspecified or ip.is_multicast or ip.is_link_local
+        )
     except ipaddress.AddressValueError:
         return False
 
@@ -77,9 +139,12 @@ def _interface_ipv4(name):
         return None
     import fcntl
     import struct
+
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as handle:
-            result = fcntl.ioctl(handle.fileno(), 0x8915, struct.pack("256s", name.encode()[:15]))
+            result = fcntl.ioctl(
+                handle.fileno(), 0x8915, struct.pack("256s", name.encode()[:15])
+            )
         return socket.inet_ntoa(result[20:24])
     except OSError:
         return None
@@ -91,9 +156,14 @@ def portal_url():
     if override:
         try:
             parsed = urlsplit(override)
-            if (parsed.scheme in ("http", "https") and _usable_ipv4(parsed.hostname)
-                    and not parsed.username and not parsed.password
-                    and not parsed.query and not parsed.fragment):
+            if (
+                parsed.scheme in ("http", "https")
+                and _usable_ipv4(parsed.hostname)
+                and not parsed.username
+                and not parsed.password
+                and not parsed.query
+                and not parsed.fragment
+            ):
                 _ = parsed.port  # Explicit development overrides may use another port.
                 return override.rstrip("/")
         except (TypeError, ValueError):
@@ -123,16 +193,26 @@ def portal_url():
 def _welcome_geometry():
     """A small sculptural ring, generated in memory (1,536 triangles)."""
     data = GeomVertexData("welcome-ring", GeomVertexFormat.get_v3n3c4(), Geom.UH_static)
-    vertices, normals, colors = (GeomVertexWriter(data, name) for name in ("vertex", "normal", "color"))
+    vertices, normals, colors = (
+        GeomVertexWriter(data, name) for name in ("vertex", "normal", "color")
+    )
     triangles = GeomTriangles(Geom.UH_static)
     segments, sides = 64, 12
     for i in range(segments + 1):
         angle = i * math.tau / segments
         for j in range(sides + 1):
             tube = j * math.tau / sides
-            radius = 1.75 + .42 * math.cos(tube)
-            vertices.add_data3(radius * math.cos(angle), radius * math.sin(angle), .42 * math.sin(tube))
-            normals.add_data3(math.cos(tube) * math.cos(angle), math.cos(tube) * math.sin(angle), math.sin(tube))
+            radius = 1.75 + 0.42 * math.cos(tube)
+            vertices.add_data3(
+                radius * math.cos(angle),
+                radius * math.sin(angle),
+                0.42 * math.sin(tube),
+            )
+            normals.add_data3(
+                math.cos(tube) * math.cos(angle),
+                math.cos(tube) * math.sin(angle),
+                math.sin(tube),
+            )
             colors.add_data4(1, 1, 1, 1)
             if i < segments and j < sides:
                 a = i * (sides + 1) + j
@@ -148,24 +228,46 @@ def _welcome_geometry():
 
 def _qr_texture(url, name):
     import qrcode
-    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=1, border=4)
+
+    qr = qrcode.QRCode(
+        error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=1, border=4
+    )
     qr.add_data(url)
     qr.make(fit=True)
     matrix = qr.get_matrix()
     texture = Texture(name)
-    texture.setup_2d_texture(len(matrix), len(matrix), Texture.T_unsigned_byte, Texture.F_rgba)
-    texture.set_ram_image(bytes(channel for row in reversed(matrix) for value in row
-                                for channel in (255, 255, 255, 255 if value else 0)))
+    texture.setup_2d_texture(
+        len(matrix), len(matrix), Texture.T_unsigned_byte, Texture.F_rgba
+    )
+    texture.set_ram_image(
+        bytes(
+            channel
+            for row in reversed(matrix)
+            for value in row
+            for channel in (255, 255, 255, 255 if value else 0)
+        )
+    )
     texture.set_minfilter(Texture.FT_nearest)
     texture.set_magfilter(Texture.FT_nearest)
     return texture
 
 
 class ControlledObjViewer(ShowBase):
-    def __init__(self, obj_path=None, *, target_fps=60, antialias_samples=2,
-                 fullscreen=True, hide_cursor=True, show_fps=False,
-                 window_type=None, model_orientation=None, ambient_light="none", exposure=50,
-                 model_url=None):
+    def __init__(
+        self,
+        obj_path=None,
+        *,
+        target_fps=60,
+        antialias_samples=2,
+        fullscreen=True,
+        hide_cursor=True,
+        show_fps=False,
+        window_type=None,
+        model_orientation=None,
+        ambient_light="none",
+        exposure=50,
+        model_url=None,
+    ):
         # Configure before creating the context. Preserve geometry and textures.
         if antialias_samples not in (0, 2, 4):
             raise ValueError("antialias_samples debe ser 0, 2 o 4")
@@ -187,28 +289,39 @@ class ControlledObjViewer(ShowBase):
         self._meter_time = self._render_clock()
         self._meter_frames = 0
         self._meter_ticks = 0
-        loadPrcFileData("gestur", "\n".join((
-            "load-file-type p3assimp",
-            "win-size 1920 1080",
-            f"fullscreen {'true' if fullscreen and sys.platform != 'darwin' else 'false'}",
-            f"fullscreen-windowed {'true' if fullscreen and sys.platform == 'darwin' else 'false'}",
-            f"framebuffer-multisample {'true' if antialias_samples else 'false'}",
-            f"multisamples {antialias_samples}",
-            "sync-video true",
-            # Panda otherwise busy-waits up to 10 ms on every limited tick.
-            # Keep a 4 ms margin: 1 ms overslept and reduced active FPS on macOS.
-            *(("sleep-precision 0.004",) if sys.platform in ("linux", "darwin") else ()),
-            "audio-library-name null",
-            "textures-power-2 none",
-            "model-cache-models true",
-        )))
+        loadPrcFileData(
+            "gestur",
+            "\n".join(
+                (
+                    "load-file-type p3assimp",
+                    "win-size 1920 1080",
+                    f"fullscreen {'true' if fullscreen and sys.platform != 'darwin' else 'false'}",
+                    f"fullscreen-windowed {'true' if fullscreen and sys.platform == 'darwin' else 'false'}",
+                    f"framebuffer-multisample {'true' if antialias_samples else 'false'}",
+                    f"multisamples {antialias_samples}",
+                    "sync-video true",
+                    # Panda otherwise busy-waits up to 10 ms on every limited tick.
+                    # Keep a 4 ms margin: 1 ms overslept and reduced active FPS
+                    # on macOS.
+                    *(
+                        ("sleep-precision 0.004",)
+                        if sys.platform in ("linux", "darwin")
+                        else ()
+                    ),
+                    "audio-library-name null",
+                    "textures-power-2 none",
+                    "model-cache-models true",
+                )
+            ),
+        )
         super().__init__(**({"windowType": window_type} if window_type else {}))
         self.setBackgroundColor(0, 0, 0, 1)
         self.disableMouse()
         self._set_model_camera()
         self.render.set_shader_auto()
         self.render.set_antialias(
-            AntialiasAttrib.MMultisample if antialias_samples else AntialiasAttrib.MNone)
+            AntialiasAttrib.MMultisample if antialias_samples else AntialiasAttrib.MNone
+        )
         self.current_state = {
             "position": [0.0, 0.0, 0.0],
             "rotation": [0.0, 0.0, 0.0],
@@ -233,24 +346,36 @@ class ControlledObjViewer(ShowBase):
             self._draw_region = self.cam.node().get_display_region(0)
             self._draw_callback = PythonCallbackObject(self._record_draw)
             self._draw_region.set_draw_callback(self._draw_callback)
-        self.apply_settings(target_fps=target_fps, hide_cursor=hide_cursor,
-                            ambient_light=ambient_light, exposure=exposure)
+        self.apply_settings(
+            target_fps=target_fps,
+            hide_cursor=hide_cursor,
+            ambient_light=ambient_light,
+            exposure=exposure,
+        )
         # Panda's built-in FPS meter counts task ticks, including skipped draws.
         self.setFrameRateMeter(False)
         if show_fps:
             self._draw_meter = TextNode("gestur-draw-meter")
             self._draw_meter.set_text("Dibujo: -- fps | Control: -- fps")
             meter = self.a2dTopLeft.attach_new_node(self._draw_meter)
-            meter.set_scale(.035)
-            meter.set_pos(.03, 0, -.06)
+            meter.set_scale(0.035)
+            meter.set_pos(0.03, 0, -0.06)
         try:
-            self.load_model(obj_path, orientation=model_orientation, model_url=model_url)
+            self.load_model(
+                obj_path, orientation=model_orientation, model_url=model_url
+            )
         except Exception:
             self.destroy()
             raise
 
-    def apply_settings(self, *, target_fps=60, hide_cursor=True, ambient_light=None, exposure=None):
-        if ambient_light is not None and ambient_light != "none" and ambient_light not in MODEL_LIGHT_PRESETS:
+    def apply_settings(
+        self, *, target_fps=60, hide_cursor=True, ambient_light=None, exposure=None
+    ):
+        if (
+            ambient_light is not None
+            and ambient_light != "none"
+            and ambient_light not in MODEL_LIGHT_PRESETS
+        ):
             raise ValueError("Iluminación ambiental no válida")
         if exposure is not None:
             _validate_exposure(exposure)
@@ -292,7 +417,9 @@ class ControlledObjViewer(ShowBase):
             duration = now - self._meter_time
             draws = (self.render_metrics.frames - self._meter_frames) / duration
             ticks = (self._render_cadence.ticks - self._meter_ticks) / duration
-            self._draw_meter.set_text(f"Dibujo: {draws:.1f} fps | Control: {ticks:.1f} fps")
+            self._draw_meter.set_text(
+                f"Dibujo: {draws:.1f} fps | Control: {ticks:.1f} fps"
+            )
             self._meter_time = now
             self._meter_frames = self.render_metrics.frames
             self._meter_ticks = self._render_cadence.ticks
@@ -305,24 +432,36 @@ class ControlledObjViewer(ShowBase):
                 self._layout_model_qr()
                 self.invalidate(frames=2)
             draw = self._render_cadence.due(
-                now, welcome=self.welcome is not None or self._idle_animation)
+                now, welcome=self.welcome is not None or self._idle_animation
+            )
             self.win.set_active(draw)
             if draw:
                 self._animate_welcome(task)
         return task.cont
 
     def get_render_status(self):
-        return {**self.render_metrics.summary(),
-                "control_ticks": self._render_cadence.ticks,
-                "skipped_draws": self._render_cadence.skipped,
-                "mode": ("floating" if self._idle_animation and self._render_cadence.mode == "welcome"
-                         else self._render_cadence.mode),
-                "ambient_light": self._ambient_light,
-                "exposure": self._exposure,
-                "idle_animation": self._idle_animation,
-                "floating_fps_limit": min(self._render_cadence.target_fps, self._render_cadence.welcome_fps),
-                "idle_refresh_fps": min(self._render_cadence.target_fps, self._render_cadence.idle_fps),
-                "welcome_fps_limit": min(self._render_cadence.target_fps, self._render_cadence.welcome_fps)}
+        return {
+            **self.render_metrics.summary(),
+            "control_ticks": self._render_cadence.ticks,
+            "skipped_draws": self._render_cadence.skipped,
+            "mode": (
+                "floating"
+                if self._idle_animation and self._render_cadence.mode == "welcome"
+                else self._render_cadence.mode
+            ),
+            "ambient_light": self._ambient_light,
+            "exposure": self._exposure,
+            "idle_animation": self._idle_animation,
+            "floating_fps_limit": min(
+                self._render_cadence.target_fps, self._render_cadence.welcome_fps
+            ),
+            "idle_refresh_fps": min(
+                self._render_cadence.target_fps, self._render_cadence.idle_fps
+            ),
+            "welcome_fps_limit": min(
+                self._render_cadence.target_fps, self._render_cadence.welcome_fps
+            ),
+        }
 
     def destroy(self):
         if getattr(self, "_draw_region", None) is not None:
@@ -342,14 +481,21 @@ class ControlledObjViewer(ShowBase):
         model_url = validate_model_url(model_url)
         path = Path(obj_path).expanduser().resolve(strict=True)
         try:
-            candidate = self.loader.loadModel(Filename.from_os_specific(str(path)), okMissing=True)
+            candidate = self.loader.loadModel(
+                Filename.from_os_specific(str(path)), okMissing=True
+            )
         except Exception as exc:
             raise ValueError(f"No se pudo interpretar el modelo: {path.name}") from exc
         if candidate is None or candidate.is_empty():
             raise ValueError(f"No se pudo cargar el modelo: {path.name}")
         try:
-            if not any(node.node().get_num_geoms() for node in candidate.find_all_matches("**/+GeomNode")):
-                raise ValueError(f"El modelo no contiene geometría visible: {path.name}")
+            if not any(
+                node.node().get_num_geoms()
+                for node in candidate.find_all_matches("**/+GeomNode")
+            ):
+                raise ValueError(
+                    f"El modelo no contiene geometría visible: {path.name}"
+                )
             # Each exhibition object moves as one unit. Merge compatible draw
             # batches without decimating vertices, UVs, materials or textures.
             candidate.clear_model_nodes()
@@ -403,11 +549,7 @@ class ControlledObjViewer(ShowBase):
             self.model_qr = self.a2dBottomRight.attach_new_node(card.generate())
             self.model_qr.set_texture(texture)
             self.model_qr.set_transparency(TransparencyAttrib.M_alpha)
-            self.model_qr.set_light_off()
-            self.model_qr.set_shader_off()
-            self.model_qr.set_depth_test(False)
-            self.model_qr.set_depth_write(False)
-            self.model_qr.set_bin("fixed", 40)
+            self._configure_screen_overlay(self.model_qr)
             self._layout_model_qr()
         self.invalidate(frames=2)
         return True
@@ -415,13 +557,15 @@ class ControlledObjViewer(ShowBase):
     def _layout_model_qr(self):
         if self.model_qr is None:
             return
-        short_side = min(self.win.get_x_size(), self.win.get_y_size()) if self.win else 1080
+        short_side = (
+            min(self.win.get_x_size(), self.win.get_y_size()) if self.win else 1080
+        )
         modules = self.model_qr.get_texture().get_x_size()
         # Typical URLs use ~17% of the short edge; dense codes get more room,
         # still below the welcome QR (36%). Anchor follows every window resize.
-        size = max(.32, min(.60, modules * 4 * 2 / max(1, short_side)))
+        size = max(0.32, min(0.60, modules * 4 * 2 / max(1, short_side)))
         self.model_qr.set_scale(size)
-        self.model_qr.set_pos(-.06, 0, .06)
+        self.model_qr.set_pos(-0.06, 0, 0.06)
 
     def _clear_model_lighting(self):
         if self.model is not None:
@@ -475,24 +619,36 @@ class ControlledObjViewer(ShowBase):
             if self._exposure_stage is None:
                 self._exposure_stage = TextureStage("gestur-exposure")
                 self._exposure_stage.set_combine_rgb(
-                    TextureStage.CM_modulate, TextureStage.CS_previous, TextureStage.CO_src_color,
-                    TextureStage.CS_constant, TextureStage.CO_src_color)
+                    TextureStage.CM_modulate,
+                    TextureStage.CS_previous,
+                    TextureStage.CO_src_color,
+                    TextureStage.CS_constant,
+                    TextureStage.CO_src_color,
+                )
                 self._exposure_stage.set_combine_alpha(
-                    TextureStage.CM_replace, TextureStage.CS_previous, TextureStage.CO_src_alpha)
+                    TextureStage.CM_replace,
+                    TextureStage.CS_previous,
+                    TextureStage.CO_src_alpha,
+                )
                 self._exposure_texture = Texture("gestur-exposure-identity")
-                self._exposure_texture.setup_2d_texture(1, 1, Texture.T_unsigned_byte, Texture.F_rgba)
+                self._exposure_texture.setup_2d_texture(
+                    1, 1, Texture.T_unsigned_byte, Texture.F_rgba
+                )
                 self._exposure_texture.set_ram_image(bytes((255, 255, 255, 255)))
             # Preserve the saved 10–100 curve exactly. Extend its lower end
             # continuously to black without changing alpha or the 50 baseline.
             gain = (
-                (self._exposure / 10) * 2 ** (-40 / 25) if self._exposure < 10
+                (self._exposure / 10) * 2 ** (-40 / 25)
+                if self._exposure < 10
                 else 2 ** ((self._exposure - 50) / 25)
             )
             rgb_scale = 4 if gain > 2 else 2 if gain > 1 else 1
             self._exposure_stage.set_rgb_scale(rgb_scale)
             self._exposure_stage.set_color((gain / rgb_scale,) * 3 + (1,))
             stages = self.model.find_all_texture_stages()
-            self._exposure_stage.set_sort(max((stage.get_sort() for stage in stages), default=0) + 1)
+            self._exposure_stage.set_sort(
+                max((stage.get_sort() for stage in stages), default=0) + 1
+            )
             # A last texture-combine stage scales the already textured RGB,
             # avoiding fixed-function clamping of vertex colors above one.
             # It preserves alpha and uses the existing draw, not a postprocess.
@@ -558,12 +714,30 @@ class ControlledObjViewer(ShowBase):
         self._remove_model_error()
         self.setBackgroundColor(0, 0, 0, 1)
         self.model_error_overlay = self.aspect2d.attach_new_node("gestur-model-error")
-        self._overlay_label(self.model_error_overlay, "model-error-brand", "GESTUR", .24, .13)
-        self._overlay_label(self.model_error_overlay, "model-error-title",
-                            "No se pudo cargar el modelo", -.02, .055)
+        self._overlay_label(
+            self.model_error_overlay, "model-error-brand", "GESTUR", 0.24, 0.13
+        )
+        self._overlay_label(
+            self.model_error_overlay,
+            "model-error-title",
+            "No se pudo cargar el modelo",
+            -0.02,
+            0.055,
+        )
         detail = "Revisa el modelo desde el portal del dispositivo."
-        self._overlay_label(self.model_error_overlay, "model-error-detail", detail, -.17, .035)
+        self._overlay_label(
+            self.model_error_overlay, "model-error-detail", detail, -0.17, 0.035
+        )
         self.invalidate(frames=2)
+
+    @staticmethod
+    def _configure_screen_overlay(node):
+        """Keep screen overlays independent of the model's lighting and depth."""
+        node.set_light_off()
+        node.set_shader_off()
+        node.set_depth_test(False)
+        node.set_depth_write(False)
+        node.set_bin("fixed", 40)
 
     def _overlay_label(self, parent, name, text, z, size):
         node = TextNode(name)
@@ -606,13 +780,13 @@ class ControlledObjViewer(ShowBase):
         self.welcome = self.render.attach_new_node("gestur-welcome")
         self.welcome_ring = self.welcome.attach_new_node(_welcome_geometry())
         self.welcome_ring.set_hpr(25, 60, -12)
-        self.welcome_ring.set_color_scale(1, 1, 1, .15)
+        self.welcome_ring.set_color_scale(1, 1, 1, 0.15)
         self.welcome_ring.set_transparency(TransparencyAttrib.M_alpha)
         ambient = AmbientLight("welcome-ambient")
-        ambient.set_color((.4, .4, .4, 1))
+        ambient.set_color((0.4, 0.4, 0.4, 1))
         self.welcome.set_light(self.welcome.attach_new_node(ambient))
         key = DirectionalLight("welcome-key")
-        key.set_color((.75, .75, .75, 1))
+        key.set_color((0.75, 0.75, 0.75, 1))
         key_node = self.welcome.attach_new_node(key)
         key_node.set_hpr(-40, -35, 0)
         self.welcome.set_light(key_node)
@@ -639,36 +813,36 @@ class ControlledObjViewer(ShowBase):
             self.welcome_overlay.remove_node()
         self.welcome_url = url
         self.welcome_overlay = self.aspect2d.attach_new_node("gestur-onboarding")
-        self.welcome_overlay.set_light_off()
-        self.welcome_overlay.set_shader_off()
-        self.welcome_overlay.set_depth_test(False)
-        self.welcome_overlay.set_depth_write(False)
-        self.welcome_overlay.set_bin("fixed", 40)
-        label = lambda name, text, z, size: self._overlay_label(
-            self.welcome_overlay, name, text, z, size)
-        label("welcome-brand", "GESTUR", .62, .17)
+        self._configure_screen_overlay(self.welcome_overlay)
+
+        def label(name, text, z, size):
+            return self._overlay_label(self.welcome_overlay, name, text, z, size)
+
+        label("welcome-brand", "GESTUR", 0.62, 0.17)
         if url is None:
-            label("welcome-network", "Esperando conexión de red", -.03, .05)
+            label("welcome-network", "Esperando conexión de red", -0.03, 0.05)
             self._layout_welcome()
             self.invalidate(frames=2)
             return
         texture = _qr_texture(url, "local-portal-qr")
         card = CardMaker("welcome-qr")
-        card.set_frame(-.36, .36, -.36, .36)
+        card.set_frame(-0.36, 0.36, -0.36, 0.36)
         qr_node = self.welcome_overlay.attach_new_node(card.generate())
         qr_node.set_texture(texture)
         qr_node.set_transparency(TransparencyAttrib.M_alpha)
-        qr_node.set_pos(0, 0, .06)
-        label("welcome-prompt", "Escanea el QR para comenzar", -.48, .057)
+        qr_node.set_pos(0, 0, 0.06)
+        label("welcome-prompt", "Escanea el QR para comenzar", -0.48, 0.057)
         address = f"o accede a {url}"
-        label("welcome-url", address, -.60, min(.038, 2.1 / max(1, len(address))))
+        label("welcome-url", address, -0.60, min(0.038, 2.1 / max(1, len(address))))
         self._layout_welcome()
         self.invalidate(frames=2)
 
     def _animate_welcome(self, task):
         if self.welcome is not None:
-            self.welcome_ring.set_hpr(25 + task.time * 7, 60 + math.sin(task.time * .35) * 7, -12)
-            self.welcome_ring.set_z(math.sin(task.time * .7) * .09)
+            self.welcome_ring.set_hpr(
+                25 + task.time * 7, 60 + math.sin(task.time * 0.35) * 7, -12
+            )
+            self.welcome_ring.set_z(math.sin(task.time * 0.7) * 0.09)
             if time.monotonic() - self._last_url_check >= 15:
                 self._refresh_welcome_overlay()
         return task.cont
@@ -677,9 +851,11 @@ class ControlledObjViewer(ShowBase):
         if self.model is None:
             return False
         changed = False
-        for key, setter in (("position", self.model.set_pos),
-                            ("rotation", self.model.set_hpr),
-                            ("scale", self.model.set_scale)):
+        for key, setter in (
+            ("position", self.model.set_pos),
+            ("rotation", self.model.set_hpr),
+            ("scale", self.model.set_scale),
+        ):
             if key not in kwargs:
                 continue
             value = kwargs[key]

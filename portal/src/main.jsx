@@ -1120,16 +1120,18 @@ function Parameters({ config, setConfig, defaults, notify }) {
                 </Text>
               </Group>
               <Slider
-                min={10}
+                min={0}
                 max={100}
-                step={1}
+                step={5}
                 value={draft.render.exposure ?? 50}
-                onChange={(value) => update("render", "exposure", value)}
+                onChange={(value) =>
+                  update("render", "exposure", Math.round(value / 5) * 5)
+                }
                 thumbLabel="Exposición"
                 thumbValueText={(value) => `${value} %`}
                 label={(value) => `${value} %`}
                 marks={[
-                  { value: 10, label: "10 %" },
+                  { value: 0, label: "0 %" },
                   { value: 50, label: "50 %" },
                   { value: 100, label: "100 %" },
                 ]}

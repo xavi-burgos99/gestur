@@ -96,13 +96,13 @@ class ConfigTests(unittest.TestCase):
     def test_exposure_bounds_and_integer_validation_preserve_saved_config(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
-            for exposure in (10, 37, 50, 100):
+            for exposure in (0, 5, 10, 37, 50, 73, 100):
                 config = default_config()
                 config["render"].update(exposure=exposure, ambient_light="studio")
                 self.assertEqual(save_config(config, path), config)
                 self.assertEqual(load_config(path), config)
             before = path.read_bytes()
-            for exposure in (None, 9, 101, 49.5, "50", True, False, [], {}):
+            for exposure in (None, -1, 101, 49.5, "50", True, False, [], {}):
                 with self.subTest(exposure=exposure):
                     config = default_config()
                     config["render"]["exposure"] = exposure

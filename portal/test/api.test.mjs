@@ -526,14 +526,14 @@ test("exposure round-trips independently of lighting and legacy names resolve to
   const { request, folder } = await fixture(t);
   const config = (await request("GET", "config")).json().config;
   config.render.ambient_light = "gallery";
-  for (const exposure of [10, 37, 50, 100]) {
+  for (const exposure of [0, 5, 10, 37, 50, 73, 100]) {
     config.render.exposure = exposure;
     const saved = await request("PUT", "config", config);
     assert.equal(saved.statusCode, 200, saved.body);
     assert.deepEqual(saved.json().config, config);
     assert.deepEqual((await request("GET", "config")).json().config, config);
   }
-  for (const exposure of [null, 9, 101, 49.5, "50", true, [], {}]) {
+  for (const exposure of [null, -1, 101, 49.5, "50", true, [], {}]) {
     const invalid = structuredClone(config);
     invalid.render.exposure = exposure;
     assert.equal((await request("PUT", "config", invalid)).statusCode, 400);

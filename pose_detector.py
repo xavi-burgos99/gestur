@@ -12,6 +12,7 @@ from pathlib import Path
 import threading
 import time
 
+from primary_person import PrimaryPersonLock
 from tracking_geometry import (TrackingFilter, anatomical_hand, empty_data,
                                empty_part, hand_features, pose_features)
 
@@ -55,10 +56,24 @@ class _MediaPipeBackend:
             self.close()
             raise
 
-    def image(self, frame, mirror):
+    def image(self, frame, mirror, region=None):
         if mirror:
             frame = self.cv2.flip(frame, 1)
         rgb = self.cv2.cvtColor(frame, self.cv2.COLOR_BGR2RGB)
+        if region is not None:
+            # Mask the converted buffer in place. Keeping the original canvas
+            # preserves VIDEO tracking coordinates, gesture scale and aspect.
+            # The captured BGR frame remains untouched for the camera thread.
+            height, width = rgb.shape[:2]
+            left, top, right, bottom = region
+            left = max(0, min(width, math.floor(left * width)))
+            right = max(left, min(width, math.ceil(right * width)))
+            top = max(0, min(height, math.floor(top * height)))
+            bottom = max(top, min(height, math.ceil(bottom * height)))
+            rgb[:top] = 0
+            rgb[bottom:] = 0
+            rgb[top:bottom, :left] = 0
+            rgb[top:bottom, right:] = 0
         return self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb)
 
     def close(self):
@@ -148,6 +163,9 @@ class PoseHandTracker:
                                  for name, rate in self._rates.items()}
         self._metrics = {}
         self._filter = TrackingFilter(self.smoothing_time, self.detection_timeout)
+        self._primary = PrimaryPersonLock(use_pose=self.use_pose,
+                                          visibility_threshold=self.visibility_threshold)
+        self._primary_generation = self._primary.generation
 
     def _open_camera(self):
         import cv2
@@ -182,6 +200,9 @@ class PoseHandTracker:
             self._expiry_timeouts = {name: max(self._base_detection_timeout, 2 / rate)
                                      for name, rate in self._rates.items()}
             self._filter = TrackingFilter(self.smoothing_time, self.detection_timeout)
+            self._primary = PrimaryPersonLock(use_pose=self.use_pose,
+                                              visibility_threshold=self.visibility_threshold)
+            self._primary_generation = self._primary.generation
             self.current_data = empty_data()
             self._metrics = dict(captured_frames=0, pose_frames=0, hand_frames=0,
                                  capture_failures=0, inference_ms=0.0, frame_age_ms=0.0,
@@ -189,7 +210,9 @@ class PoseHandTracker:
                                  budget_pauses=0, budget_pause_seconds=0.0,
                                  pose_scheduled_fps=self._rates.get('pose', 0),
                                  hand_scheduled_fps=self._rates.get('hand', 0),
-                                 pose_idle=False, hand_idle=False)
+                                 pose_idle=False, hand_idle=False,
+                                 primary_person_state='searching', primary_person_generation=0,
+                                 rejected_pose_frames=0, rejected_hand_candidates=0)
             if not self.use_pose and not self.use_hands:
                 return
             self.cap = None
@@ -290,16 +313,14 @@ class PoseHandTracker:
                 due_hand = 'hand' in next_due and now >= next_due['hand']
                 started = now
                 timestamp_ms = max(timestamp_ms+1, int(captured_at*1000))
-                image = self._backend.image(frame, self.mirror)
+                region = self._primary.region(captured_at)
+                self._sync_primary_generation()
+                image = (self._backend.image(frame, self.mirror, region)
+                         if region is not None else self._backend.image(frame, self.mirror))
                 aspect = frame.shape[1] / frame.shape[0]
                 if due_pose:
                     result = self.pose_model.detect_for_video(image, timestamp_ms)
-                    normalized = result.pose_landmarks[0] if result.pose_landmarks else []
-                    world = result.pose_world_landmarks[0] if result.pose_world_landmarks else []
-                    features = pose_features(normalized, world, self.visibility_threshold, aspect,
-                                             self.head_scale_min, self.head_scale_max)
-                    for key, sample in features.items():
-                        self._filter.update(key, sample, captured_at)
+                    features = self._update_pose(result, captured_at, aspect)
                     detected = any(features[part]['detected'] for part in self.pose_parts)
                     self._schedule_model('pose', detected, captured_at,
                                          started, time.monotonic(), next_due, last_detected)
@@ -327,6 +348,8 @@ class PoseHandTracker:
                     self._metrics['inference_ms'] = elapsed*1000
                     self._metrics['inference_wall_seconds'] += elapsed
                     self._metrics['frame_age_ms'] = (completed-captured_at)*1000
+                    self._metrics['primary_person_state'] = self._primary.state
+                    self._metrics['primary_person_generation'] = self._primary.generation
                 self._publish()
         except Exception as error:
             self.last_error = error
@@ -388,20 +411,59 @@ class PoseHandTracker:
     def _update_hands(self, result, timestamp, aspect):
         samples = {'left_hand': empty_part(hand=True), 'right_hand': empty_part(hand=True)}
         scores = {'left_hand': -1, 'right_hand': -1}
+        candidates = []
         for normalized, world, categories in zip(result.hand_landmarks,
                 result.hand_world_landmarks, result.handedness):
             if not categories:
                 continue
             category = max(categories, key=lambda c: c.score)
-            label = anatomical_hand(category.category_name, self.mirror, self.invert_hands)
+            label = anatomical_hand(category.category_name, self.mirror)
             if label is None or category.score < self.visibility_threshold:
                 continue
+            candidates.append((normalized, world, category, label))
+        selected = self._primary.select_hands(
+            [(points, label, category.score) for points, _, category, label in candidates],
+            timestamp, aspect)
+        self._sync_primary_generation()
+        with self._state_lock:
+            self._metrics['rejected_hand_candidates'] = (
+                self._metrics.get('rejected_hand_candidates', 0) + len(candidates) - len(selected))
+        for index in selected:
+            normalized, world, category, label = candidates[index]
+            # Ownership uses anatomical labels; optional control inversion must
+            # not change which physical person's hand is accepted.
+            if self.invert_hands:
+                label = 'Left' if label == 'Right' else 'Right'
             key = label.lower() + '_hand'
             if category.score > scores[key]:
                 samples[key] = hand_features(normalized, world, category.category_name, aspect)
                 scores[key] = category.score
         for key, sample in samples.items():
             self._filter.update(key, sample, timestamp)
+
+    def _update_pose(self, result, timestamp, aspect):
+        normalized = result.pose_landmarks[0] if result.pose_landmarks else []
+        world = result.pose_world_landmarks[0] if result.pose_world_landmarks else []
+        accepted = self._primary.update_pose(normalized, timestamp, aspect)
+        self._sync_primary_generation()
+        features = (pose_features(normalized, world, self.visibility_threshold, aspect,
+                                  self.head_scale_min, self.head_scale_max)
+                    if accepted else {'head': empty_part(head=True), 'torso': empty_part()})
+        for key, sample in features.items():
+            self._filter.update(key, sample, timestamp)
+        # Hands have their own cadence and ownership checks. An intermittent
+        # pose must not invalidate a still-visible, already associated hand.
+        # Changing owner clears every part in _sync_primary_generation.
+        with self._state_lock:
+            self._metrics['rejected_pose_frames'] = (
+                self._metrics.get('rejected_pose_frames', 0) + int(bool(normalized) and not accepted))
+        return features
+
+    def _sync_primary_generation(self):
+        """Never smooth samples from different people together."""
+        if self._primary.generation != self._primary_generation:
+            self._primary_generation = self._primary.generation
+            self._filter = TrackingFilter(self.smoothing_time, self.detection_timeout)
 
     def _close_backend(self):
         if self._backend is not None:

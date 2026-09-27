@@ -401,7 +401,7 @@ test("retired lighting presets migrate atomically while preserving exposure and 
 
 test("explicit invalid exposure stays on disk and is reported instead of resetting brightness", async (t) => {
   const { store, configPath } = await fixture(t);
-  for (const exposure of [null, 9, 101, 49.5, "50", true, [], {}]) {
+  for (const exposure of [null, -1, 101, 49.5, "50", true, [], {}]) {
     const config = structuredClone(store.defaults);
     config.render.exposure = exposure;
     const bytes = JSON.stringify(config);

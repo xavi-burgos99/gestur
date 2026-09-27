@@ -31,7 +31,7 @@
         "fullscreen": {"type": "boolean"},
         "hide_cursor": {"type": "boolean"},
         "ambient_light": {"type": "string", "enum": ["none", "studio", "gallery", "sunset", "rim"]},
-        "exposure": {"type": "integer", "minimum": 10, "maximum": 100}
+        "exposure": {"type": "integer", "minimum": 0, "maximum": 100}
       }
     },
     "controls": {

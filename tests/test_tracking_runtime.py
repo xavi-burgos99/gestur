@@ -215,6 +215,8 @@ def test_stalled_camera_publishes_expiry_once_without_refreshing_stale_data(monk
     sample = empty_part(head=True)
     sample.update(detected=True,x=.7,y=.4,scale=.3)
     monkeypatch.setattr(pose_detector,'pose_features',lambda *args:{'head':sample,'torso':empty_part()})
+    # This expiry test supplies features directly, without landmark inference.
+    monkeypatch.setattr(pose_detector.PrimaryPersonLock, 'update_pose', lambda *args: True)
     tracker,_,_ = setup(monkeypatch,use_hands=False)
     monkeypatch.setattr(tracker,'_open_camera',ReadOnceCamera)
     publications = []
@@ -305,6 +307,7 @@ def test_pose_idle_cadence_uses_only_parts_requested_by_controls(monkeypatch, pa
     head.update(detected=head_present, x=.5, y=.4, scale=.3)
     torso.update(detected=torso_present, x=.5, y=.6, scale=.6)
     monkeypatch.setattr(pose_detector, 'pose_features', lambda *args: {'head':head, 'torso':torso})
+    monkeypatch.setattr(pose_detector.PrimaryPersonLock, 'update_pose', lambda *args: True)
     tracker, _, _ = setup(monkeypatch, use_hands=False, pose_parts=parts, idle_after_seconds=0)
     tracker.run()
     try:

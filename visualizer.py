@@ -58,8 +58,8 @@ MODEL_LIGHT_PRESETS = {
 
 
 def _validate_exposure(value):
-    if type(value) is not int or not 10 <= value <= 100:
-        raise ValueError("La exposición debe ser un entero entre 10 y 100")
+    if type(value) is not int or not 0 <= value <= 100:
+        raise ValueError("La exposición debe ser un entero entre 0 y 100")
     return value
 
 
@@ -424,7 +424,12 @@ class ControlledObjViewer(ShowBase):
                 self._exposure_texture = Texture("gestur-exposure-identity")
                 self._exposure_texture.setup_2d_texture(1, 1, Texture.T_unsigned_byte, Texture.F_rgba)
                 self._exposure_texture.set_ram_image(bytes((255, 255, 255, 255)))
-            gain = 2 ** ((self._exposure - 50) / 25)
+            # Preserve the saved 10–100 curve exactly. Extend its lower end
+            # continuously to black without changing alpha or the 50 baseline.
+            gain = (
+                (self._exposure / 10) * 2 ** (-40 / 25) if self._exposure < 10
+                else 2 ** ((self._exposure - 50) / 25)
+            )
             rgb_scale = 4 if gain > 2 else 2 if gain > 1 else 1
             self._exposure_stage.set_rgb_scale(rgb_scale)
             self._exposure_stage.set_color((gain / rgb_scale,) * 3 + (1,))

@@ -62,7 +62,7 @@ def test_exposure_is_monotonic_reversible_and_preserves_alpha(tmp_path, kind, sc
         baseline_pixels = np.frombuffer(baseline, dtype=np.uint8).reshape(-1, 4)
         measures = {}
         identity = None
-        for value in (10, 50, 75, 100):
+        for value in (0, 5, 10, 50, 73, 75, 100):
             pixels = np.frombuffer(frame(value), dtype=np.uint8).reshape(-1, 4)
             measures[value] = int(pixels[:, :3].sum())
             assert np.array_equal(pixels[:, 3], baseline_pixels[:, 3])
@@ -74,11 +74,18 @@ def test_exposure_is_monotonic_reversible_and_preserves_alpha(tmp_path, kind, sc
                 stage = viewer._exposure_stage
                 assert stage.get_sort() > max((item.get_sort() for item in original_stages), default=0)
                 assert stage.get_combine_alpha_mode() == p.TextureStage.CM_replace
+                gain = stage.get_color().x * stage.get_rgb_scale()
+                expected_gain = (
+                    (value / 10) * 2 ** (-40 / 25) if value < 10
+                    else 2 ** ((value - 50) / 25)
+                )
+                assert gain == pytest.approx(expected_gain)
                 if identity is None:
                     identity = viewer._exposure_texture
                 assert identity == viewer._exposure_texture
                 assert (identity.get_x_size(), identity.get_y_size()) == (1, 1)
-        assert 0 < measures[10] < measures[50] < measures[75] < measures[100]
+        assert measures[0] == 0
+        assert 0 < measures[5] < measures[10] < measures[50] < measures[73] < measures[75] < measures[100]
         assert frame(50) == baseline
         assert list(model.find_all_texture_stages()) == original_stages
         assert viewer._model_light_root is None if scenario == "none" else viewer._model_light_root is not None
@@ -91,7 +98,7 @@ def test_bad_exposure_does_not_partially_apply_a_light_change():
     from visualizer import ControlledObjViewer
     viewer = ControlledObjViewer(None, window_type="none", fullscreen=False)
     try:
-        for value in (True, 9, 101, 50.0, "50"):
+        for value in (True, -1, 101, 50.0, "50"):
             with pytest.raises(ValueError):
                 viewer.apply_settings(ambient_light="gallery", exposure=value)
             assert viewer.get_render_status()["ambient_light"] == "none"

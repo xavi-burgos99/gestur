@@ -32,13 +32,18 @@ Los cambios de controles se aplican al recargar la configuración. Los ajustes d
 - `rim` — **Contraluz**: luz trasera que destaca la silueta, con relleno frontal.
 
 Cada escenario cambia la disposición de las luces. `render.exposure` controla
-la exposición de forma independiente, con valores enteros del **10 % al 100 %**.
+la exposición de forma independiente, del **0 % al 100 %** en pasos de **5 %** en
+el portal. Los valores enteros guardados antes se conservan hasta que se ajuste
+el control, aunque no sean múltiplos de cinco.
 El **50 %** conserva la exposición original y también se puede ajustar con
 Ninguna seleccionado. Ambos ajustes se aplican al guardar sin recargar el modelo
 ni modificar sus texturas. La bienvenida y el QR mantienen su propia iluminación.
 Los escenarios usan como máximo una luz ambiente y dos luces dirigidas, sin
 mapas de sombras ni pasadas adicionales de renderizado. La exposición se aplica
-al color del modelo: cada 25 puntos duplican la intensidad, con ganancia 1 al 50 %.
+al color del modelo: del 10 % al 100 %, cada 25 puntos duplican la intensidad,
+con ganancia 1 al 50 %. Del 0 % al 10 % aumenta de forma lineal desde negro hasta
+la intensidad del 10 %, conservando el aspecto de los ajustes anteriores. El
+0 % oscurece por completo el color del modelo sin cambiar su transparencia.
 
 `controls.idle_mode` define qué ocurre cuando faltan los gestos activos:
 

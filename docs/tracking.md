@@ -53,6 +53,23 @@ entorno manualmente; la validación del hardware objetivo se hace en Linux ARM64
 
 ## Cadencia, pérdida de seguimiento y rotaciones
 
+- La primera persona detectada conserva el control mientras su seguimiento sea
+  compatible con sus posiciones anteriores. `num_poses=1` limita la cantidad de
+  resultados, pero por sí solo no evita saltar de una persona a otra. El bloqueo
+  espacial comprueba desplazamiento y tamaño antes de actualizar los controles;
+  un candidato rechazado no mueve ni amplía la zona seleccionada.
+- La zona se mantiene durante **1,5 segundos** sin observaciones del usuario
+  para permitir una oclusión breve. Cada parte perdida deja de enviar controles;
+  las manos ya asociadas pueden continuar aunque el cuerpo falle momentáneamente.
+  No se admiten manos nuevas hasta recuperar una pose válida. Tras perder todas
+  las partes durante ese tiempo se busca otra persona y se reinicia el filtro
+  para no mezclar ambos usuarios.
+- El fondo exterior a la zona seleccionada se enmascara sobre el búfer RGB ya
+  convertido, manteniendo resolución, coordenadas y espejo. Pose y manos usan
+  la misma imagen; no se añade ningún modelo ni se incrementan sus frecuencias.
+  Las manos se asocian a las muñecas de la persona seleccionada. Con solo manos
+  activas se conserva el primer grupo por continuidad y proximidad, sin cargar
+  el modelo corporal.
 - Un hilo drena la cámara a un único hueco de memoria. La inferencia toma siempre
   la imagen más reciente; no se acumula una cola de imágenes antiguas.
 - Pose y manos tienen frecuencias máximas independientes (`inference_fps` y
@@ -147,6 +164,14 @@ pinza invariante a escala/rotación, puño, visibilidad, espejo, filtros con dis
 frecuencias, colas acotadas, cadencias distintas, reinicio, callbacks y fallos de
 cámara/inferencia. Si los modelos se han aprovisionado también se ejecuta
 inferencia CPU real en ambos Tasks con imágenes vacías.
+
+Las pruebas de selección cubren una segunda persona, pérdida breve, devolución
+del control tras la espera, manos ajenas, espejo y caducidad. La máscara conserva
+las coordenadas de imagen, la escala de los gestos y el fotograma capturado.
+Este bloqueo sigue la continuidad espacial, no identifica personas: un
+solapamiento completo con posición y tamaño similares puede ser indistinguible.
+En el modo de solo manos, proximidad tampoco demuestra que ambas pertenezcan a
+la misma persona. No se calculan ni almacenan descriptores de identidad.
 
 Además se verificó manualmente en el entorno de desarrollo que los modelos Lite
 producen dos manos y sus landmarks métricos con la imagen oficial

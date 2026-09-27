@@ -37,16 +37,19 @@ class ExponentialSmoother(Smoother):
     specifies the time constant directly. period enables circular angle inputs.
     decay_period expresses a full output rotation in input units, so loss and
     reacquisition stay continuous even when input sensitivity changes.
+    linear_decay returns scalar outputs to their numeric center without wrapping.
     """
     def __init__(self, alpha=0.3, decay_rate=0.1, center_value=0.5,
-                 smoothing_ms=None, clock=time.monotonic, period=None, decay_period=None):
+                 smoothing_ms=None, clock=time.monotonic, period=None,
+                 decay_period=None, linear_decay=False):
         self.alpha = alpha
         self.decay_rate = decay_rate
         self.center_value = center_value
         self.clock = clock
         self.period = period
         self.decay_period = period if decay_period is None else decay_period
-        self.align_reacquisition = decay_period is not None
+        self.linear_decay = linear_decay
+        self.align_reacquisition = decay_period is not None and not linear_decay
         self.time_constant = (smoothing_ms / 1000.0 if smoothing_ms is not None
                               else self._time_constant(alpha))
         self.decay_constant = self._time_constant(decay_rate)
@@ -72,7 +75,9 @@ class ExponentialSmoother(Smoother):
         target = self.center_value if value is None else value + self.input_offset
         constant = self.decay_constant if value is None else self.time_constant
         weight = 1.0 if constant <= 0 else -math.expm1(-elapsed / constant)
-        period = self.decay_period if value is None else self.period
+        period = self.period
+        if value is None:
+            period = None if self.linear_decay else self.decay_period
         delta = (target - self.smoothed_value if period is None
                  else _shortest_delta(target, self.smoothed_value, period))
         self.smoothed_value += weight * delta
@@ -298,12 +303,15 @@ def create_extractors():
         return extractor
 
     extractors = {f"head_{axis}": tracked("head", axis) for axis in ("x", "y", "scale")}
+    for angle in ("pitch", "yaw", "roll"):
+        extractors[f"head_{angle}"] = tracked("head", angle, True)
     for field in ("center_x", "center_y", "distance", "separation_x"):
         extractors[f"hands_{field}"] = lambda data, field=field: _number(data.get("hands", {}).get(field))
     for side in ("left", "right"):
         for angle in ("rotation", "pitch", "yaw", "roll"):
             extractors[f"{side}_hand_{angle}"] = tracked(f"{side}_hand", angle, True)
-        extractors[f"{side}_hand_pinch"] = tracked(f"{side}_hand", "pinch")
+        for field in ("x", "y", "pinch", "openness"):
+            extractors[f"{side}_hand_{field}"] = tracked(f"{side}_hand", field)
     return extractors
 
 
@@ -378,16 +386,19 @@ def create_control_system(config=None, clock=time.monotonic):
     appliers = create_appliers(clock=clock)
     axes = {"rotation_yaw": 0, "rotation_pitch": 1, "rotation_roll": 2}
     for spec in controls["mappings"]:
-        circular = spec["input"].endswith(("_hand_rotation", "_hand_pitch", "_hand_yaw", "_hand_roll"))
+        circular = spec["input"].endswith(("_rotation", "_pitch", "_yaw", "_roll"))
         # The original zoom responded faster than the head position channels.
         smoothing = controls["smoothing_ms"] / 3 if spec["mode"] == "stepped" else controls["smoothing_ms"]
-        # Input angles wrap every 1.0, but changing sensitivity changes how much
-        # input represents a full turn of the displayed object.
+        # Head roll is an unoriented eye line (180 degrees); other angles wrap
+        # at 360 degrees. Neutral return follows a full OUTPUT turn, whose input
+        # range changes with sensitivity, independently of the measured period.
         decay_period = (180.0 / spec["scale"] if circular and spec["mode"] == "absolute"
                         and spec["output"] in axes and spec["scale"] > 0 else None)
         smoother = ExponentialSmoother(smoothing_ms=smoothing, decay_rate=0.2,
                                        center_value=spec["center"], clock=clock,
-                                       period=1.0 if circular else None, decay_period=decay_period)
+                                       period=0.5 if spec["input"] == "head_roll" else 1.0 if circular else None,
+                                       decay_period=decay_period,
+                                       linear_decay=circular and spec["output"] not in axes)
         if spec["mode"] == "hybrid":
             controller = HybridRotationController(max_degrees=spec["scale"],
                 left_threshold=spec["left_threshold"], right_threshold=spec["right_threshold"],

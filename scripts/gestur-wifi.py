@@ -79,7 +79,37 @@ class NetworkManager:
                 'secured': bool(settings.get('802-11-wireless-security')),
                 'active': self.active(device, str(settings['connection']['uuid']))}
 
+    def active_status(self):
+        result = self.status()
+        if not result['active']:
+            raise RuntimeError('Access point is not active')
+        return result
+
+    def wait_device_ready(self, device):
+        # WirelessEnabled/rfkill can return before the supplicant is available.
+        # NMDeviceState 20 (UNAVAILABLE) is transient during that startup. Wait
+        # for state 30 (DISCONNECTED) or an active/activating connection before
+        # asking NM to activate; never retry failed activation requests blindly.
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            if not self.prop(NM_PATH, BUS_NAME, 'WirelessHardwareEnabled'):
+                raise RuntimeError('Wireless hardware is disabled')
+            if not self.prop(device, BUS_NAME + '.Device', 'Managed'):
+                raise RuntimeError('Wireless device is unmanaged')
+            if self.prop(device, BUS_NAME + '.Device', 'FirmwareMissing'):
+                raise RuntimeError('Wireless device firmware is missing')
+            state = int(self.prop(device, BUS_NAME + '.Device', 'State'))
+            if state == 120:
+                raise RuntimeError('Wireless device failed')
+            if self.prop(NM_PATH, BUS_NAME, 'WirelessEnabled') and 30 <= state <= 100:
+                return
+            if state not in (0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110):
+                raise RuntimeError('Wireless device cannot activate a connection')
+            time.sleep(.25)
+        raise RuntimeError('Wireless device readiness timed out')
+
     def activate(self, device, object_path):
+        self.wait_device_ready(device)
         active = str(self.prop(device, BUS_NAME + '.Device', 'ActiveConnection'))
         if active != '/':
             self.nm.DeactivateConnection(active)
@@ -88,6 +118,8 @@ class NetworkManager:
         while time.monotonic() < deadline:
             state = int(self.prop(active, BUS_NAME + '.Connection.Active', 'State'))
             if state == 2:
+                if str(self.prop(device, BUS_NAME + '.Device', 'ActiveConnection')) != str(active):
+                    raise RuntimeError('Access point is not active on the wireless device')
                 return
             if state == 4:
                 raise RuntimeError('Access point activation failed')
@@ -116,6 +148,7 @@ class NetworkManager:
         try:
             connection.Update(settings)
             self.activate(device, object_path)
+            result = self.active_status()
         except Exception:
             try:
                 connection.Update(old)
@@ -123,7 +156,7 @@ class NetworkManager:
             except Exception:
                 pass
             raise RuntimeError('Access point update failed; rollback attempted') from None
-        return self.status()
+        return result
 
     def bootstrap(self):
         self.interface(NM_PATH, 'org.freedesktop.DBus.Properties').Set(BUS_NAME, 'WirelessEnabled', self.dbus.Boolean(True))
@@ -131,7 +164,7 @@ class NetworkManager:
             device, object_path, _, settings = self.profile()
             if not self.active(device, str(settings['connection']['uuid'])):
                 self.activate(device, object_path)
-            return self.status()  # Keep the chosen AP and its credentials on reinstall.
+            return self.active_status()  # Keep the chosen AP and its credentials on reinstall.
         device = self.nm.GetDeviceByIpIface('wlan0')
         candidates = []
         for object_path in self.settings.ListConnections():
@@ -160,7 +193,7 @@ class NetworkManager:
         temporary.replace(PROFILE)
         if not self.active(device, str(settings['connection']['uuid'])):
             self.activate(device, object_path)
-        return self.status()
+        return self.active_status()
 
 
 def main():

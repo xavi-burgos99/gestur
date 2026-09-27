@@ -33,7 +33,6 @@ import {
   IconCube,
   IconAdjustmentsHorizontal,
   IconSettings,
-  IconHandMove,
   IconArrowUpRight,
   IconUpload,
   IconCheck,
@@ -42,7 +41,6 @@ import {
   IconLockOpen,
   IconLogout,
   IconPlus,
-  IconTrash,
   IconArrowRight,
   IconAlertCircle,
   IconRefresh,
@@ -51,37 +49,8 @@ import {
 } from "@tabler/icons-react";
 import "@mantine/core/styles.css";
 import "./styles.css";
+import ControlsEditor from "./ControlsEditor.jsx";
 
-const inputs = {
-  head_x: "Cabeza · horizontal",
-  head_y: "Cabeza · vertical",
-  head_scale: "Cabeza · distancia",
-  hands_center_x: "Manos · horizontal",
-  hands_center_y: "Manos · vertical",
-  hands_distance: "Manos · distancia",
-  hands_separation_x: "Manos · separación",
-  left_hand_pitch: "Mano izquierda · inclinación",
-  right_hand_pitch: "Mano derecha · inclinación",
-  left_hand_yaw: "Mano izquierda · giro lateral",
-  right_hand_yaw: "Mano derecha · giro lateral",
-  left_hand_rotation: "Mano izquierda · giro",
-  right_hand_rotation: "Mano derecha · giro",
-  left_hand_roll: "Mano izquierda · giro 3D",
-  right_hand_roll: "Mano derecha · giro 3D",
-  left_hand_pinch: "Mano izquierda · pinza",
-  right_hand_pinch: "Mano derecha · pinza",
-};
-const outputs = {
-  rotation_yaw: "Giro horizontal",
-  rotation_pitch: "Giro vertical",
-  rotation_roll: "Inclinación lateral",
-  position_x: "Desplazar horizontalmente",
-  position_y: "Desplazar en profundidad",
-  position_z: "Desplazar verticalmente",
-  scale_uniform: "Tamaño del modelo",
-};
-const options = (obj) =>
-  Object.entries(obj).map(([value, label]) => ({ value, label }));
 async function api(url, { method = "GET", body } = {}) {
   const form = body instanceof FormData;
   const response = await fetch(`/api/${url}`, {
@@ -124,15 +93,16 @@ function Numeric({
     />
   );
 }
-function SectionTitle({ eyebrow, title, description, action }) {
+function SectionTitle({ title, description, action }) {
   return (
     <Group justify="space-between" align="flex-end" mb={30}>
       <div>
-        <Text className="eyebrow">{eyebrow}</Text>
         <Title order={1}>{title}</Title>
-        <Text c="dimmed" mt={8}>
-          {description}
-        </Text>
+        {description && (
+          <Text c="dimmed" mt={8}>
+            {description}
+          </Text>
+        )}
       </div>
       {action}
     </Group>
@@ -182,8 +152,8 @@ function ImportWarnings({ warnings = [] }) {
     <details className="import-warnings">
       <summary>
         {warnings.length === 1
-          ? "1 detalle de la importación"
-          : `${warnings.length} detalles de la importación`}
+          ? "1 aviso de importación"
+          : `${warnings.length} avisos de importación`}
       </summary>
       <ul>
         {warnings.map((warning, index) => (
@@ -323,8 +293,8 @@ function Models({ config, setConfig, notify }) {
       setConfig(result.config);
       notify(
         id
-          ? "Selección guardada. El visualizador cargará el modelo en unos segundos."
-          : "La pantalla de bienvenida se mostrará en el dispositivo.",
+          ? "Modelo seleccionado. Se mostrará en unos segundos."
+          : "Pantalla de bienvenida seleccionada.",
       );
     } catch (e) {
       notify(e.message, true);
@@ -352,9 +322,8 @@ function Models({ config, setConfig, notify }) {
   return (
     <>
       <SectionTitle
-        eyebrow="TU COLECCIÓN"
         title="Modelos 3D"
-        description="Tus piezas, listas para responder a cada movimiento."
+        description="Sube modelos 3D para mostrarlos en la pantalla del dispositivo."
         action={
           <ImportButton
             upload={upload}
@@ -381,7 +350,7 @@ function Models({ config, setConfig, notify }) {
                 ? "El modelo seleccionado se está mostrando en el dispositivo."
                 : "El dispositivo muestra la bienvenida con el QR de este portal."
               : "El visor está aplicando la selección.")
-          : "Puedes guardar cambios. Se aplicarán cuando el visualizador esté en marcha."}
+          : "Los cambios se aplicarán cuando el visor esté conectado."}
       </Alert>
       {jobError && (
         <Alert
@@ -390,8 +359,7 @@ function Models({ config, setConfig, notify }) {
           title="Reconectando con la importación"
           role="status"
         >
-          {jobError} Si ya había una importación en marcha, continúa en el
-          dispositivo. Volveremos a comprobar su estado automáticamente.
+          {jobError} El estado se actualizará al recuperar la conexión.
         </Alert>
       )}
       {uploading && (
@@ -399,7 +367,7 @@ function Models({ config, setConfig, notify }) {
           <Group wrap="nowrap">
             <Loader size="sm" />
             <div>
-              <Text fw={600}>Enviando tu archivo</Text>
+              <Text fw={600}>Subiendo archivo</Text>
               <Text size="sm" c="dimmed">
                 Mantén esta página abierta hasta que termine la subida.
               </Text>
@@ -437,12 +405,12 @@ function Models({ config, setConfig, notify }) {
             <div className="import-status-copy">
               <Text fw={600}>
                 {job.state === "completed"
-                  ? `Modelo preparado: ${job.model?.name || "Nueva pieza"}`
+                  ? `Modelo importado: ${job.model?.name || "Sin nombre"}`
                   : job.state === "failed"
                     ? "No se pudo importar el modelo"
                     : job.state === "awaiting_decision"
-                      ? "Tu modelo tiene muchos triángulos"
-                      : "Preparando tu modelo"}
+                      ? "Reducción de triángulos pendiente"
+                      : "Importando modelo"}
               </Text>
               <Text size="sm" c="dimmed" mt={3}>
                 {job.state === "failed"
@@ -451,8 +419,8 @@ function Models({ config, setConfig, notify }) {
               </Text>
               {job.state === "processing" && (
                 <Text size="sm" c="dimmed" mt={5}>
-                  La Raspberry Pi está trabajando. Puede tardar varios minutos;
-                  puedes salir y volver a esta página.
+                  Puede tardar varios minutos. Puedes cerrar esta página y
+                  volver más tarde.
                 </Text>
               )}
               <ImportWarnings warnings={job.warnings} />
@@ -461,7 +429,7 @@ function Models({ config, setConfig, notify }) {
         </Paper>
       )}
       {error && (
-        <Alert color="red" mb="lg" title="No se pudo cargar la colección">
+        <Alert color="red" mb="lg" title="No se pudieron cargar los modelos">
           {error}
           <Button mt="sm" variant="light" onClick={load}>
             Reintentar
@@ -493,7 +461,7 @@ function Models({ config, setConfig, notify }) {
         >
           {dragging && (
             <div className="drop-overlay" aria-hidden="true">
-              Suelta tu modelo aquí
+              Suelta el archivo aquí
             </div>
           )}
           {empty ? (
@@ -528,11 +496,9 @@ function Models({ config, setConfig, notify }) {
                 </svg>
               </div>
               <div className="empty-collection-copy">
-                <Text className="eyebrow">TODO EMPIEZA CON UNA PIEZA</Text>
-                <Title order={2}>Tu primera pieza va aquí</Title>
+                <Title order={2}>No hay modelos</Title>
                 <Text c="dimmed" mt="sm" maw={470}>
-                  La colección está vacía. Sube un modelo 3D o arrástralo aquí y
-                  Gestur lo preparará para el visualizador.
+                  Sube un archivo 3D o arrástralo aquí.
                 </Text>
                 <Group mt="xl">
                   <ImportButton
@@ -612,7 +578,7 @@ function Models({ config, setConfig, notify }) {
                     <IconUpload size={24} />
                   </ThemeIcon>
                   <Title order={3} mt="xl">
-                    Suma una nueva pieza
+                    Añadir modelo
                   </Title>
                   <Text c="dimmed" mt="sm" mb="xl" size="sm">
                     Arrastra aquí un archivo 3D o un ZIP con el modelo y sus
@@ -638,17 +604,14 @@ function Models({ config, setConfig, notify }) {
           </ThemeIcon>
           <div>
             <Text fw={600} size="sm">
-              Un archivo, y nos encargamos del resto
+              Formatos admitidos
             </Text>
             <Text size="sm" c="dimmed" mt={4}>
               GLB, glTF, OBJ, FBX, STL, PLY, COLLADA y más. Si hay texturas o
-              archivos auxiliares, inclúyelos en un ZIP junto al modelo. Gestur
-              convierte el modelo y busca sus texturas aunque las rutas hayan
-              cambiado.
+              archivos auxiliares, inclúyelos en un ZIP junto al modelo.
             </Text>
             <Text size="xs" c="dimmed" mt={8}>
-              Si una textura falta o hay varias posibles, te avisaremos. Hasta
-              100 MB por subida · 250 MB al descomprimir · 500 archivos.
+              Hasta 100 MB por subida · 250 MB al descomprimir · 500 archivos.
             </Text>
           </div>
         </Group>
@@ -659,13 +622,11 @@ function Models({ config, setConfig, notify }) {
             <IconDeviceDesktop size={23} className="fixed-icon" />
             <div>
               <Text fw={600} size="sm">
-                {config.active_model
-                  ? "Elige qué muestra tu dispositivo"
-                  : "Tu dispositivo está listo para empezar"}
+                Pantalla de bienvenida
               </Text>
               <Text size="sm" c="dimmed">
-                Sin un modelo seleccionado, el visualizador muestra una figura
-                3D y un QR para abrir este portal.
+                Sin un modelo seleccionado, la pantalla muestra una figura 3D y
+                un QR para abrir el portal.
               </Text>
             </div>
           </Group>
@@ -687,16 +648,15 @@ function Models({ config, setConfig, notify }) {
         withCloseButton={false}
         closeOnClickOutside={false}
         closeOnEscape={false}
-        title="¿Hacemos tu modelo más ligero?"
+        title="Reducir triángulos"
         centered
         size="lg"
       >
         {proposal && (
           <Stack gap="lg">
             <Text size="sm" c="dimmed">
-              Hemos detectado un número muy elevado de triángulos. Reducirlos
-              puede ayudar a que el movimiento sea más fluido en la Raspberry
-              Pi.
+              El modelo tiene un número elevado de triángulos. Reducirlos puede
+              mejorar la fluidez en el dispositivo.
             </Text>
             <div className="simplify-comparison">
               <div>
@@ -731,9 +691,8 @@ function Models({ config, setConfig, notify }) {
               {formatCount(proposal.reductionPercent)} % menos triángulos
             </Badge>
             <Text size="sm">
-              La Raspberry Pi realizará la reducción; puede tardar varios
-              minutos. La simplificación puede cambiar algunos detalles de la
-              geometría.
+              La reducción se realiza en la Raspberry Pi y puede tardar varios
+              minutos. Algunos detalles del modelo pueden perderse.
             </Text>
             <ImportWarnings warnings={job.warnings} />
             {decisionError && (
@@ -756,7 +715,7 @@ function Models({ config, setConfig, notify }) {
                 disabled={deciding !== null}
                 leftSection={<IconBolt size={17} />}
               >
-                Reducir polígonos
+                Reducir triángulos
               </Button>
             </div>
           </Stack>
@@ -768,7 +727,20 @@ function Models({ config, setConfig, notify }) {
 function Parameters({ config, setConfig, defaults, notify }) {
   const [draft, setDraft] = useState(() => structuredClone(config));
   const [saving, setSaving] = useState(false);
-  useEffect(() => setDraft(structuredClone(config)), [config]);
+  const previousConfig = useRef(config);
+  useEffect(() => {
+    const previous = previousConfig.current;
+    const parametersUnchanged = ["tracking", "render", "controls"].every(
+      (group) =>
+        JSON.stringify(previous[group]) === JSON.stringify(config[group]),
+    );
+    setDraft((current) =>
+      parametersUnchanged
+        ? { ...current, active_model: config.active_model }
+        : structuredClone(config),
+    );
+    previousConfig.current = config;
+  }, [config]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(config);
   const update = (group, key, value) =>
     setDraft((d) => ({ ...d, [group]: { ...d[group], [key]: value } }));
@@ -782,40 +754,12 @@ function Parameters({ config, setConfig, defaults, notify }) {
         ),
       },
     }));
-  function mode(i, value) {
-    const m = draft.controls.mappings[i];
-    mapping(i, {
-      mode: value,
-      ...(value === "hybrid"
-        ? {
-            output: m.output.startsWith("rotation_")
-              ? m.output
-              : "rotation_yaw",
-            left_threshold: 0.25,
-            center: 0.5,
-            right_threshold: 0.75,
-            continuous_speed: 100,
-          }
-        : value === "stepped"
-          ? {
-              output: "scale_uniform",
-              threshold: 0.4,
-              small_scale: 1,
-              large_scale: 1.75,
-              transition_ms: 750,
-              hysteresis: 0.02,
-            }
-          : {}),
-    });
-  }
   async function save() {
     setSaving(true);
     try {
       const d = await api("config", { method: "PUT", body: draft });
       setConfig(d.config);
-      notify(
-        "Parámetros guardados. El dispositivo los aplicará automáticamente.",
-      );
+      notify("Parámetros guardados.");
     } catch (e) {
       notify(e.message, true);
     } finally {
@@ -825,9 +769,8 @@ function Parameters({ config, setConfig, defaults, notify }) {
   return (
     <>
       <SectionTitle
-        eyebrow="A TU MANERA"
         title="Parámetros"
-        description="Ajusta cómo se transforma cada gesto en movimiento."
+        description="Configura los gestos y los movimientos del modelo."
         action={
           <Button
             leftSection={<IconCheck size={18} />}
@@ -835,19 +778,18 @@ function Parameters({ config, setConfig, defaults, notify }) {
             loading={saving}
             onClick={save}
           >
-            {dirty ? "Guardar cambios" : "Todo guardado"}
+            {dirty ? "Guardar cambios" : "Sin cambios"}
           </Button>
         }
       />
       <SimpleGrid cols={{ base: 1, md: 3 }} mb="xl">
         <Paper p="xl" withBorder>
-          <Text className="eyebrow">RECONOCIMIENTO</Text>
           <Title order={3} mb="lg">
-            Cuerpo y manos
+            Seguimiento
           </Title>
           <Stack>
             <Switch
-              label="Seguir cabeza y cuerpo"
+              label="Seguir la cabeza"
               checked={draft.tracking.use_pose}
               onChange={(e) =>
                 update("tracking", "use_pose", e.currentTarget.checked)
@@ -855,7 +797,6 @@ function Parameters({ config, setConfig, defaults, notify }) {
             />
             <Switch
               label="Reconocer las manos"
-              description="Activa giro de muñeca, pinza y separación."
               checked={draft.tracking.use_hands}
               onChange={(e) =>
                 update("tracking", "use_hands", e.currentTarget.checked)
@@ -871,7 +812,6 @@ function Parameters({ config, setConfig, defaults, notify }) {
           </Stack>
         </Paper>
         <Paper p="xl" withBorder>
-          <Text className="eyebrow">RESPUESTA</Text>
           <Title order={3} mb="lg">
             Suavidad del gesto
           </Title>
@@ -886,7 +826,6 @@ function Parameters({ config, setConfig, defaults, notify }) {
           />
         </Paper>
         <Paper p="xl" withBorder>
-          <Text className="eyebrow">REPOSO</Text>
           <Title order={3} mb="lg">
             Volver al centro
           </Title>
@@ -903,232 +842,14 @@ function Parameters({ config, setConfig, defaults, notify }) {
           </Text>
         </Paper>
       </SimpleGrid>
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Gestos y movimientos</Title>
-        <Button
-          variant="subtle"
-          leftSection={<IconPlus size={17} />}
-          disabled={draft.controls.mappings.length >= 32}
-          onClick={() =>
-            update("controls", "mappings", [
-              ...draft.controls.mappings,
-              {
-                id: `gesture_${Date.now()}`,
-                input: "right_hand_rotation",
-                output: "rotation_yaw",
-                mode: "absolute",
-                enabled: false,
-                scale: 90,
-                invert: false,
-                center: 0.5,
-              },
-            ])
-          }
-        >
-          Añadir gesto
-        </Button>
-      </Group>
-      <Text c="dimmed" size="sm" mb="lg">
-        Cada movimiento puede tener un gesto activo. Desactiva un gesto antes de
-        sustituirlo.
-      </Text>
-      <Accordion variant="separated" radius="md">
-        {draft.controls.mappings.map((m, i) => (
-          <Accordion.Item value={m.id} key={m.id}>
-            <Accordion.Control>
-              <Group gap="md">
-                <ThemeIcon
-                  color={m.enabled ? "teal" : "gray"}
-                  variant="light"
-                  size={38}
-                >
-                  <IconHandMove size={21} />
-                </ThemeIcon>
-                <div>
-                  <Text fw={600}>
-                    {inputs[m.input]} <span className="arrow">→</span>{" "}
-                    {outputs[m.output]}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {m.enabled ? "Activo" : "Desactivado"} ·{" "}
-                    {m.mode === "hybrid"
-                      ? "Continuo en los extremos"
-                      : m.mode === "stepped"
-                        ? "Dos tamaños"
-                        : "Proporcional"}
-                  </Text>
-                </div>
-              </Group>
-            </Accordion.Control>
-            <Accordion.Panel>
-              <Stack pt="md">
-                <Group justify="space-between">
-                  <Switch
-                    label="Gesto activo"
-                    checked={m.enabled}
-                    onChange={(e) =>
-                      mapping(i, { enabled: e.currentTarget.checked })
-                    }
-                  />
-                  <Tooltip label="Eliminar gesto">
-                    <ActionIcon
-                      aria-label="Eliminar gesto"
-                      color="red"
-                      variant="subtle"
-                      onClick={() =>
-                        update(
-                          "controls",
-                          "mappings",
-                          draft.controls.mappings.filter((_, n) => n !== i),
-                        )
-                      }
-                    >
-                      <IconTrash size={18} />
-                    </ActionIcon>
-                  </Tooltip>
-                </Group>
-                <SimpleGrid cols={{ base: 1, sm: 3 }}>
-                  <Select
-                    label="Gesto de entrada"
-                    value={m.input}
-                    data={options(inputs)}
-                    onChange={(v) => mapping(i, { input: v })}
-                  />
-                  <Select
-                    label="Movimiento del objeto"
-                    value={m.output}
-                    data={options(outputs).filter((o) =>
-                      m.mode === "hybrid"
-                        ? o.value.startsWith("rotation_")
-                        : m.mode === "stepped"
-                          ? o.value === "scale_uniform"
-                          : true,
-                    )}
-                    onChange={(v) => mapping(i, { output: v })}
-                  />
-                  <Select
-                    label="Respuesta"
-                    value={m.mode}
-                    data={[
-                      { value: "absolute", label: "Proporcional" },
-                      { value: "hybrid", label: "Continua en los extremos" },
-                      { value: "stepped", label: "Dos tamaños" },
-                    ]}
-                    onChange={(v) => mode(i, v)}
-                  />
-                </SimpleGrid>
-                {!draft.tracking.use_hands && m.input.includes("hand") && (
-                  <Alert color="yellow">
-                    Activa «Reconocer las manos» para utilizar este gesto.
-                  </Alert>
-                )}
-                {!draft.tracking.use_pose && m.input.startsWith("head") && (
-                  <Alert color="yellow">
-                    Activa «Seguir cabeza y cuerpo» para utilizar este gesto.
-                  </Alert>
-                )}
-                <SimpleGrid cols={{ base: 2, md: 4 }}>
-                  <Numeric
-                    label="Intensidad"
-                    value={m.scale}
-                    onChange={(v) => mapping(i, { scale: v })}
-                    max={360}
-                    step={0.1}
-                  />
-                  <Numeric
-                    label="Centro neutro"
-                    value={m.center}
-                    onChange={(v) => mapping(i, { center: v })}
-                    max={1}
-                    step={0.05}
-                  />
-                  {m.mode === "hybrid" && (
-                    <>
-                      <Numeric
-                        label="Extremo izquierdo"
-                        value={m.left_threshold}
-                        onChange={(v) => mapping(i, { left_threshold: v })}
-                        min={0.01}
-                        max={0.99}
-                        step={0.05}
-                      />
-                      <Numeric
-                        label="Extremo derecho"
-                        value={m.right_threshold}
-                        onChange={(v) => mapping(i, { right_threshold: v })}
-                        min={0.01}
-                        max={0.99}
-                        step={0.05}
-                      />
-                      <Numeric
-                        label="Velocidad continua (°/s)"
-                        value={m.continuous_speed}
-                        onChange={(v) => mapping(i, { continuous_speed: v })}
-                      />
-                    </>
-                  )}
-                  {m.mode === "stepped" && (
-                    <>
-                      <Numeric
-                        label="Umbral de cambio"
-                        value={m.threshold}
-                        onChange={(v) => mapping(i, { threshold: v })}
-                        max={1}
-                        step={0.05}
-                      />
-                      <Numeric
-                        label="Margen del umbral"
-                        value={m.hysteresis}
-                        onChange={(v) => mapping(i, { hysteresis: v })}
-                        max={0.2}
-                        step={0.01}
-                      />
-                      <Numeric
-                        label="Tamaño pequeño"
-                        value={m.small_scale}
-                        onChange={(v) => mapping(i, { small_scale: v })}
-                        min={0.1}
-                        max={5}
-                        step={0.1}
-                      />
-                      <Numeric
-                        label="Tamaño grande"
-                        value={m.large_scale}
-                        onChange={(v) => mapping(i, { large_scale: v })}
-                        min={0.1}
-                        max={5}
-                        step={0.1}
-                      />
-                      <Numeric
-                        label="Transición"
-                        value={m.transition_ms}
-                        onChange={(v) => mapping(i, { transition_ms: v })}
-                        max={5000}
-                        step={50}
-                        suffix=" ms"
-                      />
-                    </>
-                  )}
-                </SimpleGrid>
-                <Switch
-                  label="Invertir dirección"
-                  checked={m.invert}
-                  onChange={(e) =>
-                    mapping(i, { invert: e.currentTarget.checked })
-                  }
-                />
-              </Stack>
-            </Accordion.Panel>
-          </Accordion.Item>
-        ))}
-      </Accordion>
+      <ControlsEditor draft={draft} update={update} mapping={mapping} />
       <Accordion mt="xl" variant="separated">
         <Accordion.Item value="advanced">
           <Accordion.Control>Captura y renderizado</Accordion.Control>
           <Accordion.Panel>
             <SimpleGrid cols={{ base: 1, sm: 3 }}>
               <Numeric
-                label="Reconocimiento de cuerpo"
+                label="Reconocimiento de cabeza"
                 suffix=" fps"
                 value={draft.tracking.inference_fps}
                 onChange={(v) => update("tracking", "inference_fps", v)}
@@ -1144,7 +865,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
                 max={30}
               />
               <Numeric
-                label="Fluidez de pantalla"
+                label="Fotogramas por segundo"
                 suffix=" fps"
                 value={draft.render.target_fps}
                 onChange={(v) => update("render", "target_fps", v)}
@@ -1221,9 +942,8 @@ function Parameters({ config, setConfig, defaults, notify }) {
               />
             </Group>
             <Text size="xs" c="dimmed" mt="md">
-              La captura, el suavizado de bordes y la pantalla completa pueden
-              requerir reiniciar el visualizador. Los gestos se actualizan en
-              vivo.
+              Los cambios se aplican al guardar. El seguimiento puede pausarse
+              unos segundos al cambiar la cámara.
             </Text>
           </Accordion.Panel>
         </Accordion.Item>
@@ -1239,7 +959,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
             })
           }
         >
-          Restaurar parámetros originales
+          Restaurar valores predeterminados
         </Button>
         <Button disabled={!dirty} loading={saving} onClick={save}>
           Guardar cambios
@@ -1297,11 +1017,7 @@ function Settings({ notify }) {
   const pending = ["pending", "applying"].includes(wifi?.job?.state);
   return (
     <>
-      <SectionTitle
-        eyebrow="TU DISPOSITIVO"
-        title="Configuración"
-        description="Gestiona la conexión a tu instalación Gestur."
-      />
+      <SectionTitle title="Configuración" />
       <Paper withBorder p={{ base: "lg", sm: 32 }} maw={820}>
         <Group justify="space-between" mb="xl">
           <Group>
@@ -1311,7 +1027,7 @@ function Settings({ notify }) {
             <div>
               <Title order={2}>Punto de acceso Wi-Fi</Title>
               <Text c="dimmed" size="sm">
-                La red local desde la que accedes a este panel.
+                Red del dispositivo para acceder al portal.
               </Text>
             </div>
           </Group>
@@ -1361,7 +1077,6 @@ function Settings({ notify }) {
             )}
             <TextInput
               label="Nombre de la red"
-              description="En nuevas instalaciones: GESTUR y los últimos cuatro caracteres de la MAC."
               value={name}
               onChange={(e) => setName(e.currentTarget.value)}
               maxLength={32}
@@ -1467,7 +1182,7 @@ function Settings({ notify }) {
           ) : (
             <PasswordInput
               label="Nueva contraseña"
-              description="Entre 8 y 63 caracteres ASCII."
+              description="De 8 a 63 caracteres, sin tildes ni ñ."
               value={password}
               onChange={(e) => setPassword(e.currentTarget.value)}
               minLength={8}
@@ -1562,18 +1277,9 @@ function App() {
     return (
       <div className="login-page">
         <Paper p={40} withBorder radius="lg" className="login-card">
-          <div className="brand-mark">
-            <IconHandMove size={28} />
-          </div>
-          <Text className="eyebrow" mt="xl">
-            GESTUR / CONTROL LOCAL
-          </Text>
-          <Title order={1} mt="sm">
-            Dale movimiento.
+          <Title order={1} mb="xl">
+            Gestur
           </Title>
-          <Text c="dimmed" mt="sm" mb="xl">
-            Tu colección, tus gestos, tu espacio.
-          </Text>
           <form onSubmit={login}>
             <Stack>
               <PasswordInput
@@ -1590,14 +1296,10 @@ function App() {
                 loading={busy}
                 rightSection={<IconArrowRight size={18} />}
               >
-                Abrir panel
+                Acceder
               </Button>
             </Stack>
           </form>
-          <Text c="dimmed" size="xs" mt="xl">
-            Conexión directa con tu dispositivo. Sin cuentas ni servicios
-            externos.
-          </Text>
         </Paper>
       </div>
     );
@@ -1606,23 +1308,8 @@ function App() {
       <AppShell.Header>
         <Container size="xl" h="100%">
           <Group justify="space-between" h="100%">
-            <Group gap={12}>
-              <div className="brand-mark">
-                <IconHandMove size={25} />
-              </div>
-              <div>
-                <Text className="wordmark">
-                  gestur<span>®</span>
-                </Text>
-                <Text size="xs" c="dimmed">
-                  PANEL DE CONTROL
-                </Text>
-              </div>
-            </Group>
+            <Text className="wordmark">Gestur</Text>
             <Group>
-              <Badge variant="dot" color="teal" visibleFrom="sm">
-                Sesión local
-              </Badge>
               <Tooltip label="Cerrar sesión">
                 <ActionIcon
                   size="lg"
@@ -1707,7 +1394,7 @@ function App() {
                     notify={notify}
                   />
                 </Tabs.Panel>
-                <Tabs.Panel value="parameters">
+                <Tabs.Panel value="parameters" keepMounted>
                   <Parameters
                     config={config}
                     setConfig={setConfig}
@@ -1721,19 +1408,6 @@ function App() {
               </>
             )}
           </Tabs>
-          <footer>
-            <Group justify="space-between">
-              <Text size="xs" c="dimmed">
-                GESTUR · El movimiento conecta.
-              </Text>
-              <Group gap={5}>
-                <IconBolt size={13} />
-                <Text size="xs" c="dimmed">
-                  Diseñado para Raspberry Pi
-                </Text>
-              </Group>
-            </Group>
-          </footer>
         </Container>
       </AppShell.Main>
     </AppShell>

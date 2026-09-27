@@ -9,7 +9,7 @@ La configuración completa contiene `active_model`, `tracking`, `render` y `cont
 ## Valores iniciales para Raspberry Pi 5
 
 - Cámara: 640 × 480, inferencia de cabeza a un máximo de 24 Hz y manos a 15 Hz cuando están activadas.
-- Manos desactivadas de inicio para reducir el trabajo. Activarlas permite usar inclinación de la palma y pinza.
+- Manos desactivadas de inicio para reducir el trabajo. Activarlas permite usar posición, orientación de la palma, apertura y pinza.
 - Renderizado: 60 FPS como objetivo, antialiasing MSAA de 2 muestras, pantalla completa y cursor oculto. Son objetivos configurables; el rendimiento real depende del modelo, la cámara y la Raspberry Pi.
 - Suavizado del seguimiento: 60 ms. Suavizado de los controles: 90 ms; el zoom usa un tercio para conservar su respuesta más rápida.
 
@@ -22,18 +22,27 @@ Los cambios de controles se aplican al recargar la configuración. Los ajustes d
 | Entrada | Valor |
 | --- | --- |
 | `head_x`, `head_y` | Posición normalizada de la cabeza, normalmente de 0 a 1 |
-| `head_scale` | Tamaño aparente de la cabeza; mantiene la calibración del zoom de Capitell |
+| `head_scale` | Tamaño aparente de la cabeza, entre 0 y 1; aproxima el acercamiento y alejamiento, no mide profundidad. Mantiene la calibración del zoom de Capitell |
+| `head_pitch`, `head_yaw`, `head_roll` | Giro vertical, giro horizontal e inclinación lateral de la cabeza, calculados con los puntos de seguimiento existentes. Los grados se normalizan a 0–1 con 0° en 0,5 y se suavizan por el ángulo más corto |
 | `hands_center_x`, `hands_center_y` | Centro de las manos visibles |
 | `hands_distance`, `hands_separation_x` | Distancia entre ambas manos o separación horizontal |
+| `left_hand_x`, `left_hand_y`, `right_hand_x`, `right_hand_y` | Posición normalizada de la muñeca de cada mano, normalmente de 0 a 1 |
 | `left_hand_rotation`, `right_hand_rotation` | Orientación de la palma en la imagen; 0° hacia arriba, +90° hacia la derecha. Se normaliza internamente a 0–1 y se suaviza por el ángulo más corto |
 | `left_hand_pitch`, `right_hand_pitch` | Inclinación de la mano calculada con las coordenadas 3D del modelo; grados normalizados a 0–1, con suavizado angular |
 | `left_hand_yaw`, `right_hand_yaw` | Giro lateral de la mano calculado con las coordenadas 3D del modelo; grados normalizados a 0–1, con suavizado angular |
 | `left_hand_roll`, `right_hand_roll` | Tercer giro del marco 3D de la palma, separado del giro de imagen `rotation`; grados normalizados a 0–1 |
 | `left_hand_pinch`, `right_hand_pinch` | Distancia pulgar–índice dividida por el ancho de la palma: 0 es contacto, 1 es una apertura de al menos un ancho de palma |
+| `left_hand_openness`, `right_hand_openness` | Proporción de dedos extendidos, sin contar el pulgar: 0 es puño y 1 son los cuatro dedos extendidos. El seguimiento suaviza los pasos intermedios |
+
+Las entradas nuevas reutilizan el seguimiento actual; no cargan modelos adicionales. La posición y los giros de cabeza son señales distintas y pueden asignarse por separado. Una cabeza o mano no detectada produce una entrada ausente, nunca un cero fabricado. No hay una entrada de profundidad para las manos.
+
+La inclinación `head_roll` se mide con la línea de los ojos, sin distinguir sus extremos: tiene periodo de 180° y se informa entre −90° y +90°. Sus dos filtros respetan ese periodo para evitar saltos al cruzar el límite. Conserva la misma escala numérica que los demás ángulos (45° equivale a 0,625). Cuando controla una rotación absoluta, el retorno tras perder el seguimiento toma como referencia una vuelta completa del objeto y tiene en cuenta la sensibilidad; recuperar la cabeza conserva esa orientación sin saltos. `head_pitch` y `head_yaw` mantienen el periodo de 360°.
+
+Si una entrada angular controla un desplazamiento o el zoom, perder el seguimiento devuelve la entrada al centro numérico configurado, aunque antes hubiera cruzado su límite angular. Así, en modo absoluto el objeto recupera la posición cero o la escala uno.
 
 Las salidas `rotation_yaw`, `rotation_pitch` y `rotation_roll` corresponden a los tres canales de rotación que ya usaba el visor. `position_x`, `position_y` y `position_z` desplazan el objeto. `scale_uniform` cambia su escala.
 
-- `absolute`: las rotaciones usan `(entrada - center) × 2 × scale` grados; los desplazamientos usan `(entrada - center) × scale`. El zoom usa `1 + (entrada - center) × scale`, limitado a 0,1–5. `invert` invierte el movimiento alrededor de `center`. La rotación de palma puede cruzar ±180° sin saltar al ángulo opuesto.
+- `absolute`: las rotaciones usan `(entrada - center) × 2 × scale` grados; los desplazamientos usan `(entrada - center) × scale`. El zoom usa `1 + (entrada - center) × scale`, limitado a 0,1–5. `invert` invierte el movimiento alrededor de `center`. Las entradas angulares de cabeza y manos pueden cruzar su límite angular sin saltar al ángulo opuesto.
 - `hybrid`: sólo admite salidas de rotación. En la zona central conserva el giro proporcional. Más allá de `left_threshold` o `right_threshold` añade giro continuo hasta `continuous_speed` grados por segundo. Debe cumplirse `left_threshold < center < right_threshold`.
 - `stepped`: sólo admite `scale_uniform`. Alterna entre `small_scale` y `large_scale` con `threshold`, un margen `hysteresis` que evita alternancias por ruido, y una transición de `transition_ms`. `scale` modifica la sensibilidad alrededor del centro; `invert` cambia su dirección. El tamaño pequeño debe ser menor o igual al grande y `threshold ± hysteresis` debe permanecer entre 0 y 1.
 

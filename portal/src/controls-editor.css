@@ -1,0 +1,165 @@
+.controls-editor .control-heading {
+  display: flex;
+  align-items: center;
+}
+.control-heading .mantine-Accordion-control {
+  flex: 1;
+  min-width: 0;
+}
+.control-enabled {
+  flex-shrink: 0;
+  padding: 12px 20px 12px 8px;
+}
+.control-art,
+.assigned-gesture-art {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: #315b4d;
+}
+.assigned-gesture {
+  background: #f8faf9;
+}
+.control-invert {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 9px;
+}
+.motion-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.motion-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 16px 12px;
+  min-width: 0;
+  min-height: 170px;
+  border: 1px solid #dfe6e2;
+  border-radius: 10px;
+  color: #233c33;
+  background: #fff;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.motion-choice:hover:not(:disabled) {
+  border-color: #619983;
+  background: #f8fbf9;
+}
+.motion-choice[aria-pressed="true"] {
+  border-color: #2c775b;
+  background: #eff7f2;
+  box-shadow: inset 0 0 0 1px #2c775b;
+}
+.motion-choice:focus-visible,
+.gesture-categories button:focus-visible {
+  outline: 3px solid #83b7a1;
+  outline-offset: 3px;
+}
+.motion-choice:disabled {
+  color: #79847e;
+  background: #f5f7f6;
+  cursor: not-allowed;
+}
+.motion-choice:disabled .motion-choice-art {
+  opacity: 0.5;
+}
+.motion-choice-art {
+  display: flex;
+  position: relative;
+  color: #315b4d;
+}
+.motion-choice-check {
+  position: absolute;
+  right: -22px;
+  top: 2px;
+  color: #257355;
+}
+.motion-choice-label {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.motion-choice-description {
+  color: #66766e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.gesture-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gesture-categories button {
+  padding: 8px 13px;
+  border: 1px solid #dfe6e2;
+  border-radius: 7px;
+  color: #596b61;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gesture-categories button[aria-pressed="true"] {
+  border-color: #2c775b;
+  background: #eff7f2;
+  color: #24583f;
+}
+.selected-control {
+  padding: 12px 16px;
+  border: 1px solid #e2e8e3;
+  border-radius: 8px;
+  background: #f8faf9;
+}
+.control-dialog-actions {
+  padding: 14px 0 0;
+  background: #fff;
+  border-top: 1px solid #e6eae7;
+}
+.control-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 48px);
+}
+.control-dialog-content,
+.control-dialog-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.control-dialog-body > :not(.motion-choice-grid) {
+  flex-shrink: 0;
+}
+.control-dialog-body > .motion-choice-grid {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px;
+}
+.motion-icon {
+  display: block;
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .motion-choice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+  .motion-choice {
+    padding: 12px 9px;
+  }
+  .control-heading {
+    flex-wrap: wrap;
+  }
+  .control-heading .mantine-Accordion-control {
+    flex-basis: 100%;
+  }
+  .control-enabled {
+    padding: 0 20px 14px;
+  }
+}

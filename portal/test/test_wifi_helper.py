@@ -25,6 +25,11 @@ class Connection:
     def GetSecrets(self, setting): return {setting: {'psk': 'previous-password'}}
     def Update(self, settings): self.updates.append(copy.deepcopy(settings))
 
+class FakeClock:
+    def __init__(self): self.now = 0.0
+    def monotonic(self): return self.now
+    def sleep(self, seconds): self.now += seconds
+
 class HelperTests(unittest.TestCase):
     def test_default_name_uses_permanent_mac_suffix(self):
         self.assertEqual(wifi.ssid_from_mac('DC:A6:32:01:ab:cd'),'GESTUR-ABCD')
@@ -103,5 +108,102 @@ class HelperTests(unittest.TestCase):
             helper.bootstrap()
         self.assertEqual(connection.updates, [])
         self.assertEqual(activated, [('device', 'profile')])
+
+    def activation_helper(self, clock, ready_at=0, connected_at=0):
+        helper = wifi.NetworkManager.__new__(wifi.NetworkManager)
+        calls = []
+        active_path = '/'
+
+        def activate(profile, device, specific):
+            nonlocal active_path
+            calls.append((clock.now, profile, device, specific))
+            if clock.now < ready_at:
+                raise RuntimeError('Device is not available')
+            active_path = 'active-ap'
+            return active_path
+
+        def prop(path, interface, name):
+            if name in ('WirelessHardwareEnabled', 'Managed'):
+                return True
+            if name == 'WirelessEnabled':
+                return clock.now >= ready_at / 2
+            if name == 'FirmwareMissing':
+                return False
+            if name == 'ActiveConnection':
+                return active_path
+            if name == 'State' and path == 'device':
+                return 30 if clock.now >= ready_at else 20
+            if name == 'State' and path == 'active-ap':
+                return 2 if clock.now >= connected_at else 1
+            raise AssertionError((path, interface, name))
+
+        helper.prop = prop
+        helper.nm = SimpleNamespace(ActivateConnection=activate,
+                                   DeactivateConnection=lambda active: self.fail('Unexpected disconnect'))
+        return helper, calls
+
+    def test_activation_waits_for_radio_and_supplicant_then_for_active_ap(self):
+        clock = FakeClock()
+        helper, calls = self.activation_helper(clock, ready_at=.5, connected_at=1)
+        with patch.object(wifi.time, 'monotonic', clock.monotonic), patch.object(wifi.time, 'sleep', clock.sleep):
+            helper.activate('device', 'profile')
+        self.assertEqual(calls, [(.5, 'profile', 'device', '/')])
+        self.assertEqual(clock.now, 1)
+
+    def test_unavailable_device_times_out_without_attempting_activation(self):
+        clock = FakeClock()
+        helper, calls = self.activation_helper(clock, ready_at=100)
+        with patch.object(wifi.time, 'monotonic', clock.monotonic), patch.object(wifi.time, 'sleep', clock.sleep):
+            with self.assertRaisesRegex(RuntimeError, 'readiness timed out'):
+                helper.activate('device', 'profile')
+        self.assertEqual(calls, [])
+        self.assertEqual(clock.now, 15)
+
+    def test_permanent_device_problems_fail_without_wait_or_activation(self):
+        for field, value in (('WirelessHardwareEnabled', False), ('Managed', False),
+                             ('FirmwareMissing', True), ('State', 120)):
+            with self.subTest(field=field):
+                clock = FakeClock()
+                helper, calls = self.activation_helper(clock)
+                original = helper.prop
+                helper.prop = lambda path, interface, name: value if name == field else original(path, interface, name)
+                with patch.object(wifi.time, 'monotonic', clock.monotonic), patch.object(wifi.time, 'sleep', clock.sleep):
+                    with self.assertRaises(RuntimeError):
+                        helper.activate('device', 'profile')
+                self.assertEqual(calls, [])
+                self.assertEqual(clock.now, 0)
+
+    def test_activation_error_is_not_retried(self):
+        clock = FakeClock()
+        helper, _ = self.activation_helper(clock)
+        calls = []
+        def fail(*args):
+            calls.append(args)
+            raise RuntimeError('Permanent activation error')
+        helper.nm.ActivateConnection = fail
+        with patch.object(wifi.time, 'monotonic', clock.monotonic), patch.object(wifi.time, 'sleep', clock.sleep):
+            with self.assertRaisesRegex(RuntimeError, 'Permanent activation error'):
+                helper.activate('device', 'profile')
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(clock.now, 0)
+
+    def test_activation_never_succeeds_if_ap_stays_activating(self):
+        clock = FakeClock()
+        helper, calls = self.activation_helper(clock, connected_at=100)
+        with patch.object(wifi.time, 'monotonic', clock.monotonic), patch.object(wifi.time, 'sleep', clock.sleep):
+            with self.assertRaisesRegex(RuntimeError, 'activation timed out'):
+                helper.activate('device', 'profile')
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(clock.now, 25)
+
+    def test_reinstall_does_not_report_success_with_inactive_final_status(self):
+        helper, _ = self.helper()
+        helper.interface = lambda *args: SimpleNamespace(Set=lambda *args: None)
+        helper.active = lambda *args: False
+        helper.status = lambda: {'ssid': 'Old', 'secured': True, 'active': False}
+        with tempfile.TemporaryDirectory() as directory, patch.object(wifi, 'PROFILE', Path(directory) / 'wifi-profile.json'):
+            wifi.PROFILE.write_text('{"uuid":"fixed","interface":"wlan0"}')
+            with self.assertRaisesRegex(RuntimeError, 'not active'):
+                helper.bootstrap()
 
 if __name__ == '__main__': unittest.main()

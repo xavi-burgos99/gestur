@@ -108,7 +108,7 @@ export async function sandboxCommand(
   }
   throw new ApiError(
     503,
-    "La importación nativa necesita Linux con bubblewrap o macOS con sandbox-exec.",
+    "La importación de modelos no está disponible en este sistema.",
   );
 }
 export async function runNative(

@@ -46,7 +46,7 @@
             "required": ["id", "input", "output", "mode", "enabled", "scale", "invert", "center"],
             "properties": {
               "id": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$"},
-              "input": {"type": "string", "enum": ["head_x", "head_y", "head_scale", "hands_center_x", "hands_center_y", "hands_distance", "hands_separation_x", "left_hand_rotation", "right_hand_rotation", "left_hand_pitch", "right_hand_pitch", "left_hand_yaw", "right_hand_yaw", "left_hand_roll", "right_hand_roll", "left_hand_pinch", "right_hand_pinch"]},
+              "input": {"type": "string", "enum": ["head_x", "head_y", "head_scale", "head_pitch", "head_yaw", "head_roll", "hands_center_x", "hands_center_y", "hands_distance", "hands_separation_x", "left_hand_x", "left_hand_y", "right_hand_x", "right_hand_y", "left_hand_rotation", "right_hand_rotation", "left_hand_pitch", "right_hand_pitch", "left_hand_yaw", "right_hand_yaw", "left_hand_roll", "right_hand_roll", "left_hand_pinch", "right_hand_pinch", "left_hand_openness", "right_hand_openness"]},
               "output": {"type": "string", "enum": ["rotation_yaw", "rotation_pitch", "rotation_roll", "position_x", "position_y", "position_z", "scale_uniform"]},
               "mode": {"type": "string", "enum": ["absolute", "hybrid", "stepped"]},
               "enabled": {"type": "boolean"},

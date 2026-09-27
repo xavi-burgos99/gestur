@@ -11,7 +11,7 @@ La imagen inicial necesita Internet para descargar paquetes, Python, Node y los 
 3. En ese ordenador, obtén una copia limpia de esta rama y prepara la raíz montada:
 
 ```bash
-git clone --branch web-portal --single-branch https://github.com/xavi-burgos99/gestur.git
+git clone --branch gestur-integrated --single-branch https://github.com/xavi-burgos99/gestur.git
 cd gestur
 sudo python3 scripts/prepare-image.py \
   --root /mnt/gestur-root \

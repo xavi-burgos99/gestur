@@ -1,6 +1,6 @@
 # Gestur
 
-Visor de objetos 3D controlado por cámara para exposiciones, orientado a Raspberry Pi 5. Utiliza Panda3D y controles de cabeza, manos, proximidad y retorno al reposo. La biblioteca empieza vacía; no incluye modelos de exposición.
+Visor de objetos 3D controlado por cámara para exposiciones, orientado a Raspberry Pi 5. Utiliza Panda3D y controles de cabeza, manos, proximidad y retorno al reposo. La biblioteca empieza vacía. El [capitel original](examples/capitel/README.md) se conserva como ejemplo para importar.
 
 ## Instalación en Raspberry Pi 5
 
@@ -35,9 +35,11 @@ Conéctate a esa red y abre **http://10.42.0.1**. La clave de administración de
 - **Parámetros**: ajusta sensibilidad, suavizado, umbrales y asignaciones de cabeza, pinza u orientación de manos a rotación, desplazamiento y escala. Las manos se pueden activar cuando hagan falta.
 - **Configuración**: en **Punto de acceso Wi-Fi** puedes cambiar el nombre, **Añadir contraseña**, **Cambiar contraseña** o **Eliminar contraseña**. Los cambios se aplican con unos segundos de margen para avisar antes de la desconexión; si fallan, se intenta recuperar la configuración anterior.
 
-Sin selección, el expositor muestra una figura 3D procedural y un QR con «Escanea el QR para comenzar». La URL usa la IP del punto de acceso o de la red local.
+El primer modelo importado se selecciona automáticamente. Después se conserva el último modelo elegido, también al reiniciar. Mientras haya modelos disponibles, no se puede dejar la selección vacía; si el archivo seleccionado desaparece se elige otro disponible.
 
-Reinstalar conserva los modelos importados, los parámetros, la clave de administración y la red existente. La antigua selección del capitel incluido pasa a la bienvenida. Si ya había un punto de acceso, su dirección puede ser distinta de `10.42.0.1`. Consulta [docs/portal.md](docs/portal.md) para desarrollo, permisos, formatos y recuperación.
+Solo cuando la biblioteca está vacía aparece la bienvenida: una figura 3D blanca al 15 % de opacidad ocupa el fondo, con «GESTUR», un QR blanco transparente, «Escanea el QR para comenzar» y «o accede a {url}». La URL usa la IP de red del dispositivo, o la del punto de acceso si no hay conexión LAN.
+
+Reinstalar conserva los modelos importados, los parámetros, la clave de administración y la red existente. La antigua referencia al capitel incluido se sustituye por un modelo importado disponible, o por la bienvenida si la biblioteca está vacía. Si ya había un punto de acceso, su dirección puede ser distinta de `10.42.0.1`. Consulta [docs/portal.md](docs/portal.md) para desarrollo, permisos, formatos y recuperación.
 
 ```bash
 cd portal

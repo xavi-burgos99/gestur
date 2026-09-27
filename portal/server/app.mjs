@@ -29,7 +29,10 @@ export async function createApp(options) {
   const timers = new Set();
   const jobFile = path.join(path.dirname(configPath), "wifi-job.json");
   let job = null;
-  const importer = await createImporter(options);
+  const importer = await createImporter({
+    ...options,
+    onPublished: () => store.read(),
+  });
   let receivingUpload = false;
   try {
     job = JSON.parse(await readFile(jobFile, "utf8"));
@@ -167,10 +170,7 @@ export async function createApp(options) {
       return { online: false, error: null };
     }
   });
-  app.get("/api/models", async () => ({
-    models: await store.listModels(),
-    active: (await store.read()).active_model,
-  }));
+  app.get("/api/models", async () => store.catalog());
   app.post("/api/models", async (request, reply) => {
     if (
       receivingUpload ||

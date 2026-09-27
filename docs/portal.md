@@ -14,7 +14,9 @@ La clave de administración independiente se genera una sola vez y se muestra al
 
 ## Modelos 3D
 
-La biblioteca está **vacía** en instalaciones nuevas. No se distribuyen el capitel ni modelos de ejemplo. El expositor muestra una figura 3D procedural con el texto «Escanea el QR para comenzar» y el enlace al portal. El QR se genera localmente; usa la IP del punto de acceso o la red local y no contiene la clave de administración. `GESTUR_PORTAL_URL` permite establecer una dirección alternativa. La antigua selección del capitel se migra a la bienvenida; las importaciones del usuario se conservan.
+La biblioteca está **vacía** en instalaciones nuevas. El [capitel original](../examples/capitel/README.md) está disponible en el repositorio para importarlo, pero no se instala como modelo predeterminado. El primer modelo importado se selecciona automáticamente; las siguientes importaciones conservan el último elegido. La selección se guarda y se recupera al reiniciar. Si falta el archivo elegido, se selecciona otro modelo disponible.
+
+Solo una biblioteca vacía muestra la bienvenida: figura 3D blanca al 15 % de opacidad a tamaño de pantalla, título «GESTUR», QR de módulos blancos sobre fondo transparente, «Escanea el QR para comenzar» y «o accede a {url}». El QR se genera localmente y no contiene la clave de administración. Usa la IP de la red del dispositivo, o la del punto de acceso sin LAN. `GESTUR_PORTAL_URL` permite fijar una URL con IP válida. Mientras no haya IP disponible se muestra la espera de conexión y se reintenta. Un fallo al cargar un modelo se informa como error; no se sustituye por la bienvenida si hay modelos disponibles.
 
 ### Subir un modelo
 
@@ -31,7 +33,7 @@ Solo si hay **más de 1.000.000 de triángulos**, el trabajo espera la decisión
 - **Reducir e importar**: meshoptimizer reduce la malla localmente en la Raspberry Pi, conservando materiales y coordenadas UV; se valida de nuevo y se registra el recuento final. Para preservar bordes y limitar el error geométrico, algunas mallas pueden quedar por encima del objetivo; se muestra el recuento real y un aviso si la diferencia supera el 5 %.
 - **Continuar sin simplificar**: se publica el modelo convertido conservando su geometría.
 
-La reducción de mallas grandes puede tardar minutos. Solo hay una importación en curso; recargar el portal recupera su estado. Los trabajos interrumpidos por un reinicio se notifican como fallidos en lugar de darse por completados; una propuesta que ya esperaba confirmación puede recuperarse y responderse después del reinicio. El modelo activo no cambia hasta seleccionarlo en la colección. «Mostrar bienvenida» permite volver al QR sin borrar modelos.
+La reducción de mallas grandes puede tardar minutos. Solo hay una importación en curso; recargar el portal recupera su estado. Los trabajos interrumpidos por un reinicio se notifican como fallidos en lugar de darse por completados; una propuesta que ya esperaba confirmación puede recuperarse y responderse después del reinicio. El primer modelo válido se activa automáticamente; después, «Mostrar en pantalla» cambia la selección. No se puede vaciar la selección mientras queden modelos disponibles.
 
 Límites de subida: 100 MiB por archivo, 250 MiB al descomprimir, 500 entradas y ratio de expansión máximo 100× por archivo (con margen de 1 MiB para archivos pequeños). Se rechazan enlaces, rutas que salgan del ZIP, nombres duplicados sin distinguir mayúsculas y ZIP cifrados. No se incluyen los temporales ni los datos de desarrollo en una instalación nueva.
 

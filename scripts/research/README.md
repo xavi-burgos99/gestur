@@ -27,8 +27,11 @@ python scripts/research/plot_pi_system.py /ruta/ensayo /tmp/telemetry.png
 La comprobación `scripts/check-portal-import.py` prueba una subida real a través
 del portal HTTP local y exige una biblioteca inicialmente vacía. Se ejecuta
 como root para leer la clave local y verificar el GLB sin exponer credenciales.
-Sube un OBJ con textura, comprueba su conversión y elimina únicamente su paquete
-de prueba; no selecciona modelos ni cambia parámetros.
+Sube un OBJ con textura, comprueba su conversión y selección automática, y elimina
+únicamente su paquete de prueba. El visor puede mostrar esa fixture durante el
+ensayo. Al finalizar, verifica que la biblioteca vuelva a quedar vacía y sin
+selección; no cambia los demás parámetros. No ejecutarlo sobre una biblioteca
+con modelos ni mientras otra persona utilice el portal.
 
 ## Repetir las comprobaciones del portal
 
@@ -46,10 +49,12 @@ sudo python3 scripts/research/smoke_portal_api.py > /tmp/portal-api-result.json
 `check-portal-import.py` conserva el ensayo de importación ejecutado en la Pi,
 con la espera inicial añadida para repetirlo inmediatamente después de un
 reinicio del servicio. Comprueba dos triángulos, UV, material y los bytes de la
-textura PNG, incluida la reparación de su ruta. La limpieza solo elimina el
-paquete identificado como propio, nunca activa el modelo y comprueba que la
-configuración y la biblioteca vacía siguen iguales. Se mantiene en `scripts/`
-sin duplicarlo aquí.
+textura PNG, incluida la reparación de su ruta. La primera importación debe
+seleccionarse automáticamente. La limpieza comprueba el marcador, el nombre y
+el hash de su paquete, y lo conserva si aparecen otros modelos, subidas o cambios
+de configuración. Tras retirarlo, solicita al portal reconciliar la selección y
+comprueba que la configuración inicial se haya restaurado sin escribir una copia
+antigua sobre los ajustes actuales. Se mantiene en `scripts/` sin duplicarlo aquí.
 
 `smoke_portal_api.py` conserva el ensayo de sesión, biblioteca vacía, runtime,
 configuración y Wi-Fi. Obtiene el SSID únicamente del AP configurado que expone

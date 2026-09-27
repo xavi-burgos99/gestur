@@ -153,6 +153,7 @@ export async function createImporter({
   modelChecker = preflightModel,
   modelConverter = convertModel,
   modelSimplifier = simplifyModel,
+  onPublished = async () => {},
 }) {
   await mkdir(modelsDir, { recursive: true, mode: 0o2770 });
   const stateFile = path.join(modelsDir, ".import-job.json");
@@ -285,6 +286,7 @@ export async function createImporter({
       force: true,
     });
     await rename(workspace, path.join(modelsDir, job.id));
+    await onPublished();
     job = {
       ...job,
       state: "completed",

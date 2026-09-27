@@ -2,9 +2,10 @@
 """Real portal import smoke on the Pi, using only Python's standard library.
 
 Run locally on the Pi after deployment (normally with sudo for token/file access).
-Uses HTTP 80 and never activates a model or updates configuration. The API has no
-model deletion/download endpoint: inspect and delete ONLY the finished UUID
-package whose name, upload hash and private fixture marker match this run.
+Uses HTTP 80 and requires an empty, otherwise idle library. The first import is
+automatically selected by the portal. The API has no model deletion/download
+endpoint: inspect and delete ONLY the finished UUID package whose name, upload
+hash and private fixture marker match this run, then reconcile the empty library.
 A terminal import-job record remains as diagnostic history; it is not a model.
 """
 import argparse
@@ -188,13 +189,24 @@ def wait_terminal(client, name, job_id, timeout):
         time.sleep(1)
 
 
-def cleanup_fixture(client, root, name, marker, upload_hash, job_id, timeout):
+def without_selection(config):
+    return {key: value for key, value in config.items() if key != 'active_model'}
+
+
+def library_entries(root):
+    """Include unpublished uploads too; this smoke must have exclusive use."""
+    return {item.name for item in root.iterdir()
+            if not item.name.startswith('.')
+            or (item.name.startswith(('.import-', '.upload-')) and item.name != '.import-job.json')}
+
+
+def cleanup_fixture(client, root, name, marker, upload_hash, job_id, timeout, config_before):
     job = own_job(client, name, job_id)
     if job and job.get('state') == 'processing':
         job = wait_terminal(client, name, job['id'], timeout)
     if job and job.get('state') == 'awaiting_decision':
         # This should never occur for two triangles; finish only our job so the
-        # shared importer is not left awaiting consent. Never select the model.
+        # shared importer is not left awaiting consent. Publication selects it.
         client.call('POST', f'/api/imports/{job["id"]}/decision', {'simplify': False}, expected=202)
         job = wait_terminal(client, name, job['id'], timeout)
     if job is not None:
@@ -206,6 +218,8 @@ def cleanup_fixture(client, root, name, marker, upload_hash, job_id, timeout):
     if not package.exists():
         return {'removed_own_package': False, 'package_absent': True,
                 'pending_workspace': (root / ('.import-' + job_id)).exists()}
+    require(job is not None and job.get('state') in ('completed', 'failed'),
+            'La importación actual ya no pertenece a esta prueba; se conserva el paquete')
     require(not package.is_symlink() and package.resolve().parent == root, 'Ruta insegura; se conserva el paquete')
     metadata = json.loads((package / '.gestur-model.json').read_text())
     require(metadata.get('name') == name, 'El paquete no pertenece a la prueba; se conserva')
@@ -214,12 +228,27 @@ def cleanup_fixture(client, root, name, marker, upload_hash, job_id, timeout):
             'No coincide el archivo subido; se conserva el paquete')
     config = client.call('GET', '/api/config')['config']
     active = config.get('active_model')
-    require(not (isinstance(active, str) and active.startswith(job_id + '/')),
-            'El modelo de prueba fue activado externamente; no se elimina')
+    model_id = job_id + '/model.glb'
+    require(config_before is not None and config_before.get('active_model') is None
+            and without_selection(config) == without_selection(config_before),
+            'Se han cambiado otros ajustes durante la prueba; se conserva el paquete')
+    require(active in (None, model_id), 'Se ha seleccionado otro modelo; se conserva el paquete')
+    catalog = client.call('GET', '/api/models')
+    require([model.get('id') for model in catalog.get('models', [])] == [model_id]
+            and catalog.get('active') in (None, model_id),
+            'Hay modelos ajenos a esta prueba; se conserva el paquete')
+    require(library_entries(root) == {job_id},
+            'Hay otros paquetes o subidas en la biblioteca; se conserva el paquete')
+    require(own_job(client, name, job_id) is not None,
+            'Ha cambiado la importación actual; se conserva el paquete')
     require(shutil.rmtree.avoids_symlink_attacks, 'La plataforma no ofrece borrado seguro con descriptores')
     shutil.rmtree(package)
+    # GET reconciles the removed selection through the same serialized store
+    # used by normal imports. Never PUT an old snapshot over concurrent edits.
+    restored = client.call('GET', '/api/config')['config']
+    require(restored == config_before, 'La configuración no se ha restaurado tras retirar la fixture')
     return {'removed_own_package': True, 'job_id': job_id,
-            'terminal_import_record_retained': True}
+            'terminal_import_record_retained': True, 'configuration_restored': True}
 
 
 def run(args):
@@ -229,7 +258,7 @@ def run(args):
     upload, texture, multipart, content_type = fixture(name, marker)
     digest = hashlib.sha256(upload).hexdigest()
     result = {'ok': False, 'fixture_name': name, 'base_url': args.base_url,
-              'scope': 'POST real OBJ+MTL+PNG ZIP; no activación ni cambios de configuración',
+              'scope': 'POST real OBJ+MTL+PNG ZIP; selección automática temporal en biblioteca vacía',
               'upload_sha256': digest}
     config_before = None
     job_id = None
@@ -248,6 +277,8 @@ def run(args):
         require(catalog.get('models') == [] and catalog.get('active') is None,
                 'La biblioteca debe estar vacía y sin selección antes de probar')
         require(config_before.get('active_model') is None, 'Hay un modelo activo; no se modifica')
+        require(not library_entries(args.models_dir),
+                'Hay paquetes o subidas previas en el directorio; no se modifica')
         current = client.call('GET', '/api/imports/current').get('job')
         require(not current or current.get('state') not in ('processing', 'awaiting_decision'),
                 'Hay otra importación pendiente; no se interfiere')
@@ -266,6 +297,15 @@ def run(args):
                 'Metadatos del modelo inesperados')
         require(model.get('sourceFormat') == 'OBJ' and model.get('simplified') is False,
                 'No se ha verificado el camino OBJ nativo esperado')
+        selected = client.call('GET', '/api/config')['config']
+        catalog = client.call('GET', '/api/models')
+        require(selected.get('active_model') == model['id'] and catalog.get('active') == model['id'],
+                'La primera importación no se ha seleccionado automáticamente')
+        require(without_selection(selected) == without_selection(config_before),
+                'La importación ha modificado otros ajustes')
+        require([entry.get('id') for entry in catalog.get('models', [])] == [model['id']],
+                'Han aparecido otros modelos durante la prueba')
+        result['automatic_selection_verified'] = True
         result['glb'] = inspect_glb(args.models_dir / job_id / 'model.glb', texture)
         result['repair_warnings'] = model.get('warnings', [])
         result['conversion_verified'] = True
@@ -276,22 +316,25 @@ def run(args):
         if logged_in:
             if upload_attempted:
                 try:
-                    result['cleanup'] = cleanup_fixture(client, args.models_dir, name, marker, digest, job_id, args.timeout)
+                    result['cleanup'] = cleanup_fixture(client, args.models_dir, name, marker, digest,
+                                                        job_id, args.timeout, config_before)
                 except (Exception, KeyboardInterrupt) as error:
                     result['cleanup_error'] = str(error) if isinstance(error, SmokeError) else type(error).__name__
             try:
+                restored = client.call('GET', '/api/config')['config']
                 after = client.call('GET', '/api/models')
                 result['library_empty'] = after.get('models') == []
-                result['selection_unchanged'] = after.get('active') is None
-                result['configuration_unchanged'] = client.call('GET', '/api/config')['config'] == config_before
+                result['selection_restored'] = after.get('active') is None and restored.get('active_model') is None
+                result['configuration_restored'] = restored == config_before
             except Exception as error:
                 result['verification_error'] = type(error).__name__
             try:
                 client.call('DELETE', '/api/session')
             except Exception:
                 result['session_logout_failed'] = True
-        result['ok'] = bool(result.get('conversion_verified') and result.get('library_empty')
-                            and result.get('selection_unchanged') and result.get('configuration_unchanged')
+        result['ok'] = bool(result.get('conversion_verified') and result.get('automatic_selection_verified')
+                            and result.get('library_empty') and result.get('selection_restored')
+                            and result.get('configuration_restored')
                             and not result.get('error') and not result.get('cleanup_error')
                             and not result.get('verification_error'))
     print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)

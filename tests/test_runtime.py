@@ -176,69 +176,168 @@ def test_controller_reports_async_camera_error_and_clears_it_when_model_removed(
     assert app.last_error is None
 
 
-def test_unavailable_selected_model_shows_welcome_and_honest_status(tmp_path, monkeypatch):
+def package_model(root, name="11111111-1111-1111-1111-111111111111"):
+    import json
+    package = root / name
+    package.mkdir(parents=True)
+    model = package / "model.obj"
+    model.write_text("v 0 0 0")
+    (package / ".gestur-model.json").write_text(json.dumps({"entrypoint": "model.obj"}))
+    return f"{name}/model.obj", model
+
+
+def viewer_stub(monkeypatch, fail=None):
+    loaded, errors = [], []
+    class Viewer:
+        def __init__(self, path, **kwargs):
+            self.taskMgr = SimpleNamespace(add=lambda *args, **kwargs: None)
+            self.load_model(path)
+        def accept(self, *args):
+            pass
+        def load_model(self, path):
+            if path and fail and fail(path):
+                raise ValueError("Geometría no válida")
+            loaded.append(path)
+        def show_model_error(self, error):
+            errors.append(error)
+        def apply_settings(self, **kwargs):
+            pass
+    monkeypatch.setitem(sys.modules, "visualizer", SimpleNamespace(ControlledObjViewer=Viewer))
+    return loaded, errors
+
+
+def test_missing_selection_with_empty_library_shows_welcome(tmp_path, monkeypatch):
     import controller
     from runtime_config import default_config, save_config
     config = default_config()
-    config['active_model'] = 'package/missing.obj'
-    path = tmp_path / 'config.json'
+    config["active_model"] = "package/missing.obj"
+    path = tmp_path / "config.json"
     save_config(config, path)
-    loaded = []
-    class Viewer:
-        def __init__(self, path, **kwargs):
-            loaded.append(path)
-            self.taskMgr = SimpleNamespace(add=lambda *args, **kwargs: None)
-        def accept(self, *args):
-            pass
-    monkeypatch.setitem(sys.modules, 'visualizer', SimpleNamespace(ControlledObjViewer=Viewer))
-    app = controller.PoseController(config_path=path, models_dir=tmp_path / 'models', no_camera=True)
+    loaded, errors = viewer_stub(monkeypatch)
+    app = controller.PoseController(config_path=path, models_dir=tmp_path / "models", no_camera=True)
     assert loaded == [None]
-    assert app.rendered_model is None
-    assert app.requested_model == 'package/missing.obj'
-    assert app.last_error
+    assert app.rendered_model is None and app.requested_model is None
+    assert app.last_error is None and errors == []
 
 
-def test_live_selection_missing_model_and_clear_return_to_welcome(tmp_path, monkeypatch):
+def test_bad_geometry_at_start_reports_error_instead_of_qr(tmp_path, monkeypatch):
+    import controller
+    from runtime_config import default_config, save_config
+    config_path = tmp_path / "config.json"
+    save_config(default_config(), config_path)
+    models = tmp_path / "models"
+    model_id, asset = package_model(models)
+    loaded, errors = viewer_stub(monkeypatch, fail=lambda path: True)
+    app = controller.PoseController(config_path=config_path, models_dir=models, no_camera=True)
+    assert loaded == [None]
+    assert app.requested_model == model_id and app.rendered_model is None
+    assert errors == [app.last_error]
+    assert "Geometría no válida" in app.last_error
+
+
+
+def test_real_panda_failed_initial_model_releases_showbase_and_boots_error_screen(tmp_path, monkeypatch):
+    pytest.importorskip("panda3d.core")
+    import builtins
+    import controller
+    import visualizer
+    from runtime_config import default_config, save_config
+    config_path = tmp_path / "config.json"
+    models = tmp_path / "models"
+    model_id, asset = package_model(models)  # OBJ exists, but has no faces.
+    config = default_config()
+    config["active_model"] = model_id
+    save_config(config, config_path)
+    monkeypatch.setenv("GESTUR_PORTAL_URL", "http://192.168.1.8")
+    real_viewer = visualizer.ControlledObjViewer
+    attempts = []
+
+    def headless_viewer(model_path, **kwargs):
+        attempts.append(model_path)
+        kwargs["fullscreen"] = False
+        return real_viewer(model_path, window_type="none", **kwargs)
+
+    monkeypatch.setattr(visualizer, "ControlledObjViewer", headless_viewer)
+    app = controller.PoseController(config_path=config_path, models_dir=models, no_camera=True)
+    try:
+        assert attempts == [asset, None]
+        # This is the real ShowBase singleton: the rejected first viewer must
+        # release it before the fallback window can be created.
+        assert builtins.base is app.visualizer
+        assert app.requested_model == model_id and app.rendered_model is None
+        assert app.model_error and app.last_error == app.model_error
+        assert app.visualizer.model_error_overlay is not None
+        assert app.visualizer.welcome is None
+        assert app.visualizer.welcome_overlay is None
+        app.visualizer.taskMgr.step()
+    finally:
+        app.cleanup()
+
+def test_live_selection_failure_keeps_model_and_empty_library_alone_shows_qr(tmp_path, monkeypatch):
     import controller
     from runtime_config import default_config, save_config
     config_path = tmp_path / "config.json"
     config = default_config()
     save_config(config, config_path)
     models = tmp_path / "models"
-    (models / "package").mkdir(parents=True)
-    asset = models / "package" / "model.obj"
-    asset.write_text("v 0 0 0")
-    loaded = []
-    class Viewer:
-        def __init__(self, path, **kwargs):
-            loaded.append(path)
-            self.taskMgr = SimpleNamespace(add=lambda *args, **kwargs: None)
-        def accept(self, *args):
-            pass
-        def load_model(self, path):
-            loaded.append(path)
-        def apply_settings(self, **kwargs):
-            pass
-    monkeypatch.setitem(sys.modules, "visualizer", SimpleNamespace(ControlledObjViewer=Viewer))
+    loaded, errors = viewer_stub(monkeypatch, fail=lambda path: path.parent.name.startswith("2"))
     app = controller.PoseController(config_path=config_path, models_dir=models, no_camera=True)
-    config["active_model"] = "package/model.obj"
+    first, asset = package_model(models)
+    # Catalog publication is enough to activate the first model, even if the
+    # viewer boots before the portal reconciles its persisted configuration.
+    app._reload_config()
+    assert loaded == [None, asset] and app.rendered_model == first
+    second, broken = package_model(models, "22222222-2222-2222-2222-222222222222")
+    config["active_model"] = second
     save_config(config, config_path)
     app._reload_config()
     assert loaded == [None, asset]
-    assert app.rendered_model == "package/model.obj"
-    assert app.last_error is None
-    config["active_model"] = "package/missing.glb"
-    save_config(config, config_path)
-    app._reload_config()
-    assert loaded[-1] is None
-    assert app.rendered_model is None
-    assert app.requested_model == "package/missing.glb"
-    assert "el visor está vacío" in app.last_error
+    assert app.rendered_model == first and app.requested_model == second
+    assert "Geometría no válida" in app.last_error
+    assert errors == []
+    # A stale/manual null cannot blank the last successfully loaded exhibition.
     config["active_model"] = None
     save_config(config, config_path)
     app._reload_config()
+    assert app.rendered_model == first
+    assert app.last_error is None
+    import shutil
+    shutil.rmtree(asset.parent)
+    shutil.rmtree(broken.parent)
+    app._reload_config()
+    assert loaded[-1] is None
     assert app.rendered_model is None and app.requested_model is None
     assert app.last_error is None
+
+
+def test_restart_loads_last_selection_and_never_overwrites_shared_config(tmp_path, monkeypatch):
+    import controller
+    from runtime_config import default_config, save_config
+    config_path = tmp_path / "config.json"
+    models = tmp_path / "models"
+    first, _ = package_model(models)
+    last, asset = package_model(models, "22222222-2222-2222-2222-222222222222")
+    config = default_config()
+    config["active_model"] = last
+    save_config(config, config_path)
+    before = config_path.read_bytes()
+    loaded, _ = viewer_stub(monkeypatch)
+    for _ in range(2):
+        app = controller.PoseController(config_path=config_path, models_dir=models, no_camera=True)
+        assert app.rendered_model == last
+    assert loaded == [asset, asset]
+    assert config_path.read_bytes() == before
+    # Unchanged config/catalog checks must never rescan model metadata.
+    with monkeypatch.context() as unchanged:
+        unchanged.setattr(controller, "reconcile_model_selection", lambda *args, **kwargs:
+                          pytest.fail("unchanged catalog must not be scanned"))
+        for _ in range(5):
+            app._reload_config()
+    # Missing saved model deterministically resolves the other complete import.
+    asset.unlink()
+    app = controller.PoseController(config_path=config_path, models_dir=models, no_camera=True)
+    assert app.rendered_model == first
+    assert config_path.read_bytes() == before
 
 
 def test_empty_scene_stops_camera_and_preserves_invalid_config_error():
@@ -295,8 +394,13 @@ def test_cleanup_does_not_recreate_window_in_process_with_unreleased_camera():
     assert app.exit_code == 1  # Kiosk must restart the process, releasing driver state.
 
 
-def test_portal_url_prefers_access_point_over_lan(monkeypatch):
+def test_portal_url_uses_access_point_then_lan_when_route_is_unavailable(monkeypatch):
     import visualizer
+    from unittest.mock import MagicMock
+    route = MagicMock()
+    route.__enter__.return_value = route
+    route.connect.side_effect = OSError("No route")
+    monkeypatch.setattr(visualizer.socket, "socket", lambda *args: route)
     monkeypatch.delenv("GESTUR_PORTAL_URL", raising=False)
     monkeypatch.setattr(visualizer.socket, "if_nameindex", lambda: [(1, "eth0"), (2, "wlan0")])
     monkeypatch.setattr(visualizer, "_interface_ipv4", lambda name: {"eth0": "192.168.1.8", "wlan0": "10.42.0.1"}.get(name))
@@ -307,19 +411,24 @@ def test_portal_url_prefers_access_point_over_lan(monkeypatch):
 
 def test_portal_url_honors_valid_override_and_ignores_loopback_or_tokens(monkeypatch):
     import visualizer
+    from unittest.mock import MagicMock
+    route = MagicMock()
+    route.__enter__.return_value = route
+    route.connect.side_effect = OSError("No route")
+    monkeypatch.setattr(visualizer.socket, "socket", lambda *args: route)
     monkeypatch.setattr(visualizer.socket, "if_nameindex", lambda: [])
     monkeypatch.setattr(visualizer, "_interface_ipv4", lambda name: "10.42.0.1")
-    monkeypatch.setenv("GESTUR_PORTAL_URL", "https://exhibition.local/gestur/")
-    assert visualizer.portal_url() == "https://exhibition.local/gestur"
-    monkeypatch.setenv("GESTUR_PORTAL_URL", "http://exhibition.local:8080/gestur/")
-    assert visualizer.portal_url() == "http://exhibition.local:8080/gestur"
-    for value in ("http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000", "file:///etc/passwd",
+    monkeypatch.setenv("GESTUR_PORTAL_URL", "https://192.168.1.8/gestur/")
+    assert visualizer.portal_url() == "https://192.168.1.8/gestur"
+    monkeypatch.setenv("GESTUR_PORTAL_URL", "http://192.168.1.8:8080/gestur/")
+    assert visualizer.portal_url() == "http://192.168.1.8:8080/gestur"
+    for value in ("http://exhibition.local", "http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000", "file:///etc/passwd",
                   "http://10.42.0.1:3000/?token=secret", "http://admin:secret@10.42.0.1:3000", "http://0.0.0.0:3000"):
         monkeypatch.setenv("GESTUR_PORTAL_URL", value)
         assert visualizer.portal_url() == "http://10.42.0.1"
 
 
-def test_portal_url_falls_back_to_route_then_mdns_without_explicit_port(monkeypatch):
+def test_portal_url_uses_route_and_waits_for_network_without_fabricating_url(monkeypatch):
     import visualizer
     from unittest.mock import MagicMock
     monkeypatch.delenv('GESTUR_PORTAL_URL', raising=False)
@@ -332,9 +441,9 @@ def test_portal_url_falls_back_to_route_then_mdns_without_explicit_port(monkeypa
     assert visualizer.portal_url() == 'http://192.168.1.22'
     route.connect.side_effect = OSError('No route')
     monkeypatch.setattr(visualizer.socket, 'gethostname', lambda: 'gestur')
-    assert visualizer.portal_url() == 'http://gestur.local'
+    assert visualizer.portal_url() is None
     monkeypatch.setattr(visualizer.socket, 'gethostname', lambda: 'exhibidor.local')
-    assert visualizer.portal_url() == 'http://exhibidor.local'
+    assert visualizer.portal_url() is None
 
 
 def test_qr_contains_reachable_url_without_admin_token(tmp_path, monkeypatch):
@@ -342,14 +451,16 @@ def test_qr_contains_reachable_url_without_admin_token(tmp_path, monkeypatch):
     import numpy as np
     import visualizer
     from visualizer import ControlledObjViewer
-    monkeypatch.delenv("GESTUR_PORTAL_URL", raising=False)
+    monkeypatch.setenv("GESTUR_PORTAL_URL", "http://10.42.0.1")
     monkeypatch.setattr(visualizer.socket, 'if_nameindex', lambda: [(1, 'wlan0')])
     monkeypatch.setattr(visualizer, '_interface_ipv4', lambda name: '10.42.0.1')
     viewer = ControlledObjViewer(None, window_type="none", fullscreen=False)
     try:
         texture = viewer.welcome_overlay.find("**/welcome-qr").get_texture()
         raw = np.frombuffer(texture.get_ram_image(), dtype=np.uint8)
-        image = raw.reshape(texture.get_y_size(), texture.get_x_size())[::-1]
+        rgba = raw.reshape(texture.get_y_size(), texture.get_x_size(), 4)[::-1]
+        assert np.all(rgba[:, :, :3] == 255)
+        image = 255 - rgba[:, :, 3]
         image = cv2.resize(image, None, fx=10, fy=10, interpolation=cv2.INTER_NEAREST)
         decoded, _, _ = cv2.QRCodeDetector().detectAndDecode(image)
         assert decoded == "http://10.42.0.1"

@@ -293,10 +293,46 @@ test("multipart import returns202, polls durablejob, prompts onlyhighpoly and se
   assert.equal(completed.state, "completed");
   const catalog = (await request("GET", "models")).json();
   assert.equal(catalog.models.length, 1);
-  assert.equal(catalog.active, null);
+  assert.equal(catalog.active, completed.model.id);
   assert.equal(
     (await request("PUT", "models/active", { id: completed.model.id }))
       .statusCode,
     200,
   );
+});
+
+test("first import is selected without polling config, later imports retain it and API rejects null", async (t) => {
+  const { request, folder } = await fixture(t, undefined, {
+    modelConverter: async ({ workspace }) =>
+      writeFile(path.join(workspace, "model.glb"), testGlb()),
+    modelChecker: async () => ({ triangles: 100 }),
+  });
+  async function upload() {
+    assert.equal(
+      (
+        await request("POST", "models", uploadBody(), {
+          "content-type": "multipart/form-data; boundary=upload",
+        })
+      ).statusCode,
+      202,
+    );
+    const done = await settledJob(request);
+    assert.equal(done.state, "completed", done.error);
+    return done.model.id;
+  }
+  const first = await upload();
+  const persisted = () =>
+    readFile(path.join(folder, "config.json"), "utf8").then(JSON.parse);
+  assert.equal((await persisted()).active_model, first);
+  const second = await upload();
+  assert.notEqual(second, first);
+  assert.equal((await persisted()).active_model, first);
+  assert.equal(
+    (await request("PUT", "models/active", { id: null })).statusCode,
+    400,
+  );
+  const invalid = await persisted();
+  invalid.active_model = null;
+  assert.equal((await request("PUT", "config", invalid)).statusCode, 409);
+  assert.equal((await persisted()).active_model, first);
 });

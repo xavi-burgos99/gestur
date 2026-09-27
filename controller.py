@@ -9,7 +9,7 @@ import sys
 import time
 
 from control_system import create_control_system
-from runtime_config import default_config, load_config, validate_config
+from runtime_config import default_config, load_config, validate_config, reconcile_model_selection
 from runtime_state import FrameMetrics, LatestPose
 from tracking_session import TrackingSession, tracking_request
 from device_metrics import DeviceMetrics
@@ -72,10 +72,11 @@ class PoseController:
         except (ValueError, OSError, RuntimeError) as exc:
             if self.obj_override:
                 raise
-            self.model_error = f"No se pudo cargar el modelo seleccionado; el visor está vacío: {exc}"
+            self.model_error = f"No se pudo cargar el modelo seleccionado: {exc}"
             self.last_error = self.model_error or self.config_error
             LOG.error(self.last_error)
             self.visualizer = ControlledObjViewer(None, **self.config["render"], show_fps=show_fps)
+            self.visualizer.show_model_error(self.model_error)
         self.visualizer.accept("escape", self.request_stop)
         self.visualizer.taskMgr.add(self._render_tick, "gestur-control", sort=10)
 
@@ -83,16 +84,24 @@ class PoseController:
         config = load_config(self.config_path) if self.config_path else default_config()
         for section, values in self.overrides.items():
             config[section].update(values)
-        return validate_config(config)
+        config = validate_config(config)
+        if self.obj_override:
+            return config
+        return reconcile_model_selection(config, self.models_dir,
+                                         preferred_model=getattr(self, "rendered_model", None))
 
     def _stamp(self):
-        if not self.config_path:
-            return None
-        try:
-            stat = self.config_path.stat()
-            return stat.st_ino, stat.st_mtime_ns, stat.st_size
-        except FileNotFoundError:
-            return None
+        def signature(path):
+            if path is None:
+                return None
+            try:
+                stat = path.stat()
+                return stat.st_ino, stat.st_mtime_ns, stat.st_size
+            except FileNotFoundError:
+                return None
+        # Publishing/removing a package changes the directory stamp. Only then
+        # scan metadata; the per-second check otherwise uses two stat calls.
+        return signature(self.config_path), signature(getattr(self, "models_dir", None))
 
     def _on_pose_update(self, pose_data):
         # Runs in the inference thread: copying to a bounded mailbox is all it does.
@@ -115,15 +124,15 @@ class PoseController:
         try:
             candidate = self._read_config()
             self.requested_model = candidate["active_model"]
-            if not self.obj_override and candidate["active_model"] != self.config["active_model"]:
+            if not self.obj_override and (candidate["active_model"] != self.rendered_model or self.model_error):
                 try:
                     self.visualizer.load_model(resolve_model(candidate["active_model"], self.models_dir))
                     self.rendered_model = candidate["active_model"]
                     self.model_error = None
                 except (ValueError, OSError, RuntimeError) as exc:
-                    self.visualizer.load_model(None)
-                    self.rendered_model = None
-                    self.model_error = f"No se pudo cargar el modelo seleccionado; el visor está vacío: {exc}"
+                    self.model_error = f"No se pudo cargar el modelo seleccionado: {exc}"
+                    if self.rendered_model is None:
+                        self.visualizer.show_model_error(self.model_error)
                     LOG.error(self.model_error)
             restart_keys = ("antialias_samples", "fullscreen")
             needs_restart = any(candidate["render"][k] != self.config["render"][k] for k in restart_keys)

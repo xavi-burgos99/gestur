@@ -137,6 +137,54 @@ def load_config(path=None):
     return validate_config(config)
 
 
+def available_models(models_dir):
+    """Return complete imported models in the portal's deterministic order.
+
+    Called on startup/config or catalog changes, never in the drawing loop.
+    Hidden import workspaces and missing or escaping entrypoints are excluded.
+    """
+    root = Path(models_dir).resolve()
+    try:
+        packages = sorted(root.iterdir(), key=lambda entry: entry.name)
+    except FileNotFoundError:
+        return []
+    models = []
+    for package in packages:
+        if not re.fullmatch(r"[a-f0-9-]{36}", package.name):
+            continue
+        try:
+            package_root = package.resolve(strict=True)
+            if package_root == root or not package_root.is_relative_to(root):
+                continue
+            metadata = json.loads((package / ".gestur-model.json").read_text(encoding="utf-8"))
+            if not isinstance(metadata, dict):
+                continue
+            entrypoint = metadata.get("entrypoint")
+            if not isinstance(entrypoint, str) or not re.fullmatch(
+                    r"[A-Za-z0-9][A-Za-z0-9_. -]*(/[A-Za-z0-9][A-Za-z0-9_. -]*)*\.(obj|gltf|glb)", entrypoint):
+                continue
+            model_path = (package_root / entrypoint).resolve(strict=True)
+            if model_path.is_relative_to(package_root) and model_path.is_file():
+                models.append(f"{package.name}/{entrypoint}")
+        except (OSError, ValueError, TypeError):
+            continue
+    return models
+
+
+def reconcile_model_selection(config, models_dir, *, preferred_model=None):
+    """Resolve an existing selection without writing shared portal state.
+
+    The portal owns persistence, serialized with explicit user choices. The
+    viewer only derives a fallback so it can boot before the portal service,
+    without overwriting a concurrent selection made by the portal.
+    """
+    models = available_models(models_dir)
+    result = copy.deepcopy(config)
+    if result["active_model"] not in models:
+        result["active_model"] = preferred_model if preferred_model in models else next(iter(models), None)
+    return result
+
+
 def save_config(config, path=None):
     """Write and fsync before atomic replace so live readers see whole files."""
     validated = validate_config(config)

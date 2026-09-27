@@ -10,9 +10,9 @@ from urllib.parse import urlsplit
 
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
-    AmbientLight, AntialiasAttrib, CardMaker, ClockObject, DirectionalLight,
+    AmbientLight, AntialiasAttrib, CardMaker, ClockObject, DirectionalLight, DynamicTextFont,
     Filename, Geom, GeomNode, GeomTriangles, GeomVertexData, GeomVertexFormat,
-    GeomVertexWriter, PythonCallbackObject, TextNode, Texture, WindowProperties, loadPrcFileData,
+    GeomVertexWriter, PythonCallbackObject, TextNode, Texture, TransparencyAttrib, WindowProperties, loadPrcFileData,
 )
 
 from render_scheduler import RenderCadence
@@ -42,33 +42,18 @@ def _interface_ipv4(name):
 
 
 def portal_url():
-    """Prefer the Wi-Fi access point, then the LAN; never encode loopback."""
+    """Use an actual device IP: its routed LAN address, or an access point offline."""
     override = os.environ.get("GESTUR_PORTAL_URL", "").strip()
     if override:
         try:
             parsed = urlsplit(override)
-            host = parsed.hostname
-            valid_host = host and host.lower() not in ("localhost", "localhost.localdomain")
-            try:
-                ip = ipaddress.ip_address(host or "")
-                valid_host = valid_host and not (ip.is_loopback or ip.is_unspecified or ip.is_multicast)
-            except ValueError:
-                pass
-            if (parsed.scheme in ("http", "https") and valid_host and not parsed.username
-                    and not parsed.password and not parsed.query and not parsed.fragment):
-                _ = parsed.port  # Reject invalid ports before producing an unusable QR.
+            if (parsed.scheme in ("http", "https") and _usable_ipv4(parsed.hostname)
+                    and not parsed.username and not parsed.password
+                    and not parsed.query and not parsed.fragment):
+                _ = parsed.port  # Explicit development overrides may use another port.
                 return override.rstrip("/")
-        except ValueError:
+        except (TypeError, ValueError):
             pass
-    try:
-        interfaces = [name for _, name in socket.if_nameindex()]
-    except OSError:
-        interfaces = []
-    ordered = ["wlan0"] + sorted(name for name in interfaces if name != "wlan0")
-    for name in ordered:
-        address = _interface_ipv4(name)
-        if _usable_ipv4(address):
-            return f"http://{address}"
     # Connecting a UDP socket selects an existing route without sending packets.
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as handle:
@@ -78,10 +63,17 @@ def portal_url():
             return f"http://{address}"
     except OSError:
         pass
-    hostname = socket.gethostname().split(".", 1)[0]
-    if not hostname or hostname.lower() == "localhost":
-        hostname = "gestur"
-    return f"http://{hostname}.local"
+    try:
+        interfaces = [name for _, name in socket.if_nameindex()]
+    except OSError:
+        interfaces = []
+    ordered = ["wlan0"] + sorted(name for name in interfaces if name != "wlan0")
+    for name in ordered:
+        address = _interface_ipv4(name)
+        if _usable_ipv4(address):
+            return f"http://{address}"
+    # DHCP may not have finished at boot. The welcome screen retries periodically.
+    return None
 
 
 def _welcome_geometry():
@@ -97,8 +89,7 @@ def _welcome_geometry():
             radius = 1.75 + .42 * math.cos(tube)
             vertices.add_data3(radius * math.cos(angle), radius * math.sin(angle), .42 * math.sin(tube))
             normals.add_data3(math.cos(tube) * math.cos(angle), math.cos(tube) * math.sin(angle), math.sin(tube))
-            shade = .5 + .5 * math.cos(angle - .8)
-            colors.add_data4(.18 + .13 * shade, .57 + .21 * shade, .57 + .18 * shade, 1)
+            colors.add_data4(1, 1, 1, 1)
             if i < segments and j < sides:
                 a = i * (sides + 1) + j
                 b = a + sides + 1
@@ -160,6 +151,7 @@ class ControlledObjViewer(ShowBase):
         self.welcome = None
         self.welcome_overlay = None
         self.welcome_url = None
+        self.model_error_overlay = None
         self._last_url_check = 0.0
         # Leave ShowBase's input/event/igLoop tasks in place. GraphicsOutput's
         # active flag skips cull/draw only, keeping control and events responsive.
@@ -225,6 +217,7 @@ class ControlledObjViewer(ShowBase):
             size = self.win.get_x_size(), self.win.get_y_size()
             if size != self._last_draw_size:
                 self._last_draw_size = size
+                self._layout_welcome()
                 self.invalidate(frames=2)
             draw = self._render_cadence.due(now, welcome=self.welcome is not None)
             self.win.set_active(draw)
@@ -292,6 +285,7 @@ class ControlledObjViewer(ShowBase):
         if previous is not None:
             previous.remove_node()
         self._remove_welcome()
+        self._remove_model_error()
         self._set_model_camera()
         self.setBackgroundColor(0, 0, 0, 1)
         # The scene owns its assets; avoid retaining previously selected models.
@@ -311,38 +305,90 @@ class ControlledObjViewer(ShowBase):
                 setattr(self, name, None)
         self.welcome_url = None
 
+    def _remove_model_error(self):
+        if self.model_error_overlay is not None:
+            self.model_error_overlay.remove_node()
+            self.model_error_overlay = None
+
+    def show_model_error(self, message):
+        """An unavailable library is not an empty library; do not show onboarding."""
+        if self.model is not None:
+            return
+        self._remove_welcome()
+        self._remove_model_error()
+        self.setBackgroundColor(0, 0, 0, 1)
+        self.model_error_overlay = self.aspect2d.attach_new_node("gestur-model-error")
+        self._overlay_label(self.model_error_overlay, "model-error-brand", "GESTUR", .24, .13)
+        self._overlay_label(self.model_error_overlay, "model-error-title",
+                            "No se pudo cargar el modelo", -.02, .055)
+        detail = "Revisa el modelo desde el portal del dispositivo."
+        self._overlay_label(self.model_error_overlay, "model-error-detail", detail, -.17, .035)
+        self.invalidate(frames=2)
+
+    def _overlay_label(self, parent, name, text, z, size):
+        node = TextNode(name)
+        if not hasattr(self, "_welcome_font"):
+            font = TextNode.get_default_font()
+            if isinstance(font, DynamicTextFont):
+                font = DynamicTextFont(font)
+                font.set_pixels_per_unit(96)
+                font.set_minfilter(Texture.FT_linear_mipmap_linear)
+                font.set_magfilter(Texture.FT_linear)
+            self._welcome_font = font
+        node.set_font(self._welcome_font)
+        node.set_text(text)
+        node.set_align(TextNode.A_center)
+        node.set_text_color(1, 1, 1, 1)
+        item = parent.attach_new_node(node)
+        item.set_scale(size)
+        item.set_pos(0, 0, z)
+        return item
+
     def show_welcome(self):
         self.invalidate(frames=2)
+        self._remove_model_error()
         if self.model is not None:
             self.model.remove_node()
         self.model = None
         self.model_path = None
         if self.welcome is not None:
             return
-        self.setBackgroundColor(.027, .062, .071, 1)
+        self.setBackgroundColor(0, 0, 0, 1)
         if self.cam:
-            self.cam.set_pos(0, -19, 4)
-            self.cam.look_at(0, 0, 1.5)
+            self.cam.set_pos(0, -21, 0)
+            self.cam.look_at(0, 0, 0)
         self.welcome = self.render.attach_new_node("gestur-welcome")
         self.welcome_ring = self.welcome.attach_new_node(_welcome_geometry())
-        self.welcome_ring.set_scale(.85)
-        self.welcome_ring.set_pos(0, 0, -1.3)
         self.welcome_ring.set_hpr(25, 60, -12)
+        self.welcome_ring.set_color_scale(1, 1, 1, .15)
+        self.welcome_ring.set_transparency(TransparencyAttrib.M_alpha)
         ambient = AmbientLight("welcome-ambient")
-        ambient.set_color((.5, .57, .6, 1))
+        ambient.set_color((.4, .4, .4, 1))
         self.welcome.set_light(self.welcome.attach_new_node(ambient))
         key = DirectionalLight("welcome-key")
-        key.set_color((.9, .96, 1, 1))
+        key.set_color((.75, .75, .75, 1))
         key_node = self.welcome.attach_new_node(key)
         key_node.set_hpr(-40, -35, 0)
         self.welcome.set_light(key_node)
         self._refresh_welcome_overlay()
+        self._layout_welcome()
+
+    def _layout_welcome(self):
+        """Cover the viewport with the sculpture; keep the overlay inside narrow screens."""
+        if self.welcome is None:
+            return
+        if self.cam:
+            fov = self.cam.node().get_lens().get_fov()
+            span = 2 * 21 * math.tan(math.radians(max(fov)) / 2)
+            self.welcome_ring.set_scale(span / 4.34 * 1.1)
+        # ShowBase keeps aspect2d's shortest viewport dimension at two units,
+        # so this compact centered stack fits both portrait and landscape.
 
     def _refresh_welcome_overlay(self):
         import qrcode
         self._last_url_check = time.monotonic()
         url = portal_url()
-        if url == self.welcome_url:
+        if url == self.welcome_url and self.welcome_overlay is not None:
             return
         if self.welcome_overlay is not None:
             self.welcome_overlay.remove_node()
@@ -353,40 +399,42 @@ class ControlledObjViewer(ShowBase):
         self.welcome_overlay.set_depth_test(False)
         self.welcome_overlay.set_depth_write(False)
         self.welcome_overlay.set_bin("fixed", 40)
-
-        def label(name, text, z, size, color):
-            node = TextNode(name)
-            node.set_text(text)
-            node.set_align(TextNode.A_center)
-            node.set_text_color(*color)
-            item = self.welcome_overlay.attach_new_node(node)
-            item.set_scale(size)
-            item.set_pos(0, 0, z)
-
-        label("welcome-brand", "G E S T U R", .85, .032, (.49, .83, .79, 1))
-        label("welcome-prompt", "Escanea el QR para comenzar.", .72, .062, (.96, .97, .96, 1))
+        label = lambda name, text, z, size: self._overlay_label(
+            self.welcome_overlay, name, text, z, size)
+        label("welcome-brand", "GESTUR", .62, .17)
+        if url is None:
+            label("welcome-network", "Esperando conexión de red", -.03, .05)
+            self._layout_welcome()
+            self.invalidate(frames=2)
+            return
         qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=1, border=4)
         qr.add_data(url)
         qr.make(fit=True)
         matrix = qr.get_matrix()
         size = len(matrix)
         texture = Texture("local-portal-qr")
-        texture.setup_2d_texture(size, size, Texture.T_unsigned_byte, Texture.F_luminance)
-        texture.set_ram_image(bytes(0 if value else 255 for row in reversed(matrix) for value in row))
+        texture.setup_2d_texture(size, size, Texture.T_unsigned_byte, Texture.F_rgba)
+        # White modules and a transparent quiet zone: no opaque backing card.
+        texture.set_ram_image(bytes(channel for row in reversed(matrix) for value in row
+                                    for channel in (255, 255, 255, 255 if value else 0)))
         texture.set_minfilter(Texture.FT_nearest)
         texture.set_magfilter(Texture.FT_nearest)
         card = CardMaker("welcome-qr")
-        card.set_frame(-.245, .245, -.245, .245)
+        card.set_frame(-.36, .36, -.36, .36)
         qr_node = self.welcome_overlay.attach_new_node(card.generate())
         qr_node.set_texture(texture)
-        qr_node.set_pos(0, 0, .35)
-        label("welcome-url", url, .027, min(.033, 1.5 / max(1, len(url))), (.64, .72, .73, 1))
+        qr_node.set_transparency(TransparencyAttrib.M_alpha)
+        qr_node.set_pos(0, 0, .06)
+        label("welcome-prompt", "Escanea el QR para comenzar", -.48, .057)
+        address = f"o accede a {url}"
+        label("welcome-url", address, -.60, min(.038, 2.1 / max(1, len(address))))
+        self._layout_welcome()
         self.invalidate(frames=2)
 
     def _animate_welcome(self, task):
         if self.welcome is not None:
             self.welcome_ring.set_hpr(25 + task.time * 7, 60 + math.sin(task.time * .35) * 7, -12)
-            self.welcome_ring.set_z(-1.3 + math.sin(task.time * .7) * .09)
+            self.welcome_ring.set_z(math.sin(task.time * .7) * .09)
             if time.monotonic() - self._last_url_check >= 15:
                 self._refresh_welcome_overlay()
         return task.cont

@@ -5,6 +5,7 @@ import {
   mkdir,
   readdir,
   stat,
+  realpath,
   unlink,
 } from "node:fs/promises";
 import path from "node:path";
@@ -84,9 +85,11 @@ export async function createStore({
   }
   async function listModels() {
     const entries = [];
-    for (const directory of (await readdir(modelsDir)).filter((n) =>
-      /^[a-f0-9-]{36}$/.test(n),
-    )) {
+    const libraryRoot = await realpath(modelsDir);
+    const modelPattern = new RegExp(schema.properties.active_model.pattern);
+    for (const directory of (await readdir(modelsDir))
+      .filter((n) => /^[a-f0-9-]{36}$/.test(n))
+      .sort()) {
       try {
         const metadata = JSON.parse(
           await readFile(
@@ -94,9 +97,16 @@ export async function createStore({
             "utf8",
           ),
         );
-        if (typeof metadata.entrypoint !== "string") continue;
-        const packageRoot = path.join(modelsDir, directory);
-        const modelPath = path.resolve(packageRoot, metadata.entrypoint);
+        if (
+          typeof metadata.entrypoint !== "string" ||
+          !modelPattern.test(`${directory}/${metadata.entrypoint}`)
+        )
+          continue;
+        const packageRoot = await realpath(path.join(modelsDir, directory));
+        if (!packageRoot.startsWith(libraryRoot + path.sep)) continue;
+        const modelPath = await realpath(
+          path.resolve(packageRoot, metadata.entrypoint),
+        );
         if (!modelPath.startsWith(packageRoot + path.sep)) continue;
         const info = await stat(modelPath);
         if (!info.isFile()) continue;
@@ -118,42 +128,77 @@ export async function createStore({
     }
     return entries;
   }
-  async function read() {
+  // Reconciliation and explicit changes share one queue. A read must never
+  // restore an older selection while an import or a user's change is saving.
+  let queue = Promise.resolve();
+  function serialized(fn) {
+    const result = queue.then(fn);
+    queue = result.catch(() => {});
+    return result;
+  }
+  async function readCurrent(models) {
+    let saved;
+    let missing = false;
+    let persistedSelection;
     try {
-      const saved = JSON.parse(await readFile(configPath, "utf8"));
-      // Retire only the former bundled default. User imports remain untouched.
-      if (saved.schema_version === 1 && saved.active_model === "capitell.obj") {
+      saved = JSON.parse(await readFile(configPath, "utf8"));
+      persistedSelection = saved.active_model;
+      if (saved.schema_version === 1 && saved.active_model === "capitell.obj")
         saved.active_model = null;
-        check(saved);
-        await atomicJson(configPath, saved);
-      }
-      return check(saved);
+      check(saved);
     } catch (error) {
       if (error.code !== "ENOENT")
         throw new ApiError(
           503,
           "La configuración guardada no es válida. Se ha conservado para poder revisarla.",
         );
-      await atomicJson(configPath, defaults);
-      return structuredClone(defaults);
+      saved = structuredClone(defaults);
+      missing = true;
     }
+    const original = saved.active_model;
+    if (!models.some((model) => model.id === original))
+      saved.active_model = models[0]?.id ?? null;
+    // Also persist the legacy migration even if the resulting library is empty.
+    if (missing || persistedSelection !== saved.active_model)
+      await atomicJson(configPath, saved);
+    return saved;
   }
-  let queue = Promise.resolve();
-  async function update(fn) {
-    const result = queue.then(async () => {
-      const next = check(await fn(await read()));
+  function read() {
+    return serialized(async () => readCurrent(await listModels()));
+  }
+  function catalog() {
+    return serialized(async () => {
+      const models = await listModels();
+      const current = await readCurrent(models);
+      return { models, active: current.active_model };
+    });
+  }
+  function update(fn) {
+    return serialized(async () => {
+      const models = await listModels();
+      const next = check(await fn(await readCurrent(models)));
+      if (next.active_model === null && models.length)
+        throw new ApiError(
+          400,
+          "Debe haber un modelo seleccionado mientras haya modelos disponibles.",
+        );
       if (
         next.active_model !== null &&
-        !(await listModels()).some((m) => m.id === next.active_model)
+        !models.some((m) => m.id === next.active_model)
       )
         throw new ApiError(400, "Selecciona un modelo disponible.");
       await atomicJson(configPath, next);
       return next;
     });
-    queue = result.catch(() => {});
-    return result;
   }
-  return { read, update, listModels, defaults, schema };
+  try {
+    await read();
+  } catch (error) {
+    // Keep administration reachable to report malformed saved configuration;
+    // never reset or overwrite it during startup reconciliation.
+    if (!(error instanceof ApiError) || error.statusCode !== 503) throw error;
+  }
+  return { read, update, listModels, catalog, defaults, schema };
 }
 
 // Check URI-bearing extensions too; loaders must never follow network references.

@@ -2,9 +2,9 @@
 
 El visor y el portal comparten `/var/lib/gestur/config.json`. Se puede cambiar la ruta con `GESTUR_CONFIG` o con la opción de configuración del visor. Una instalación sin archivo utiliza `config/default.json`. El contrato versionado está en `config/schema.json` (JSON Schema Draft 7); `schema_version` debe ser `1`. El portal valida antes de guardar y sustituye el archivo de forma atómica. No se guardan contraseñas Wi-Fi en este archivo: las gestiona el servicio de red.
 
-La configuración completa contiene `active_model`, `tracking`, `render` y `controls`. `active_model: null` es el valor inicial: muestra la bienvenida con figura procedural y QR, sin abrir la cámara. Al importar se guarda un GLB autocontenido y la selección usa `<uuid>/model.glb`; también se conservan los paquetes OBJ/glTF/GLB de instalaciones anteriores. La selección antigua `capitell.obj` se migra a `null`; no se borran modelos del usuario.
+La configuración completa contiene `active_model`, `tracking`, `render` y `controls`. `active_model: null` corresponde a una biblioteca vacía: muestra la bienvenida con figura procedural y QR, sin abrir la cámara. Al importar el primer modelo se selecciona automáticamente. Se guarda un GLB autocontenido y la selección usa `<uuid>/model.glb`; también se conservan los paquetes OBJ/glTF/GLB de instalaciones anteriores. El último modelo elegido se mantiene al reiniciar. Si la selección falta o apunta a un archivo desaparecido, se escoge un modelo disponible; la API rechaza dejarla vacía cuando hay modelos. La referencia antigua `capitell.obj` se reconcilia con la biblioteca actual; no se borran modelos del usuario.
 
-`GESTUR_PORTAL_URL` permite indicar la URL pública local del QR cuando se usa un proxy o una dirección distinta. Sin esa variable se detecta la dirección del punto de acceso o la LAN y se usa el puerto 3000. Nunca se añade la clave de administración al QR.
+`GESTUR_PORTAL_URL` permite indicar una URL alternativa con una IP válida. Sin esa variable se detecta la IP de la LAN, o la del punto de acceso si no hay ruta de red, y se usa HTTP en el puerto 80. Si todavía no hay IP disponible, la bienvenida espera y reintenta. Nunca se añade la clave de administración al QR.
 
 ## Valores iniciales para Raspberry Pi 5
 

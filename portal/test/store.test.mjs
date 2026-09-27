@@ -39,7 +39,7 @@ test("legacy builtin selection migrates to welcome while preserving controls", a
   assert.equal(migrated.controls.smoothing_ms, 234);
 });
 
-test("existing user imports survive migration and can return to the welcome screen", async (t) => {
+test("existing user imports keep their selection and cannot return to welcome", async (t) => {
   const { store, modelsDir } = await fixture(t);
   const uuid = randomUUID();
   await mkdir(path.join(modelsDir, uuid));
@@ -64,7 +64,11 @@ test("existing user imports survive migration and can return to the welcome scre
   assert.equal(model.triangles, 499998);
   assert.equal(model.sourceFormat, "FBX");
   assert.equal(model.simplified, true);
-  await store.update((config) => ({ ...config, active_model: null }));
+  await assert.rejects(
+    store.update((config) => ({ ...config, active_model: null })),
+    /Debe haber un modelo seleccionado/,
+  );
+  assert.equal((await store.read()).active_model, id);
   assert.equal((await store.listModels()).length, 1);
 });
 
@@ -78,4 +82,106 @@ test("catalog metadata cannot reference files outside an imported package", asyn
     JSON.stringify({ entrypoint: "../../outside.glb" }),
   );
   assert.deepEqual(await store.listModels(), []);
+});
+
+async function addModel(modelsDir, uuid = randomUUID()) {
+  const folder = path.join(modelsDir, uuid);
+  await mkdir(folder);
+  await writeFile(path.join(folder, "model.glb"), "fixture");
+  await writeFile(
+    path.join(folder, ".gestur-model.json"),
+    JSON.stringify({ entrypoint: "model.glb", name: uuid }),
+  );
+  return `${uuid}/model.glb`;
+}
+
+test("startup persists a fallback and restart retains the last selected model", async (t) => {
+  const { configPath, modelsDir, store } = await fixture(t);
+  const second = await addModel(
+    modelsDir,
+    "22222222-2222-2222-2222-222222222222",
+  );
+  const first = await addModel(
+    modelsDir,
+    "11111111-1111-1111-1111-111111111111",
+  );
+  const restarted = await createStore({ configPath, modelsDir });
+  assert.equal((await restarted.read()).active_model, first);
+  assert.equal(
+    JSON.parse(await readFile(configPath, "utf8")).active_model,
+    first,
+  );
+  await store.update((current) => ({ ...current, active_model: second }));
+  const again = await createStore({ configPath, modelsDir });
+  assert.equal((await again.read()).active_model, second);
+  // New imports do not replace the user's chosen exhibition.
+  await addModel(modelsDir, "00000000-0000-0000-0000-000000000000");
+  assert.equal((await again.read()).active_model, second);
+});
+
+test("missing selection falls back to another model, and only an empty catalog selects null", async (t) => {
+  const { configPath, modelsDir, store } = await fixture(t);
+  const first = await addModel(
+    modelsDir,
+    "11111111-1111-1111-1111-111111111111",
+  );
+  const second = await addModel(
+    modelsDir,
+    "22222222-2222-2222-2222-222222222222",
+  );
+  await store.update((current) => ({ ...current, active_model: second }));
+  await rm(path.join(modelsDir, second.split("/")[0]), { recursive: true });
+  assert.equal((await store.read()).active_model, first);
+  await rm(path.join(modelsDir, first.split("/")[0]), { recursive: true });
+  assert.equal((await store.read()).active_model, null);
+  assert.equal(
+    JSON.parse(await readFile(configPath, "utf8")).active_model,
+    null,
+  );
+});
+
+test("reconciliation waits for a concurrent explicit selection and preserves it", async (t) => {
+  const { configPath, modelsDir, store } = await fixture(t);
+  await addModel(modelsDir, "11111111-1111-1111-1111-111111111111");
+  const second = await addModel(
+    modelsDir,
+    "22222222-2222-2222-2222-222222222222",
+  );
+  let enter;
+  let resume;
+  const entered = new Promise((resolve) => {
+    enter = resolve;
+  });
+  const paused = new Promise((resolve) => {
+    resume = resolve;
+  });
+  const update = store.update(async (current) => {
+    enter();
+    await paused;
+    return { ...current, active_model: second };
+  });
+  await entered;
+  const read = store.read();
+  const snapshot = store.catalog();
+  resume();
+  await update;
+  assert.equal((await read).active_model, second);
+  const catalog = await snapshot;
+  assert.equal(catalog.active, second);
+  assert.ok(catalog.models.some((model) => model.id === catalog.active));
+  assert.equal(
+    JSON.parse(await readFile(configPath, "utf8")).active_model,
+    second,
+  );
+});
+
+test("startup keeps malformed configuration intact and reports it through the store", async (t) => {
+  const { configPath, modelsDir } = await fixture(t);
+  await writeFile(configPath, "{broken");
+  const restarted = await createStore({ configPath, modelsDir });
+  await assert.rejects(
+    restarted.read(),
+    /La configuración guardada no es válida/,
+  );
+  assert.equal(await readFile(configPath, "utf8"), "{broken");
 });

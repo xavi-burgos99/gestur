@@ -193,20 +193,25 @@ function Models({ config, setConfig, notify }) {
   const importMutating = useRef(false);
   const completedJob = useRef(null);
   const dragDepth = useRef(0);
+  const selectionRevision = useRef(0);
+  const selectionMutating = useRef(false);
   const pending = ["processing", "awaiting_decision"].includes(job?.state);
   const importDisabled = restoring || uploading || pending;
   const load = useCallback(async () => {
+    const revision = selectionRevision.current;
     setLoading(true);
     setError("");
     try {
       const data = await api("models");
       setModels(data.models);
+      if (revision === selectionRevision.current && !selectionMutating.current)
+        setConfig((current) => ({ ...current, active_model: data.active }));
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setConfig]);
   useEffect(() => {
     load();
   }, [load]);
@@ -284,6 +289,9 @@ function Models({ config, setConfig, notify }) {
     }
   }
   async function activate(id) {
+    if (selectionMutating.current) return;
+    selectionRevision.current += 1;
+    selectionMutating.current = true;
     setBusy(true);
     try {
       const result = await api("models/active", {
@@ -291,14 +299,11 @@ function Models({ config, setConfig, notify }) {
         body: { id },
       });
       setConfig(result.config);
-      notify(
-        id
-          ? "Modelo seleccionado. Se mostrará en unos segundos."
-          : "Pantalla de bienvenida seleccionada.",
-      );
+      notify("Modelo seleccionado. Se mostrará en unos segundos.");
     } catch (e) {
       notify(e.message, true);
     } finally {
+      selectionMutating.current = false;
       setBusy(false);
     }
   }
@@ -616,8 +621,8 @@ function Models({ config, setConfig, notify }) {
           </div>
         </Group>
       </Paper>
-      <Paper className="note-panel" mt="lg" p="lg">
-        <Group justify="space-between" align="center">
+      {empty && (
+        <Paper className="note-panel" mt="lg" p="lg">
           <Group wrap="nowrap" align="flex-start" className="welcome-note">
             <IconDeviceDesktop size={23} className="fixed-icon" />
             <div>
@@ -625,23 +630,14 @@ function Models({ config, setConfig, notify }) {
                 Pantalla de bienvenida
               </Text>
               <Text size="sm" c="dimmed">
-                Sin un modelo seleccionado, la pantalla muestra una figura 3D y
-                un QR para abrir el portal.
+                Mientras no haya modelos, la pantalla muestra un QR para abrir
+                el portal. El primer modelo que subas se mostrará
+                automáticamente.
               </Text>
             </div>
           </Group>
-          {config.active_model && (
-            <Button
-              variant="white"
-              disabled={busy}
-              onClick={() => activate(null)}
-              leftSection={<IconDeviceDesktop size={17} />}
-            >
-              Mostrar bienvenida
-            </Button>
-          )}
-        </Group>
-      </Paper>
+        </Paper>
+      )}
       <Modal
         opened={job?.state === "awaiting_decision" && !!proposal}
         onClose={() => {}}

@@ -189,6 +189,7 @@ function Models({ config, setConfig, notify }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [job, setJob] = useState(null);
+  const [catalogImport, setCatalogImport] = useState(null);
   const [restoring, setRestoring] = useState(true);
   const [jobError, setJobError] = useState("");
   const [decisionError, setDecisionError] = useState("");
@@ -209,6 +210,7 @@ function Models({ config, setConfig, notify }) {
   const importDisabled = restoring || uploading || pending || busy || loading;
   const load = useCallback(async () => {
     const revision = selectionRevision.current;
+    const importedJob = completedJob.current;
     const request = ++catalogRequest.current;
     setLoading(true);
     setError("");
@@ -221,6 +223,7 @@ function Models({ config, setConfig, notify }) {
       )
         return;
       setModels(data.models);
+      setCatalogImport(importedJob);
       setConfig((current) => ({ ...current, active_model: data.active }));
     } catch (e) {
       if (
@@ -400,6 +403,12 @@ function Models({ config, setConfig, notify }) {
   }
   const proposal = job?.proposal;
   const empty = !loading && !error && models.length === 0;
+  const showImportStatus =
+    job &&
+    !uploading &&
+    (job.state !== "completed" ||
+      catalogImport !== job.id ||
+      models.some((model) => model.id === job.model?.id));
   return (
     <>
       <SectionTitle
@@ -456,7 +465,7 @@ function Models({ config, setConfig, notify }) {
           </Group>
         </Paper>
       )}
-      {job && !uploading && (
+      {showImportStatus && (
         <Paper
           withBorder
           p="lg"

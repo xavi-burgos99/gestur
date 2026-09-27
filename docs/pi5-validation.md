@@ -31,6 +31,20 @@ SSID o la dirección local omitidos. Registra los hashes y el código de medici�
 No se publican imágenes de la cámara, trazas voluminosas, direcciones de red ni
 credenciales.
 
+## Selección y gestión de modelos
+
+La actualización de gestión del 27 de septiembre se comprobó en la misma Pi.
+Tras un reinicio real, el capitel importado volvió a aparecer sin modificar la
+selección ni los parámetros guardados. Su GLB conserva los 491.038 triángulos
+y el JPEG original byte por byte; el OBJ, el material y la textura del archivo
+subido coinciden con los de [examples/capitel](../examples/capitel/README.md).
+
+Una importación de prueba permitió verificar el cambio de nombre, la orientación
+guardada y su actualización en vivo en el visor. El hash del GLB no cambió.
+Al borrar esa importación mientras estaba seleccionada, el visor volvió al
+capitel y los parámetros permanecieron intactos. Estas son comprobaciones de
+funcionamiento, no nuevas mediciones de rendimiento.
+
 ## Cómo interpretar las unidades
 
 - **CPU del proceso:** 100 % representa un núcleo ocupado, no toda la Pi. En sus

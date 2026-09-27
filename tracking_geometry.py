@@ -57,17 +57,17 @@ def clamp(value, low=0.0, high=1.0):
     return max(low, min(high, value))
 
 
-def wrap_angle(angle):
-    return (angle + 180.0) % 360.0 - 180.0
+def wrap_angle(angle, period=360.0):
+    return (angle + period / 2) % period - period / 2
 
 
-def smooth_value(previous, value, dt, smoothing_time, circular=False):
+def smooth_value(previous, value, dt, smoothing_time, circular=False, period=360.0):
     if previous is None or smoothing_time <= 0:
         return value
     alpha = -math.expm1(-max(0.0, dt) / smoothing_time)
-    delta = wrap_angle(value - previous) if circular else value - previous
+    delta = wrap_angle(value - previous, period) if circular else value - previous
     result = previous + alpha * delta
-    return wrap_angle(result) if circular else result
+    return wrap_angle(result, period) if circular else result
 
 
 def landmarks_valid(points, indices, visibility_threshold=None):
@@ -196,8 +196,10 @@ class TrackingFilter:
         filtered = {}
         for name, value in sample.items():
             if isinstance(value, (int, float)) and not isinstance(value, bool):
+                # The eye line is unoriented: +89° and -89° differ by 2°.
+                period = 180.0 if key == 'head' and name == 'roll' else 360.0
                 filtered[name] = smooth_value(previous.get(name), value, dt,
-                    self.smoothing_time, name in ANGLE_FIELDS)
+                    self.smoothing_time, name in ANGLE_FIELDS, period)
             else:
                 filtered[name] = value
         self.data[key] = filtered

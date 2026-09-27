@@ -5,6 +5,7 @@ import unittest
 
 from runtime_config import (ConfigReloader, ConfigurationError, default_config,
                             load_config, save_config, validate_config)
+from control_system import create_control_system
 
 
 class ConfigTests(unittest.TestCase):
@@ -89,6 +90,36 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 save_config({}, path)
             self.assertEqual(json.loads(path.read_text()), default_config())
+
+    def test_new_gestures_save_reload_and_build_runtime_controls(self):
+        inputs = ("head_pitch", "head_yaw", "head_roll", "left_hand_x", "left_hand_y",
+                  "right_hand_x", "right_hand_y", "left_hand_openness", "right_hand_openness")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            save_config(default_config(), path)
+            reloader = ConfigReloader(path)
+            for input_name in inputs:
+                with self.subTest(input=input_name):
+                    config = default_config()
+                    config["controls"]["mappings"] = [{"id": "new_input", "input": input_name,
+                        "output": "position_x", "mode": "absolute", "enabled": True,
+                        "scale": 2, "invert": False, "center": 0.5}]
+                    save_config(config, path)
+                    reloaded = reloader.reload_if_changed()
+                    self.assertEqual(reloaded, config)
+                    part, field = input_name.rsplit("_", 1)
+                    value = 90 if part == "head" else 0.75
+                    runtime = create_control_system(reloaded)
+                    output = runtime.process_input({part: {"detected": True, field: value}})
+                    self.assertAlmostEqual(output["position"][0], 0.5)
+
+    def test_unmeasured_depth_inputs_are_rejected(self):
+        for input_name in ("head_z", "left_hand_z", "right_hand_z"):
+            with self.subTest(input=input_name):
+                config = default_config()
+                config["controls"]["mappings"][0]["input"] = input_name
+                with self.assertRaises(ConfigurationError):
+                    validate_config(config)
 
 
 if __name__ == "__main__":

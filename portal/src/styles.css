@@ -14,37 +14,22 @@ body {
   border-bottom: 1px solid #e5e9e6;
   background: #fff;
 }
-.brand-mark {
-  width: 43px;
-  height: 43px;
-  display: grid;
-  place-items: center;
-  background: #d9ece5;
-  color: #255c49;
-  border-radius: 12px;
-}
 .wordmark {
   font-size: 25px;
-  letter-spacing: -1.5px;
+  letter-spacing: -0.8px;
   line-height: 1.15;
   font-weight: 750;
 }
-.wordmark span {
-  font-size: 10px;
-  vertical-align: top;
-  letter-spacing: 0;
-  margin-left: 3px;
-}
 .main-tabs > .mantine-Tabs-list {
   padding-top: 23px;
-  gap: 25px;
+  gap: 40px;
   border-bottom: 1px solid #e2e8e3;
 }
 .main-tabs > .mantine-Tabs-list:before {
   border: 0;
 }
 .main-tabs > .mantine-Tabs-list .mantine-Tabs-tab {
-  padding: 15px 3px 19px;
+  padding: 15px 12px 19px;
   font-weight: 600;
   font-size: 14px;
   color: #6b7671;
@@ -55,13 +40,6 @@ body {
 }
 .main-tabs > .mantine-Tabs-panel {
   padding: 42px 0;
-}
-.eyebrow {
-  font-size: 10px;
-  letter-spacing: 1.75px;
-  font-weight: 750;
-  color: #657c70;
-  margin-bottom: 9px;
 }
 .mantine-Title-root {
   letter-spacing: -0.65px;
@@ -128,10 +106,6 @@ body {
 .mantine-Accordion-item {
   background: #fff;
 }
-footer {
-  padding: 25px 0 32px;
-  border-top: 1px solid #e2e8e3;
-}
 .centered {
   min-height: 100vh;
   display: grid;
@@ -151,12 +125,21 @@ footer {
 }
 @media (max-width: 600px) {
   .main-tabs > .mantine-Tabs-list {
-    gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
   }
   .main-tabs > .mantine-Tabs-list .mantine-Tabs-tab {
     font-size: 12px;
     padding-left: 0;
     padding-right: 0;
+  }
+  .main-tabs .mantine-Tabs-tabSection[data-position="left"] {
+    margin-inline-end: 6px;
+  }
+  .main-tabs .mantine-Tabs-tabSection svg {
+    width: 17px;
+    height: 17px;
   }
   .main-tabs > .mantine-Tabs-panel {
     padding: 28px 0;

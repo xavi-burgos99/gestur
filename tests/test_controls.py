@@ -3,7 +3,7 @@ import unittest
 
 from control_system import (DataProcessor, ExponentialSmoother,
                             HybridRotationController, create_appliers,
-                            create_control_system)
+                            create_control_system, create_extractors)
 from runtime_config import default_config
 
 
@@ -156,6 +156,93 @@ class ControlTests(unittest.TestCase):
         self.assertGreater(second["rotation"][1], 179)
         self.assertLess(second["rotation"][1], 181)
         self.assertAlmostEqual(second["rotation"][0], -45)
+
+    def test_head_angles_control_each_rotation_independently(self):
+        config = default_config()
+        config["controls"]["mappings"] = [
+            {"id": angle, "input": f"head_{angle}", "output": f"rotation_{angle}",
+             "mode": "absolute", "enabled": True, "scale": 180, "invert": False, "center": 0.5}
+            for angle in ("yaw", "pitch", "roll")
+        ]
+        result = create_control_system(config).process_input({"head": {
+            "detected": True, "x": 0.1, "y": 0.9, "pitch": -20, "yaw": 30, "roll": 45,
+        }})
+        for actual, expected in zip(result["rotation"], (30, -20, 45)):
+            self.assertAlmostEqual(actual, expected)
+        self.assertEqual(result["position"], [0, 0, 0])
+
+    def test_head_yaw_wrap_and_tracking_loss_keep_shortest_rotation(self):
+        clock = Clock()
+        config = default_config()
+        config["controls"]["mappings"] = [{"id": "head_turn", "input": "head_yaw",
+            "output": "rotation_yaw", "mode": "absolute", "enabled": True,
+            "scale": 180, "invert": False, "center": 0.5}]
+        system = create_control_system(config, clock)
+        first = system.process_input({"head": {"detected": True, "yaw": 179}})["rotation"][0]
+        clock.advance(0.05)
+        second = system.process_input({"head": {"detected": True, "yaw": -179}})["rotation"][0]
+        self.assertAlmostEqual(first, 179)
+        self.assertGreater(second, first)
+        self.assertLess(second - first, 2)
+        # An undetected stale value must not continue commanding a turn.
+        clock.advance(5)
+        neutral = system.process_input({"head": {"detected": False, "yaw": -179}})["rotation"][0]
+        self.assertAlmostEqual(neutral % 360, 0, places=8)
+
+    def test_individual_hand_positions_and_openness_are_independent(self):
+        config = default_config()
+        config["controls"]["mappings"] = [
+            {"id": input_name, "input": input_name, "output": output_name,
+             "mode": "absolute", "enabled": True, "scale": 2, "invert": False, "center": 0.5}
+            for input_name, output_name in (("left_hand_x", "position_x"),
+                                           ("right_hand_y", "position_y"),
+                                           ("left_hand_openness", "scale_uniform"))
+        ]
+        system = create_control_system(config)
+        result = system.process_input({
+            "left_hand": {"detected": True, "x": 0.25, "y": 0.1, "openness": 0.75},
+            "right_hand": {"detected": True, "x": 0.9, "y": 0.8, "openness": 0},
+        })
+        self.assertAlmostEqual(result["position"][0], -0.5)
+        self.assertAlmostEqual(result["position"][1], 0.6)
+        self.assertEqual(result["scale"], 1.5)
+
+    def test_new_inputs_require_detected_finite_measurements(self):
+        extractors = create_extractors()
+        inputs = [(f"head_{angle}", "head", angle, 90, 0.75) for angle in ("pitch", "yaw", "roll")]
+        inputs += [(f"{side}_hand_{field}", f"{side}_hand", field, 0, 0)
+                   for side in ("left", "right") for field in ("x", "y", "openness")]
+        for name, part, field, value, expected in inputs:
+            with self.subTest(input=name):
+                extractor = extractors[name]
+                self.assertEqual(extractor({part: {"detected": True, field: value}}), expected)
+                self.assertIsNone(extractor({}))
+                self.assertIsNone(extractor({part: None}))
+                self.assertIsNone(extractor({part: {"detected": False, field: value}}))
+                self.assertIsNone(extractor({part: {"detected": True}}))
+                for invalid in (None, True, "0.5", float("nan"), float("inf")):
+                    self.assertIsNone(extractor({part: {"detected": True, field: invalid}}))
+
+    def test_lost_head_angle_stops_hybrid_rotation_before_reset(self):
+        clock = Clock()
+        config = default_config()
+        config["controls"]["mappings"] = [{"id": "head_turn", "input": "head_yaw",
+            "output": "rotation_yaw", "mode": "hybrid", "enabled": True,
+            "scale": 30, "invert": False, "center": 0.5,
+            "left_threshold": 0.4, "right_threshold": 0.6, "continuous_speed": 100}]
+        system = create_control_system(config, clock)
+        frame = {"head": {"detected": True, "yaw": 90}}
+        system.process_input(frame)
+        for _ in range(10):
+            clock.advance(0.1)
+            before = system.process_input(frame)["rotation"][0]
+        self.assertGreater(before, 6)
+        clock.advance(0.1)
+        self.assertAlmostEqual(system.process_input({"head": {"detected": False, "yaw": 90}})["rotation"][0], before)
+        clock.advance(3)
+        system.process_input({})
+        clock.advance(1)
+        self.assertAlmostEqual(system.process_input({})["rotation"][0], 0)
 
     def test_partial_or_invalid_detection_cannot_produce_nan(self):
         data = DataProcessor().process_hands({"detected": True, "x": 0.5}, {"detected": True})

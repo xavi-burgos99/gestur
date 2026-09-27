@@ -168,3 +168,52 @@ def test_head_visibility_is_independent_of_torso_visibility():
     assert not result['torso']['detected']
     points[2].presence = .1
     assert not pose_features(points,points)['head']['detected']
+
+
+def tilted_head(degrees):
+    world = rotate(pose(), 'z', degrees)
+    return pose_features(world, world, aspect=1)['head']
+
+
+def test_head_roll_filter_respects_unoriented_eye_line_and_clears_loss():
+    first, second = tilted_head(89), tilted_head(91)
+    assert first['roll'] == pytest.approx(89)
+    assert second['roll'] == pytest.approx(-89)
+    state = TrackingFilter(smoothing_time=.1)
+    state.update('head', first, 0)
+    state.update('head', second, .1)
+    # The filter crosses the vertical line, not the upright pose at zero.
+    assert -90 < state.snapshot()['head']['roll'] < -89
+    state.expire(.4)
+    assert state.snapshot()['head']['detected'] is False
+    assert state.snapshot()['head']['roll'] is None
+    state.update('head', tilted_head(0), .5)
+    assert state.snapshot()['head']['roll'] == pytest.approx(0)
+
+
+def test_head_roll_control_crosses_eye_line_wrap_and_returns_upright_on_loss():
+    from control_system import create_control_system
+    from runtime_config import default_config
+
+    now = 0.0
+    config = default_config()
+    config['controls']['mappings'] = [{
+        'id': 'tilt', 'input': 'head_roll', 'output': 'rotation_roll',
+        'mode': 'absolute', 'enabled': True, 'scale': 180, 'invert': False, 'center': .5,
+    }]
+    controls = create_control_system(config, clock=lambda: now)
+    tracking = TrackingFilter(smoothing_time=.1)
+    tracking.update('head', tilted_head(89), now)
+    first = controls.process_input(tracking.snapshot())['rotation'][2]
+    now = .1
+    tracking.update('head', tilted_head(91), now)
+    second = controls.process_input(tracking.snapshot())['rotation'][2]
+    assert first == pytest.approx(89)
+    assert first < second < 91
+    now = .4
+    tracking.expire(now)
+    after_loss = controls.process_input(tracking.snapshot())['rotation'][2]
+    assert 0 < after_loss < second
+    now = 5
+    neutral = controls.process_input(tracking.snapshot())['rotation'][2]
+    assert neutral == pytest.approx(0, abs=1e-8)

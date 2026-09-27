@@ -59,7 +59,9 @@ export function systemWifi() {
           return reject(
             new ApiError(
               503,
-              "No se ha podido aplicar la configuración Wi-Fi. Revisa NetworkManager en el dispositivo.",
+              action === "status"
+                ? "No se pudo consultar la red Wi-Fi del dispositivo."
+                : "No se pudieron aplicar los cambios de Wi-Fi. Comprueba el estado de la red y vuelve a intentarlo.",
             ),
           );
         try {

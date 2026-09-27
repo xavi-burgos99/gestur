@@ -122,15 +122,16 @@ function Numeric({
     />
   );
 }
-function SectionTitle({ eyebrow, title, description, action }) {
+function SectionTitle({ title, description, action }) {
   return (
     <Group justify="space-between" align="flex-end" mb={30}>
       <div>
-        <Text className="eyebrow">{eyebrow}</Text>
         <Title order={1}>{title}</Title>
-        <Text c="dimmed" mt={8}>
-          {description}
-        </Text>
+        {description && (
+          <Text c="dimmed" mt={8}>
+            {description}
+          </Text>
+        )}
       </div>
       {action}
     </Group>
@@ -180,8 +181,8 @@ function ImportWarnings({ warnings = [] }) {
     <details className="import-warnings">
       <summary>
         {warnings.length === 1
-          ? "1 detalle de la importación"
-          : `${warnings.length} detalles de la importación`}
+          ? "1 aviso de importación"
+          : `${warnings.length} avisos de importación`}
       </summary>
       <ul>
         {warnings.map((warning, index) => (
@@ -321,8 +322,8 @@ function Models({ config, setConfig, notify }) {
       setConfig(result.config);
       notify(
         id
-          ? "Selección guardada. El visualizador cargará el modelo en unos segundos."
-          : "La pantalla de bienvenida se mostrará en el dispositivo.",
+          ? "Modelo seleccionado. Se mostrará en unos segundos."
+          : "Pantalla de bienvenida seleccionada.",
       );
     } catch (e) {
       notify(e.message, true);
@@ -350,9 +351,8 @@ function Models({ config, setConfig, notify }) {
   return (
     <>
       <SectionTitle
-        eyebrow="TU COLECCIÓN"
         title="Modelos 3D"
-        description="Tus piezas, listas para responder a cada movimiento."
+        description="Sube modelos 3D para mostrarlos en la pantalla del dispositivo."
         action={
           <ImportButton
             upload={upload}
@@ -379,7 +379,7 @@ function Models({ config, setConfig, notify }) {
                 ? "El modelo seleccionado se está mostrando en el dispositivo."
                 : "El dispositivo muestra la bienvenida con el QR de este portal."
               : "El visor está aplicando la selección.")
-          : "Puedes guardar cambios. Se aplicarán cuando el visualizador esté en marcha."}
+          : "Los cambios se aplicarán cuando el visor esté conectado."}
       </Alert>
       {jobError && (
         <Alert
@@ -388,8 +388,7 @@ function Models({ config, setConfig, notify }) {
           title="Reconectando con la importación"
           role="status"
         >
-          {jobError} Si ya había una importación en marcha, continúa en el
-          dispositivo. Volveremos a comprobar su estado automáticamente.
+          {jobError} El estado se actualizará al recuperar la conexión.
         </Alert>
       )}
       {uploading && (
@@ -397,7 +396,7 @@ function Models({ config, setConfig, notify }) {
           <Group wrap="nowrap">
             <Loader size="sm" />
             <div>
-              <Text fw={600}>Enviando tu archivo</Text>
+              <Text fw={600}>Subiendo archivo</Text>
               <Text size="sm" c="dimmed">
                 Mantén esta página abierta hasta que termine la subida.
               </Text>
@@ -435,12 +434,12 @@ function Models({ config, setConfig, notify }) {
             <div className="import-status-copy">
               <Text fw={600}>
                 {job.state === "completed"
-                  ? `Modelo preparado: ${job.model?.name || "Nueva pieza"}`
+                  ? `Modelo importado: ${job.model?.name || "Sin nombre"}`
                   : job.state === "failed"
                     ? "No se pudo importar el modelo"
                     : job.state === "awaiting_decision"
-                      ? "Tu modelo tiene muchos triángulos"
-                      : "Preparando tu modelo"}
+                      ? "Reducción de triángulos pendiente"
+                      : "Importando modelo"}
               </Text>
               <Text size="sm" c="dimmed" mt={3}>
                 {job.state === "failed"
@@ -449,8 +448,8 @@ function Models({ config, setConfig, notify }) {
               </Text>
               {job.state === "processing" && (
                 <Text size="sm" c="dimmed" mt={5}>
-                  La Raspberry Pi está trabajando. Puede tardar varios minutos;
-                  puedes salir y volver a esta página.
+                  Puede tardar varios minutos. Puedes cerrar esta página y
+                  volver más tarde.
                 </Text>
               )}
               <ImportWarnings warnings={job.warnings} />
@@ -459,7 +458,7 @@ function Models({ config, setConfig, notify }) {
         </Paper>
       )}
       {error && (
-        <Alert color="red" mb="lg" title="No se pudo cargar la colección">
+        <Alert color="red" mb="lg" title="No se pudieron cargar los modelos">
           {error}
           <Button mt="sm" variant="light" onClick={load}>
             Reintentar
@@ -491,7 +490,7 @@ function Models({ config, setConfig, notify }) {
         >
           {dragging && (
             <div className="drop-overlay" aria-hidden="true">
-              Suelta tu modelo aquí
+              Suelta el archivo aquí
             </div>
           )}
           {empty ? (
@@ -526,11 +525,9 @@ function Models({ config, setConfig, notify }) {
                 </svg>
               </div>
               <div className="empty-collection-copy">
-                <Text className="eyebrow">TODO EMPIEZA CON UNA PIEZA</Text>
-                <Title order={2}>Tu primera pieza va aquí</Title>
+                <Title order={2}>No hay modelos</Title>
                 <Text c="dimmed" mt="sm" maw={470}>
-                  La colección está vacía. Sube un modelo 3D o arrástralo aquí y
-                  Gestur lo preparará para el visualizador.
+                  Sube un archivo 3D o arrástralo aquí.
                 </Text>
                 <Group mt="xl">
                   <ImportButton
@@ -610,7 +607,7 @@ function Models({ config, setConfig, notify }) {
                     <IconUpload size={24} />
                   </ThemeIcon>
                   <Title order={3} mt="xl">
-                    Suma una nueva pieza
+                    Añadir modelo
                   </Title>
                   <Text c="dimmed" mt="sm" mb="xl" size="sm">
                     Arrastra aquí un archivo 3D o un ZIP con el modelo y sus
@@ -636,17 +633,14 @@ function Models({ config, setConfig, notify }) {
           </ThemeIcon>
           <div>
             <Text fw={600} size="sm">
-              Un archivo, y nos encargamos del resto
+              Formatos admitidos
             </Text>
             <Text size="sm" c="dimmed" mt={4}>
               GLB, glTF, OBJ, FBX, STL, PLY, COLLADA y más. Si hay texturas o
-              archivos auxiliares, inclúyelos en un ZIP junto al modelo. Gestur
-              convierte el modelo y busca sus texturas aunque las rutas hayan
-              cambiado.
+              archivos auxiliares, inclúyelos en un ZIP junto al modelo.
             </Text>
             <Text size="xs" c="dimmed" mt={8}>
-              Si una textura falta o hay varias posibles, te avisaremos. Hasta
-              100 MB por subida · 250 MB al descomprimir · 500 archivos.
+              Hasta 100 MB por subida · 250 MB al descomprimir · 500 archivos.
             </Text>
           </div>
         </Group>
@@ -657,13 +651,11 @@ function Models({ config, setConfig, notify }) {
             <IconDeviceDesktop size={23} className="fixed-icon" />
             <div>
               <Text fw={600} size="sm">
-                {config.active_model
-                  ? "Elige qué muestra tu dispositivo"
-                  : "Tu dispositivo está listo para empezar"}
+                Pantalla de bienvenida
               </Text>
               <Text size="sm" c="dimmed">
-                Sin un modelo seleccionado, el visualizador muestra una figura
-                3D y un QR para abrir este portal.
+                Sin un modelo seleccionado, la pantalla muestra una figura 3D y
+                un QR para abrir el portal.
               </Text>
             </div>
           </Group>
@@ -685,16 +677,15 @@ function Models({ config, setConfig, notify }) {
         withCloseButton={false}
         closeOnClickOutside={false}
         closeOnEscape={false}
-        title="¿Hacemos tu modelo más ligero?"
+        title="Reducir triángulos"
         centered
         size="lg"
       >
         {proposal && (
           <Stack gap="lg">
             <Text size="sm" c="dimmed">
-              Hemos detectado un número muy elevado de triángulos. Reducirlos
-              puede ayudar a que el movimiento sea más fluido en la Raspberry
-              Pi.
+              El modelo tiene un número elevado de triángulos. Reducirlos puede
+              mejorar la fluidez en el dispositivo.
             </Text>
             <div className="simplify-comparison">
               <div>
@@ -729,9 +720,8 @@ function Models({ config, setConfig, notify }) {
               {formatCount(proposal.reductionPercent)} % menos triángulos
             </Badge>
             <Text size="sm">
-              La Raspberry Pi realizará la reducción; puede tardar varios
-              minutos. La simplificación puede cambiar algunos detalles de la
-              geometría.
+              La reducción se realiza en la Raspberry Pi y puede tardar varios
+              minutos. Algunos detalles del modelo pueden perderse.
             </Text>
             <ImportWarnings warnings={job.warnings} />
             {decisionError && (
@@ -754,7 +744,7 @@ function Models({ config, setConfig, notify }) {
                 disabled={deciding !== null}
                 leftSection={<IconBolt size={17} />}
               >
-                Reducir polígonos
+                Reducir triángulos
               </Button>
             </div>
           </Stack>
@@ -811,9 +801,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
     try {
       const d = await api("config", { method: "PUT", body: draft });
       setConfig(d.config);
-      notify(
-        "Parámetros guardados. El dispositivo los aplicará automáticamente.",
-      );
+      notify("Parámetros guardados.");
     } catch (e) {
       notify(e.message, true);
     } finally {
@@ -823,9 +811,8 @@ function Parameters({ config, setConfig, defaults, notify }) {
   return (
     <>
       <SectionTitle
-        eyebrow="A TU MANERA"
         title="Parámetros"
-        description="Ajusta cómo se transforma cada gesto en movimiento."
+        description="Configura los gestos y los movimientos del modelo."
         action={
           <Button
             leftSection={<IconCheck size={18} />}
@@ -833,13 +820,12 @@ function Parameters({ config, setConfig, defaults, notify }) {
             loading={saving}
             onClick={save}
           >
-            {dirty ? "Guardar cambios" : "Todo guardado"}
+            {dirty ? "Guardar cambios" : "Sin cambios"}
           </Button>
         }
       />
       <SimpleGrid cols={{ base: 1, md: 3 }} mb="xl">
         <Paper p="xl" withBorder>
-          <Text className="eyebrow">RECONOCIMIENTO</Text>
           <Title order={3} mb="lg">
             Cuerpo y manos
           </Title>
@@ -869,7 +855,6 @@ function Parameters({ config, setConfig, defaults, notify }) {
           </Stack>
         </Paper>
         <Paper p="xl" withBorder>
-          <Text className="eyebrow">RESPUESTA</Text>
           <Title order={3} mb="lg">
             Suavidad del gesto
           </Title>
@@ -884,7 +869,6 @@ function Parameters({ config, setConfig, defaults, notify }) {
           />
         </Paper>
         <Paper p="xl" withBorder>
-          <Text className="eyebrow">REPOSO</Text>
           <Title order={3} mb="lg">
             Volver al centro
           </Title>
@@ -993,7 +977,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
                     onChange={(v) => mapping(i, { input: v })}
                   />
                   <Select
-                    label="Movimiento del objeto"
+                    label="Movimiento del modelo"
                     value={m.output}
                     data={options(outputs).filter((o) =>
                       m.mode === "hybrid"
@@ -1142,7 +1126,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
                 max={30}
               />
               <Numeric
-                label="Fluidez de pantalla"
+                label="Fotogramas por segundo"
                 suffix=" fps"
                 value={draft.render.target_fps}
                 onChange={(v) => update("render", "target_fps", v)}
@@ -1219,9 +1203,8 @@ function Parameters({ config, setConfig, defaults, notify }) {
               />
             </Group>
             <Text size="xs" c="dimmed" mt="md">
-              La captura, el suavizado de bordes y la pantalla completa pueden
-              requerir reiniciar el visualizador. Los gestos se actualizan en
-              vivo.
+              Al cambiar la captura o la pantalla, el visor se reinicia
+              automáticamente. Los gestos se aplican sin reiniciar.
             </Text>
           </Accordion.Panel>
         </Accordion.Item>
@@ -1237,7 +1220,7 @@ function Parameters({ config, setConfig, defaults, notify }) {
             })
           }
         >
-          Restaurar parámetros originales
+          Restaurar valores predeterminados
         </Button>
         <Button disabled={!dirty} loading={saving} onClick={save}>
           Guardar cambios
@@ -1295,11 +1278,7 @@ function Settings({ notify }) {
   const pending = ["pending", "applying"].includes(wifi?.job?.state);
   return (
     <>
-      <SectionTitle
-        eyebrow="TU DISPOSITIVO"
-        title="Configuración"
-        description="Gestiona la conexión a tu instalación Gestur."
-      />
+      <SectionTitle title="Configuración" />
       <Paper withBorder p={{ base: "lg", sm: 32 }} maw={820}>
         <Group justify="space-between" mb="xl">
           <Group>
@@ -1309,7 +1288,7 @@ function Settings({ notify }) {
             <div>
               <Title order={2}>Punto de acceso Wi-Fi</Title>
               <Text c="dimmed" size="sm">
-                La red local desde la que accedes a este panel.
+                Red del dispositivo para acceder al portal.
               </Text>
             </div>
           </Group>
@@ -1359,7 +1338,6 @@ function Settings({ notify }) {
             )}
             <TextInput
               label="Nombre de la red"
-              description="En nuevas instalaciones: GESTUR y los últimos cuatro caracteres de la MAC."
               value={name}
               onChange={(e) => setName(e.currentTarget.value)}
               maxLength={32}
@@ -1465,7 +1443,7 @@ function Settings({ notify }) {
           ) : (
             <PasswordInput
               label="Nueva contraseña"
-              description="Entre 8 y 63 caracteres ASCII."
+              description="De 8 a 63 caracteres, sin tildes ni ñ."
               value={password}
               onChange={(e) => setPassword(e.currentTarget.value)}
               minLength={8}
@@ -1560,18 +1538,9 @@ function App() {
     return (
       <div className="login-page">
         <Paper p={40} withBorder radius="lg" className="login-card">
-          <div className="brand-mark">
-            <IconHandMove size={28} />
-          </div>
-          <Text className="eyebrow" mt="xl">
-            GESTUR / CONTROL LOCAL
-          </Text>
-          <Title order={1} mt="sm">
-            Dale movimiento.
+          <Title order={1} mb="xl">
+            Gestur
           </Title>
-          <Text c="dimmed" mt="sm" mb="xl">
-            Tu colección, tus gestos, tu espacio.
-          </Text>
           <form onSubmit={login}>
             <Stack>
               <PasswordInput
@@ -1588,14 +1557,10 @@ function App() {
                 loading={busy}
                 rightSection={<IconArrowRight size={18} />}
               >
-                Abrir panel
+                Acceder
               </Button>
             </Stack>
           </form>
-          <Text c="dimmed" size="xs" mt="xl">
-            Conexión directa con tu dispositivo. Sin cuentas ni servicios
-            externos.
-          </Text>
         </Paper>
       </div>
     );
@@ -1604,23 +1569,8 @@ function App() {
       <AppShell.Header>
         <Container size="xl" h="100%">
           <Group justify="space-between" h="100%">
-            <Group gap={12}>
-              <div className="brand-mark">
-                <IconHandMove size={25} />
-              </div>
-              <div>
-                <Text className="wordmark">
-                  gestur<span>®</span>
-                </Text>
-                <Text size="xs" c="dimmed">
-                  PANEL DE CONTROL
-                </Text>
-              </div>
-            </Group>
+            <Text className="wordmark">Gestur</Text>
             <Group>
-              <Badge variant="dot" color="teal" visibleFrom="sm">
-                Sesión local
-              </Badge>
               <Tooltip label="Cerrar sesión">
                 <ActionIcon
                   size="lg"
@@ -1719,19 +1669,6 @@ function App() {
               </>
             )}
           </Tabs>
-          <footer>
-            <Group justify="space-between">
-              <Text size="xs" c="dimmed">
-                GESTUR · El movimiento conecta.
-              </Text>
-              <Group gap={5}>
-                <IconBolt size={13} />
-                <Text size="xs" c="dimmed">
-                  Diseñado para Raspberry Pi
-                </Text>
-              </Group>
-            </Group>
-          </footer>
         </Container>
       </AppShell.Main>
     </AppShell>

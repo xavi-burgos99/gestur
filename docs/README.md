@@ -6,7 +6,6 @@
 - [Prepared OS images and first boot](first-boot.md)
 - [Portal, onboarding, model management, presets, and networking](portal.md)
 - [Configuration schema and controls](configuration.md)
-- [Capitel import example](../examples/capitel/README.md)
 
 ## Develop
 
@@ -31,6 +30,7 @@ state. Its values and source hashes belong to the revision originally measured.
 
 ## Licensing
 
+- [Project license](../LICENSE)
 - [Project licensing decision](licensing.md)
 - [Dependency and asset audit](licensing-audit.md)
 - [Third-party notices](../THIRD_PARTY_NOTICES.md)

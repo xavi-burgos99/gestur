@@ -2,6 +2,7 @@
   "name": "gestur-portal",
   "version": "1.0.0",
   "private": true,
+  "license": "SEE LICENSE IN ../LICENSE",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"

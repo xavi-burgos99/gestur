@@ -4,8 +4,6 @@
 docs/licenses/texts/** -text -whitespace
 docs/licenses/upstream/** -text -whitespace
 scripts/research/mobrecon/source/** -text
-examples/capitel/*.obj -text
-examples/capitel/*.mtl -text
 
 *.png binary
 *.jpg binary

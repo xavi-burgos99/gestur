@@ -1,18 +1,24 @@
-# Gestur Noncommercial Attribution License — review draft
+# Gestur Noncommercial Attribution License
 
-**NOT IN FORCE.** This is a proposed license text for the maintainer and legal
-review. Publishing this draft does not apply it to Gestur or grant permission to
-use the project. The effective revision and rights covered must be established
-before adoption. This draft is not a standard open-source license.
+Version 1.0 — 2026-09-27
+
+Copyright (c) 2024–2026 Xavier Burgos.
+
+This license applies prospectively from the Git revision that first introduces
+version 1.0 of this license and to later revisions distributed with it. It does
+not retroactively replace valid licenses for earlier copies. This is a
+source-available license with a noncommercial restriction, not an OSI-approved
+open-source license.
 
 ## 1. Scope
 
 “Licensor” means Xavier Burgos, but only to the extent that he owns or is
 expressly authorized to license the rights concerned. “Software” means the
-original Gestur code expressly designated as covered when this license is
-adopted. It does not include third-party dependencies, operating-system packages,
-third-party models or weights, vendored research source, or assets separately
-identified in `THIRD_PARTY_NOTICES.md` or accompanied by other terms.
+original Gestur source code and its accompanying original documentation and
+configuration in revisions distributed with this license. It does not include
+third-party dependencies, operating-system packages, third-party models or
+weights, vendored research source, or assets separately identified in
+`THIRD_PARTY_NOTICES.md` or accompanied by other terms.
 
 Third-party components retain their own licenses. Nothing in these terms
 restricts the exercise of rights separately granted by their copyright holders,
@@ -101,12 +107,3 @@ without warranties of merchantability, fitness for a particular purpose, title,
 or noninfringement. To that same extent, the Licensor is not liable for losses or
 damages arising from the Software or its use. These limitations do not exclude
 liability that cannot lawfully be excluded.
-
----
-
-Open points for review: ownership and earlier Apache grants; practical visible
-credit placement; the proposed treatment of ticketed nonprofit events and
-sponsorship; dependency obligations; termination and remedies under the applicable
-law; and whether an express patent grant or source-sharing condition is wanted.
-No jurisdiction, exclusive ownership, or clearance of third-party rights is
-assumed by this draft.

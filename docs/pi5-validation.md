@@ -5,6 +5,10 @@ Raspberry Pi OS Lite de 64 bits / Debian 13 trixie, kernel
 `6.18.50+rpt-rpi-2712`, cámara UGREEN USB, HDMI de 1920 × 1080 y ventilación
 `pwm-fan`. Python 3.12.14; las inferencias se ejecutaron en CPU ARM64.
 
+El capitel utilizado es un modelo de prueba externo y no se distribuye con el
+proyecto. Se conservan las rutas, los hashes y los resultados históricos para
+identificar la carga medida; no indican que sus archivos estén incluidos.
+
 El capitel original, con 491.038 triángulos y textura 2048 × 2048, se dibujó a
 38,62 FPS con cámara y seguimiento activos en una prueba de 60 segundos a 1080p.
 La CPU media del proceso fue 73,45 % de un núcleo y la temperatura máxima,
@@ -37,7 +41,8 @@ La actualización de gestión del 27 de septiembre se comprobó en la misma Pi.
 Tras un reinicio real, el capitel importado volvió a aparecer sin modificar la
 selección ni los parámetros guardados. Su GLB conserva los 491.038 triángulos
 y el JPEG original byte por byte; el OBJ, el material y la textura del archivo
-subido coinciden con los de [examples/capitel](../examples/capitel/README.md).
+subido coincidían con los archivos originales utilizados en esa comprobación.
+Ese modelo se conserva ahora fuera del repositorio.
 
 Una importación de prueba permitió verificar el cambio de nombre, la orientación
 guardada y su actualización en vivo en el visor. El hash del GLB no cambió.
@@ -538,8 +543,9 @@ Una escena vacía mide principalmente el sondeo de ausencia. No ejecutar
 benchmarks simultáneamente ni confundir estas herramientas sin visor con la
 aplicación completa.
 
-Para repetir el ensayo completo, usar una sesión Xorg acelerada, la cámara libre
-y ningún otro visor en paralelo. El directorio de salida debe ser nuevo:
+Para repetir el ensayo completo se necesita una copia externa del modelo
+identificado por el hash siguiente. Usar una sesión Xorg acelerada, la cámara
+libre y ningún otro visor en paralelo. El directorio de salida debe ser nuevo:
 
 ```sh
 .venv/bin/python scripts/benchmark_pi_system.py --source camera --duration 60 --model /ruta/capitel-original/capitell.obj --motion controls --output-dir /tmp/capitel-camera-new

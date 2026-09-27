@@ -223,6 +223,9 @@ export default function Settings({ notify, onOperation }) {
           )}
         </Paper>
       </DeviceSettings>
+      <Text size="xs" c="dimmed" mt="xl">
+        Desarrollado por Xavier Burgos
+      </Text>
       <Modal
         opened={!!dialog}
         onClose={() => {

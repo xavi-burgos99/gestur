@@ -44,7 +44,7 @@ derecha, separado de ambos bordes y más pequeño que el de bienvenida. Vaciar
 el campo elimina el QR. Se aplica al guardar, sin recargar la geometría, y se
 conserva al reiniciar; Gestur no visita ni descarga el enlace.
 
-La biblioteca está **vacía** en instalaciones nuevas. El [capitel original](../examples/capitel/README.md) está disponible en el repositorio para importarlo, pero no se instala como modelo predeterminado. El primer modelo importado se selecciona automáticamente; las siguientes importaciones conservan el último elegido. La selección se guarda y se recupera al reiniciar. Si falta el archivo elegido, se selecciona otro modelo disponible.
+La biblioteca está **vacía** en instalaciones nuevas. El capitel utilizado en las pruebas es un recurso externo y no se distribuye con el proyecto. El primer modelo importado se selecciona automáticamente; las siguientes importaciones conservan el último elegido. La selección se guarda y se recupera al reiniciar. Si falta el archivo elegido, se selecciona otro modelo disponible.
 
 Solo una biblioteca vacía muestra la bienvenida: figura 3D blanca al 15 % de opacidad a tamaño de pantalla, título «GESTUR», QR de módulos blancos sobre fondo transparente, «Escanea el QR para comenzar» y «o accede a {url}». El QR se genera localmente y no contiene la clave de administración. Usa la IP de la red del dispositivo, o la del punto de acceso sin LAN. `GESTUR_PORTAL_URL` permite fijar una URL con IP válida. Mientras no haya IP disponible se muestra la espera de conexión y se reintenta. Un fallo al cargar un modelo se informa como error; no se sustituye por la bienvenida si hay modelos disponibles.
 

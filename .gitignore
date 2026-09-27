@@ -37,4 +37,4 @@ build/
 tracking_models/*.task
 tracking_models/*.tflite
 *.log
-examples/capitel/*.zip
+/examples/capitel/

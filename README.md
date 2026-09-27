@@ -64,9 +64,9 @@ produces a self-contained GLB. Limits are 100 MB per upload, 250 MB unpacked, an
 500 files. Blender is not required.
 
 Models above one million triangles offer an optional reduction to approximately
-500,000 triangles. The Pi performs simplification only after confirmation. The
-[original capitel example](examples/capitel/README.md) contains 491,038 triangles
-and is not installed into the library automatically.
+500,000 triangles. The Pi performs simplification only after confirmation.
+No 3D models are distributed with the project; upload models you have permission
+to use. Historical capitel benchmarks used an external 491,038-triangle model.
 
 The first upload is selected automatically. The last selected model survives a
 restart; deleting it selects another available model. The welcome screen appears
@@ -159,9 +159,18 @@ Barcelona, 2024/2025, supervised by Fernando Vilariño at the Centre de Visió p
 Computador. Acknowledgements: Fran Iglesias, Fundación Épica – La Fura dels Baus,
 and Cátedra UAB–Cruïlla (TSI-100929-2023-2).
 
-The project license is under review. The intended policy is free noncommercial
-use with attribution, and separate written permission for commercial use. This
-statement is not a license grant. See the [licensing review](docs/licensing.md)
-and [dependency audit](docs/licensing-audit.md) before redistributing Gestur.
-Third-party components and example assets are not relicensed by that policy;
-see [third-party notices](THIRD_PARTY_NOTICES.md).
+Original Gestur code is available under the
+[Gestur Noncommercial Attribution License 1.0](LICENSE). Noncommercial use,
+modification, and sharing are free under its terms. Commercial use requires
+prior, explicit written permission from Xavier Burgos at
+[xavi@dzin.es](mailto:xavi@dzin.es).
+
+Keep the attribution **Gestur — developed by Xavier Burgos**. Public installations
+must display it legibly on screen or on a clearly visible adjacent sign; a
+private administration page alone is insufficient. Distributed web interfaces
+must retain an accessible developer credit.
+
+This is source-available software with a noncommercial restriction. Third-party
+components retain their own licenses, and valid earlier grants remain in force.
+See the [licensing guide](docs/licensing.md), [dependency audit](docs/licensing-audit.md),
+and [third-party notices](THIRD_PARTY_NOTICES.md) for scope and distribution duties.

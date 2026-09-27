@@ -1,17 +1,19 @@
 # Gestur dependency and rights audit
 
-Audit date: **2026-09-27**. Baseline application revision: **ef1d383** on `gestur-integrated`; formatting/documentation work may be newer. This is a factual engineering audit and a list of decisions still needed, **not a legal opinion or a guarantee of redistribution clearance**. It does not apply a license to Gestur.
+Audit date: **2026-09-27**. Baseline application revision: **ef1d383** on `gestur-integrated`; the dependency inventories, original notices, hashes and historical findings below describe that audit. This is a factual engineering audit, **not a legal opinion or a guarantee of redistribution clearance**.
+
+**Subsequent maintainer decision, 2026-09-27:** the approved **Gestur Noncommercial Attribution License 1.0**, Copyright 2024–2026 Xavier Burgos, is active in [LICENSE](../LICENSE), prospectively from the commit that introduces it. The capitel files have been removed from the current source checkout and distribution and moved to the maintainer's Downloads directory. These decisions do not rewrite the audited evidence, license third-party material, revoke valid prior grants, erase Git history, or resolve the academic-ownership questions identified below.
 
 ## Conclusion
 
-A noncommercial grant for **the original Gestur code that its licensor actually owns**, with separate written permission for commercial use, is technically plausible with this dependency stack. It cannot replace third-party licenses, withdraw earlier grants, or grant rights over an undocumented scan. Attribution in redistributed source is different from attribution visible to every visitor using a kiosk.
+The adopted license grants noncommercial use of **the original Gestur material that its licensor actually owns**, requires attribution, and requires separate express written permission for commercial use; [LICENSE](../LICENSE) controls its precise scope and conditions. This choice cannot replace third-party licenses, withdraw earlier grants, or grant rights over an undocumented scan. Attribution in redistributed source is different from attribution visible to every visitor using a kiosk; the adopted text specifies the applicable requirements.
 
 The runtime is not wholly MIT/BSD/Apache: Sharp includes LGPL libraries; the ARM64 OpenCV wheel includes FFmpeg and Qt; numerical wheels include GCC runtime code with an exception. These are manageable obligations, not evidence that every Gestur file must become GPL. A preinstalled image needs a separate binary/source compliance package. The files assembled here improve evidence and notices but do not yet constitute that complete image package.
 
-Priority decisions before public distribution:
+Priority conditions for public distribution, with the subsequent asset decision recorded:
 
-1. Confirm the licensor's rights in the academic work and the attribution wording/placement. Git identities and acknowledgements are not assignment agreements.
-2. Establish rights for the capitel mesh and photograph/texture, or exclude those assets from the distribution. Merely excluding them from Gestur's own license does not itself authorize distributing them.
+1. Confirm the licensor's rights in the academic work and comply with the attribution requirements in [LICENSE](../LICENSE). Git identities and acknowledgements are not assignment agreements; adopting a license does not settle ownership.
+2. **Current checkout exclusion completed:** the capitel mesh, materials, photograph/texture and user archive are no longer included. Establish their separate rights before any future redistribution. Historical copies and hashes remain evidence, not a permission grant.
 3. Preserve all upstream rights and satisfy the native library/source/replacement requirements for the exact image being shipped. Do not describe the entire image as noncommercial-only.
 4. Keep MobRecon weights, geometry templates/regressors, training data and example photographs out of a generally licensed/commercial release until their separate rights are resolved. They are already absent from tracked research assets.
 5. Explicitly preserve any valid historical Apache grants. A new restrictive license is prospective and cannot revoke those rights.
@@ -150,7 +152,7 @@ The model cards' intended-use limitations are not an invented extra noncommercia
 
 ## Vendored research and research dependencies
 
-The seven Python files under `scripts/research/mobrecon/source/` and their MIT license match **every stored SHA-256** in the manifest at upstream commit `3c87e958d4855f890e3884ec94bcfc0f99422c3d`. Existing copyright headers are retained. Credit: **Copyright (c) 2021 chenxingyu**, with individual files also naming Xingyu Chen. These files must remain under their upstream license even if original Gestur code receives noncommercial terms. [Pinned upstream license](https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/LICENSE).
+The seven Python files under `scripts/research/mobrecon/source/` and their MIT license match **every stored SHA-256** in the manifest at upstream commit `3c87e958d4855f890e3884ec94bcfc0f99422c3d`. Existing copyright headers are retained. Credit: **Copyright (c) 2021 chenxingyu**, with individual files also naming Xingyu Chen. These files remain under their upstream license; the adopted Gestur noncommercial terms do not apply to them. [Pinned upstream license](https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/LICENSE).
 
 The upstream [README](https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/README.md) acknowledges SpiralNet++ for SpiralConv. Its MIT notice, **Copyright (c) 2019 swgong**, is now preserved in [the additional original text](licenses/upstream/spiralnet-plus-LICENSE.txt). This is an attribution addition; the vendored source was not reformatted or edited.
 
@@ -162,8 +164,8 @@ Research-only preparation pins include PyTorch 2.14.0, ONNX 1.23.0, ONNX Runtime
 
 | Resource | Finding / action |
 | --- | --- |
-| `examples/capitel/capitell.obj`, `.mtl`, `.jpg` | Tracked example, original scan/texture authorship and license not documented. The OBJ/MTL say exported by Blender 3.6.2, which establishes neither rights to the scan nor a GPL license for the resulting model. Do not assign the scan to Xavier solely because it is in his Git history. Written permission/source credit is required before claiming a redistributable license. |
-| `examples/capitel/capitell.zip` | Existing untracked user file; not opened, modified, removed, staged or licensed by this audit. |
+| `examples/capitel/capitell.obj`, `.mtl`, `.jpg` | Tracked example at audited baseline `ef1d383`; subsequently removed from the current checkout/distribution and moved to Downloads. Original scan/texture authorship and license were not documented and remain unresolved. The OBJ/MTL say exported by Blender 3.6.2, which establishes neither rights to the scan nor a GPL license for the resulting model. Do not assign the scan to Xavier solely because it is in his Git history. Written permission/source credit is required before claiming a redistributable license. |
+| `examples/capitel/capitell.zip` | Existing untracked user file at the audit, then left untouched and unlicensed by the audit. Subsequently moved out of the checkout to Downloads at the user's request, together with the other capitel assets; it is not part of the current distribution. |
 | `portal/src/MotionIcon.jsx` | Repo-native SVG geometry, described in the design notes as original drawing inspired by Hugeicons' rounded stroke style. No Hugeicons package, downloaded SVG collection, or Hugeicons license found in the dependency tree. This records provenance; it is not a legal originality/similarity guarantee. |
 | Other portal icons | `@tabler/icons-react` 3.48.0 is actually used and MIT-licensed. Preserve Paweł Kuna/Tabler's original package notice. Do not describe all portal icons as wholly custom. |
 | `docs/design-assets/head-base.png`, `hand-base.png` | The prompt/provenance document records generated images from the integrated image tool. They are archived design references, not current portal public assets. Generated output provenance is not a guarantee of copyrightability, exclusivity or third-party clearance. |
@@ -171,24 +173,24 @@ Research-only preparation pins include PyTorch 2.14.0, ONNX 1.23.0, ONNX Runtime
 | Fonts | Portal uses the component/system font stack, with no extra downloaded web-font asset identified. Panda's default font and Matplotlib's distributed font data must be included in native/font notice review, not assumed covered solely by Python package metadata. |
 | Research photographs | MediaPipe fixture URLs and the MobRecon crop are recorded in research reports/manifests, not tracked as production assets. A model/code license should not automatically be applied to those photos. |
 
-Capitel SHA-256 for the audited tracked files: OBJ `dc6b46d861b0402a54041ffbed5ee7021dcc3f3872a7cd51599e9bd4b60d76d6`; JPG `440fd275205af9831b083ef899f8decf2f66ac24243f2131e302453b9ef0acd9`; MTL `c230b6110ce3f17b6bf61a29d1593729d30c0b14ad4ba12bdaedad2ff2d13202`. These identify files; they do not certify a license.
+Capitel SHA-256 for the audited tracked files: OBJ `dc6b46d861b0402a54041ffbed5ee7021dcc3f3872a7cd51599e9bd4b60d76d6`; JPG `440fd275205af9831b083ef899f8decf2f66ac24243f2131e302453b9ef0acd9`; MTL `c230b6110ce3f17b6bf61a29d1593729d30c0b14ad4ba12bdaedad2ff2d13202`. These identify the audited historical files; they do not certify a license. They are retained after removal of the assets from the current checkout. No history rewrite or clearance of historical redistribution is claimed.
 
 ## Git history and academic authorship
 
-The current README credits Xavier Burgos, Escola d'Enginyeria/UAB, academic year 2024/2025, supervisor Fernando Vilariño/CVC, Fran Iglesias, Fundación Épica – La Fura dels Baus and Cátedra UAB–Cruïlla. The historical README at `f200fb8` identifies the work as a TFG and refers to unspecified academic terms. It does not include an executable public license grant. All observed commit author identities are variants of Xavi Burgos; Git authorship is not evidence of exclusive copyright or an institutional assignment.
+The README inspected during the audit credits Xavier Burgos, Escola d'Enginyeria/UAB, academic year 2024/2025, supervisor Fernando Vilariño/CVC, Fran Iglesias, Fundación Épica – La Fura dels Baus and Cátedra UAB–Cruïlla. The historical README at `f200fb8` identifies the work as a TFG and refers to unspecified academic terms. It does not include an executable public license grant. All observed commit author identities are variants of Xavi Burgos; Git authorship is not evidence of exclusive copyright or an institutional assignment.
 
 There **was** a root license in reachable history:
 
 - `fc9fd2a131df78463cccc60e37976e10eb03d954` (2025-06-01, “mmpose test”) added a root Apache-2.0 license headed **Copyright 2018–2020 Open-MMLab** and a 1,999-file tree dominated by MMPose. That snapshot also contains root custom-looking `head_viewer.py` and `main.py` alongside upstream files.
 - `08bb72e` (2025-06-24, “mediapipe version”) removed the root `LICENSE`.
 - Original license Git blob: `b712427afe4978c6084580f113cdc87f77564fd9`, preserved in [historical-OpenMMLab-LICENSE.txt](licenses/upstream/historical-OpenMMLab-LICENSE.txt).
-- No current path has the same blob as the same path in that historical snapshot. This **does not prove** there are no derivatives, renamed files or retained portions. A scan of current project Python/JS headers found the explicit vendored HandMesh headers, not a current OpenMMLab header; that is not an exhaustive originality review.
+- No path in the audited checkout had the same blob as the same path in that historical snapshot. This **does not prove** there are no derivatives, renamed files or retained portions. A scan of current project Python/JS headers found the explicit vendored HandMesh headers, not a current OpenMMLab header; that is not an exhaustive originality review.
 
 The surrounding snapshot strongly indicates an upstream import, but a root license may have been understood to cover contributions in that revision. Do not assert that it was limited to MMPose without further evidence. Apache grants validly received for historical material continue under their own terms; removing the file and later adopting a noncommercial license does not retroactively revoke them. A maintainer can only license rights they hold, and must preserve relevant upstream notices on retained/derived portions. No copyright assignment, UAB agreement, CLA or institutional permission document was found in the tracked repository. Ownership and any academic/funding obligations need confirmation from the author/institution rather than inference.
 
 ## License choice and “attribution always”
 
-This section informs a decision; it does not adopt any option.
+The comparison below records the options considered during the audit. The maintainer subsequently approved the custom **Gestur Noncommercial Attribution License 1.0** now active in [LICENSE](../LICENSE); the standard licenses below are not alternative grants for original Gestur material.
 
 | Option | Fits free noncommercial use? | Commercial consent only? | Attribution consequence |
 | --- | --- | --- | --- |
@@ -200,8 +202,8 @@ This section informs a decision; it does not adopt any option.
 
 Primary texts: [PolyForm NC](https://polyformproject.org/licenses/noncommercial/1.0.0), [PolyForm source/branding instructions](https://github.com/polyformproject/polyform-licenses), [Creative Commons software FAQ](https://creativecommons.org/faq/#can-i-apply-a-creative-commons-license-to-software), [OSI definition, especially field-of-endeavour neutrality](https://opensource.org/osd). A noncommercial-only license is **source-available, not OSI open source**. Modifying PolyForm's terms requires removing its name/URL according to that project's instructions; do not silently bolt a custom display requirement onto text presented as the unchanged standard license.
 
-Decide whether “always” means credit in copies, in every public installation, in the administration portal, in the viewer, or in every frame; these are materially different requirements. Separate commercial permissions should preserve the agreed attribution requirement too. Whatever is chosen for original Gestur material, expressly carve out third-party code, models, fonts, OS components, independently licensed assets and valid prior grants. The software can prominently credit Xavier without claiming ownership of those components or their authors' endorsement.
+The audit distinguished credit in copies, public installations, the administration portal, the viewer and every frame, because these are materially different requirements. The adopted [LICENSE](../LICENSE) now states the chosen attribution obligations; any separate commercial permission must also address attribution under its agreed terms. Third-party code, models, fonts, OS components, independently licensed assets and valid prior grants remain outside the new Gestur restrictions. Crediting Xavier does not claim ownership of those components or their authors' endorsement.
 
 ## Remaining release work
 
-The source checkout now contains substantially better notices and a repeatable package inventory. Before releasing binaries/images: freeze the actual target dependencies; collect the target OS/native build notices and required corresponding sources; provide the LGPL library replacement/relinking/install route where applicable; verify licenses remain accessible alongside distributed frontend bundles; resolve the scan and academic rights; choose and publish the actual Gestur grant after the attribution decision. This audit did not alter the application, active licenses, user assets, dependencies, or the running Pi.
+The source checkout contains the adopted Gestur license, third-party notices and a repeatable package inventory; the capitel assets have been excluded from the current distribution. Before releasing binaries/images: freeze the actual target dependencies; collect the target OS/native build notices and required corresponding sources; provide the LGPL library replacement/relinking/install route where applicable; verify licenses and required attribution remain accessible alongside distributed frontend bundles; and confirm academic rights. The scan's rights must be resolved before any future redistribution, including redistribution from historical revisions. The original audit did not alter the application, licenses, user assets, dependencies, or running Pi; subsequent license adoption and local asset removal are recorded above as separate maintainer decisions. Neither decision completes the native/image compliance work or changes the preserved historical evidence.

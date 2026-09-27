@@ -1,6 +1,6 @@
 # Third-party notices
 
-Gestur uses independently licensed software and recognition models. **Any license adopted for original Gestur material does not replace or restrict these upstream licenses.** The notices below, original source headers, and the complete texts referenced here must be preserved as required by their respective terms. Listing a component does not imply endorsement by its authors.
+Gestur uses independently licensed software and recognition models. Original Gestur material is subject to the **Gestur Noncommercial Attribution License 1.0** in [LICENSE](LICENSE), effective prospectively from the commit that introduces it. **That license does not replace or restrict these upstream licenses or any valid prior grants.** The notices below, original source headers, and the complete texts referenced here must be preserved as required by their respective terms. Listing a component does not imply endorsement by its authors.
 
 This file is an attribution/evidence index, not a new grant over third-party material, not a relicensing of all repository files, and not a completed corresponding-source offer for a preinstalled Raspberry Pi OS image. Consult the [licensing audit](docs/licensing-audit.md) for unresolved asset rights and binary-distribution work.
 
@@ -8,7 +8,7 @@ This file is an attribution/evidence index, not a new grant over third-party mat
 
 The [dependency notice index](docs/licenses/DEPENDENCIES.md) links the original license/copyright/NOTICE files of all captured packages. The [inventory](docs/licenses/inventory.json) records package/version, dependency scope, original paths and SHA-256. Original texts are retained without rewriting in `docs/licenses/texts/`; copyright statements in those texts remain authoritative. Additional [upstream source texts](docs/licenses/upstream/sources.json) cover omissions in package archives and interpreter/bootstrap software.
 
-The inventory includes development tools and optional platform variants as well as runtime packages. [Linux ARM64 Python wheel evidence](docs/licenses/arm64-wheel-evidence.json) and [Linux ARM64 Node archive evidence](docs/licenses/arm64-node-evidence.json) record the inspected target builds and additional notices. A package's declared top-level license does not automatically cover every embedded native library.
+The inventory records the 2026-09-27 audit of application baseline `ef1d383`; it has not been rewritten to reflect the subsequent Gestur license adoption or capitel removal. It includes development tools and optional platform variants as well as runtime packages. [Linux ARM64 Python wheel evidence](docs/licenses/arm64-wheel-evidence.json) and [Linux ARM64 Node archive evidence](docs/licenses/arm64-node-evidence.json) record the inspected target builds and additional notices. A package's declared top-level license does not automatically cover every embedded native library.
 
 ## Python runtime and graphics
 
@@ -76,6 +76,6 @@ For an installed OS, retain `/usr/share/doc/<package>/copyright`, `/usr/share/co
 
 ## Assets and historical rights
 
-The capitel mesh/texture's original author and distribution permission are not established in the repository. No license for those files is created here. Likewise, the original gesture SVGs and archived generated raster images have their own provenance; this document makes no claim of exclusive copyright in generated output.
+The capitel model, materials, texture and user archive have been removed from the current source checkout and distribution, with the local files moved to the maintainer's Downloads directory. Their original author and distribution permission remain unestablished; the Gestur license grants no rights over them. The audit retains their historical findings and identifying hashes as evidence. Removal from the current checkout does not erase prior Git history or establish permission to redistribute those historical assets. Likewise, the original gesture SVGs and archived generated raster images have their own provenance; this document makes no claim of exclusive copyright in generated output.
 
 The root `LICENSE` present in historical commit `fc9fd2a` was Apache-2.0 with Open-MMLab copyright. The [original text is preserved](docs/licenses/upstream/historical-OpenMMLab-LICENSE.txt). Removing that file or adopting later terms does not revoke any valid historical grant. See the audit for scope uncertainty and academic-authorship questions.

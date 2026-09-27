@@ -69,9 +69,9 @@ scripts use them directly.
 
 Keep source, configuration schemas, tests, documentation, and small reproducible
 fixtures in Git. Keep environments, compiled portal assets, downloaded tracking
-weights, temporary measurements, credentials, and ZIP copies of the capitel out.
-Do not delete the original example, upstream notices, or published benchmark
-provenance as part of routine cleanup.
+weights, temporary measurements, credentials, and locally owned models out.
+The capitel used in historical trials is an external asset and is not distributed
+with the project. Preserve upstream notices and published benchmark provenance.
 
 Historical benchmark records describe their original revision. If benchmark
 code changes, preserve old measurements and record a new revision for a new run;
@@ -79,11 +79,18 @@ do not rewrite old hashes to match the current source.
 
 ## Licensing
 
-Read [the licensing review](docs/licensing.md) and
+Read the [project license](LICENSE), [licensing guide](docs/licensing.md), and
 [third-party notices](THIRD_PARTY_NOTICES.md) before adding dependencies, code,
 weights, images, or models. Record the exact version, provenance, license, and
 redistribution obligations. A repository license does not establish the rights
 to separately downloaded model weights or training assets.
 
-The maintainer must settle the project license and contribution terms before
-accepting external contributions that would affect future commercial licensing.
+Original Gestur code is distributed under the Gestur Noncommercial Attribution
+License 1.0. Keep its attribution and the applicable upstream notices. A source
+contribution must not include material the contributor is not authorized to
+license under the intended terms.
+
+Before merging external contributions, agree in writing on the maintainer's
+authority to offer those contributions under separate commercial terms. The
+project license alone does not transfer ownership or confer that additional
+authority. Record any third-party exceptions explicitly.

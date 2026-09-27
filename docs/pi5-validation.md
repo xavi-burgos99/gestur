@@ -20,10 +20,16 @@ correctamente en la Pi, pero su inferencia de una mano es más lenta que la red
 Lite actual en las pruebas descritas. Ninguna de estas mediciones demuestra
 mayor precisión ni valida todos los gestos.
 
+Tras actualizar y reiniciar, una nueva prueba de 60 segundos con cámara y
+capitel terminó a **38,22 FPS**, sin errores ni throttling. Sus condiciones y
+límites se documentan por separado: no prolonga a 30 minutos la validación del
+código más reciente ni permite comparar precisión o mejoras de rendimiento.
+
 El [manifiesto de resultados](benchmarks/pi5/manifest.json) identifica los JSON
-originales, los agregados calculados y la copia del ensayo de API con el SSID
-omitido. Registra los hashes y el código de medición. No se publican imágenes de
-la cámara, trazas voluminosas, direcciones de red ni credenciales.
+originales, los agregados calculados y las copias de pruebas del portal con el
+SSID o la dirección local omitidos. Registra los hashes y el código de medición.
+No se publican imágenes de la cámara, trazas voluminosas, direcciones de red ni
+credenciales.
 
 ## Cómo interpretar las unidades
 
@@ -77,6 +83,44 @@ Fuentes: [escena y condiciones](benchmarks/pi5/capitel-camera/manifest.json),
 [resumen original](benchmarks/pi5/capitel-camera/summary.json) y
 [agregados de telemetría](benchmarks/pi5/capitel-camera/telemetry-summary.json).
 Se conserva el hash del JSONL completo sin añadir la traza al repositorio.
+
+### Cámara y capitel después del reinicio final
+
+Con el despliegue de `549ca43` y los iconos de `9786282`, una nueva ejecución
+completó **60,031 s** de bucle y 60,267 s incluyendo cierre, con código de salida
+0. Se mantuvieron el capitel de 491.038 triángulos, su textura 2048 × 2048,
+pantalla visible a 1920 × 1080, V3D 7.1.7.0 y MSAA real de 4 muestras (2
+solicitadas). La cámara fue real y solo los controles movían el modelo.
+
+| Medida | Resultado |
+| --- | ---: |
+| Dibujo medio / control medio | 38,22 FPS / 40,15 Hz |
+| Intervalo entre dibujos, p50 / p95 / p99 | 32,28 / 34,18 / 91,60 ms |
+| CPU media del proceso desde 5 s, % de un núcleo | 74,03 % |
+| CPU media total del sistema desde 5 s | 21,64 % |
+| Temperatura máxima / lecturas con throttling | 61,7 °C / 0 de 61 |
+| RSS final / máximo muestreado | 428,52 / 461,45 MiB |
+| Captura / inferencias de pose / de manos | 1.105 / 407 / 302 |
+
+Las medias de CPU usan 56 muestras desde el segundo 5; no son las últimas
+lecturas del resumen. No hubo fallos de captura ni errores del muestreador,
+runtime o seguimiento, y todas las lecturas de throttling fueron `0x0`. Al final,
+las manos estaban en búsqueda a 3 FPS (`hand_idle=true`); esta prueba no acredita
+seguimiento persistente de dos manos ni precisión de gestos. La escena humana
+no fue controlada para compararla con el ensayo anterior, por lo que no se
+atribuye la diferencia de FPS o CPU a los cambios de código.
+
+El operador verificó que los hashes SHA-256 de los once archivos de runtime y
+benchmark enumerados en el manifiesto global coinciden entre la Pi y el
+checkout; estos también coinciden con `9786282`. La sesión normal volvió después
+a la bienvenida, sin modelo, con seguimiento detenido y sin error. Esta
+comprobación de 60 segundos no sustituye un ensayo prolongado de ese despliegue.
+
+Fuentes: [condiciones originales](benchmarks/pi5/capitel-camera-final/manifest.json),
+[resumen original](benchmarks/pi5/capitel-camera-final/summary.json) y
+[agregado de telemetría](benchmarks/pi5/capitel-camera-final/telemetry-summary.json).
+Los originales se conservan sin modificaciones y el hash de la traza completa,
+fuera de Git, figura en el manifiesto global.
 
 ## Ensayo sostenido de 30 minutos con el capitel
 
@@ -139,8 +183,8 @@ lector devuelve fin de captura al recibir la orden de detenerse.
 El resultado documenta la carga térmica y de recursos durante este ensayo con
 esta refrigeración. No demuestra precisión de gestos, consumo en vatios,
 latencia óptica, un cuello de botella concreto ni estabilidad indefinida.
-Tampoco alcanza el objetivo de 60 FPS. El reinicio y la comprobación del último
-despliegue siguen pendientes.
+Tampoco alcanza el objetivo de 60 FPS. La comprobación posterior del reinicio
+y del portal instalado se documenta en la sección de arranque gráfico.
 
 Fuentes sin modificar: [condiciones y escena](benchmarks/pi5/capitel-endurance/manifest.json)
 y [resumen final](benchmarks/pi5/capitel-endurance/summary.json). El JSONL completo
@@ -213,22 +257,53 @@ quedan conservados con sus hashes para repetir estas comparaciones.
 
 ## Portal, Wi-Fi y arranque gráfico
 
-El [ensayo de API](benchmarks/pi5/api-smoke.redacted.json) terminó en 30,14 s con
-sus 11 comprobaciones correctas: sesión de acceso, catálogo vacío y sin modelo
-activo, runtime conectado, configuración inicial, Wi-Fi abierto, añadir/cambiar/
-eliminar contraseña, restauración de la red abierta, configuración sin cambios
-y cierre de sesión. No quedan contraseñas de prueba activas. El SSID literal se
-ha omitido del JSON publicado; los resultados y tiempos se conservan. El
-manifiesto diferencia expresamente esta copia del original.
+La comprobación del portal en **HTTP 80**, con la corrección de importación
+nativa `549ca43`, completó sus **11 pruebas de API en
+30,2 s**: sesión de acceso, catálogo vacío y sin modelo activo, runtime conectado,
+configuración inicial, Wi-Fi abierto, añadir/cambiar/eliminar contraseña,
+restauración de la red abierta, configuración sin cambios y cierre de sesión.
+No quedan contraseñas de prueba activas. Este
+[resultado final](benchmarks/pi5/portal-http80/api-smoke.redacted.json) se conserva
+separado del [ensayo anterior de 30,14 s](benchmarks/pi5/api-smoke.redacted.json).
+La lectura puntual de FPS incluida en la API no es un benchmark de rendimiento.
+
+La [prueba final de importación](benchmarks/pi5/portal-http80/import-smoke.redacted.json)
+subió un ZIP con OBJ, MTL y PNG a través del portal instalado. La conversión
+nativa produjo un GLB de 2.068 bytes con dos triángulos, UV y textura de 2 × 2
+verificada. Se reparó una ruta de textura de Windows con diferencias de
+mayúsculas. La prueba eliminó únicamente su paquete y conservó el registro
+terminal del trabajo; dejó vacía la biblioteca, sin seleccionar modelo ni
+modificar parámetros.
+
+Las copias publicadas omiten el SSID de la API y la dirección local del ensayo
+de importación. Todos los resultados y tiempos se conservan; el
+[manifiesto final](benchmarks/pi5/portal-http80/manifest.json) identifica los
+campos omitidos y los hashes tanto originales como publicados.
 
 Se corrigió la selección de dispositivo DRM de Xorg: en Pi 5, `vc4` controla las
 salidas de pantalla y `v3d` proporciona render. La
 [regla instalada](../deployment/99-gestur-vc4.conf) selecciona `modesetting`
 sobre `vc4` como GPU principal, sin asumir si corresponde a `card0` o `card1`.
 El [instalador](../scripts/configure-xorg.sh) incorpora la corrección del commit
-`dcb57f6`. El renderer V3D y la salida HDMI acelerada están comprobados en los
-ensayos anteriores. **El arranque automático después de reiniciar con esta
-corrección sigue pendiente de comprobación.**
+`dcb57f6`. **El reinicio real y el arranque automático quedaron comprobados**
+después del despliegue de `549ca43` y la revisión de iconos `9786282`. Según la observación del operador,
+el identificador de arranque cambió y, al revisar el sistema con 21,56 s de
+actividad, el controlador se había iniciado automáticamente, el portal estaba
+activo y su `ExecStartPre` había terminado con código 0. Ese tiempo es el momento
+de inspección, no una medida de latencia de arranque.
+
+La misma revisión confirmó **V3D 7.1.7.0, Mesa 26.2.2 y aceleración activa**;
+HTTP respondió 200 tanto por mDNS como por IPv4. El runtime mostraba bienvenida,
+sin modelo seleccionado ni dibujado, seguimiento detenido y ningún error.
+Además, se ejecutó la función instalada `portal_url()`: devolvió una URL con
+esquema `http`, sin puerto explícito y con la dirección del punto de acceso,
+no una dirección de loopback. Se comprobó así el destino generado para el QR;
+**no se realizó un escaneo físico del QR**.
+Estas comprobaciones se registran explícitamente como observaciones del
+operador, no como un JSON original de captura; no se publican identificadores
+de arranque ni direcciones de red. Verifican el arranque tras la instalación
+manual. **El proceso completo de imagen preparada e instalación en su primer
+arranque sigue pendiente.**
 
 ## Captura y seguimiento con cámara USB
 
@@ -503,10 +578,11 @@ FaceLandmarker: 3.758.596 bytes, SHA-256
 
 ## Pendiente de completar
 
-Quedan pendientes el reinicio que confirme el arranque automático con la
-corrección gráfica instalada y la comprobación del último despliegue. El ensayo
-térmico de 30 minutos está completado con replay; no sustituye una sesión
-prolongada con visitantes y cámara real. Tampoco se han medido
+Queda pendiente el proceso completo de imagen preparada e instalación en el
+primer arranque. La instalación manual, el reinicio y el arranque automático
+gráfico y del portal sí están verificados. El ensayo térmico de 30 minutos está
+completado con replay; no sustituye una sesión prolongada con visitantes y
+cámara real. Tampoco se han medido
 vatios, latencia óptica cámara→pantalla, error angular 3D, oclusiones anotadas,
 dos manos persistentes ni pérdida y recuperación en secuencias reproducibles.
 

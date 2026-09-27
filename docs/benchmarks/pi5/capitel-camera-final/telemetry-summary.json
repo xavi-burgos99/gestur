@@ -1,0 +1,267 @@
+{
+  "source_telemetry": {
+    "path": "artifacts/pi5/capitel-camera-final/telemetry.jsonl",
+    "bytes": 136655,
+    "sha256": "fe3b53679a01ddb0b83ad54b6777a712c2cd6b9456e7e2fbdddb5904448e892d",
+    "committed": false
+  },
+  "source_manifest": {
+    "bytes": 2076,
+    "sha256": "c0aa07f29c43873a317386f63a9b574a68b8f8f7816d69cdcb7eb12211f5cdef"
+  },
+  "source_summary": {
+    "bytes": 2568,
+    "sha256": "473cd8c7f38d7f17f55c7f5d0864162594b96e159049668fa5ddfea2b68e23a4"
+  },
+  "aggregation_script": {
+    "filename": "aggregate_pi_trial.py",
+    "bytes": 13632,
+    "sha256": "ea8139fe5d6570ca3ade2fb0d7b7dccd2f4f491ca1645fb014c9e0cb4193fae7"
+  },
+  "method": {
+    "cpu": "Arithmetic mean of non-null outer hardware samples at elapsed_seconds >= 5; approximately 1 Hz, not a time-weighted integral.",
+    "cpu_process_unit": "Percent of one logical core; 100 means one core.",
+    "cpu_system_unit": "Percent of total system capacity across all logical cores; independently measured, not process CPU divided by cores.",
+    "temperature_rss_throttling": "All telemetry rows including startup and sampled cleanup. RSS is current resident memory in MiB, not model size or ru_maxrss.",
+    "fps_windows": "Fixed [n*60,(n+1)*60) second windows; unique runtime.updated_at stamps and render.frames counters. FPS=(last counter-first counter)/(last runtime timestamp-first runtime timestamp). Actual endpoints reported; no interpolation or invented counter at zero. Windows with <2 states or counter reset have null FPS.",
+    "runtime_time_origin": "Median of outer timestamp-elapsed_seconds; used only to align runtime timestamps with telemetry windows.",
+    "tail": "Last 300 seconds of observed telemetry (or from second 5 for shorter trials); includes sampled shutdown and is not labelled steady state.",
+    "null": "Missing/nonfinite values excluded, never interpreted as zero.",
+    "errors": "Counts are telemetry rows containing errors, not counts of independent incidents.",
+    "final_frame_percentiles": "Final controller percentiles use at most the last 18000 draw/control intervals, not necessarily the whole endurance trial."
+  },
+  "outcome": "completed",
+  "exit_code": 0,
+  "total_samples": 61,
+  "malformed_rows": 0,
+  "observed_window": {
+    "first_seconds": 0.001,
+    "last_seconds": 60.015
+  },
+  "sample_spacing_seconds": {
+    "median": 1.0,
+    "maximum": 1.004,
+    "gaps_over_2_5_seconds": 0
+  },
+  "cpu_window": {
+    "start_at_or_after_seconds": 5,
+    "first_sample_seconds": 5.006,
+    "last_sample_seconds": 60.015,
+    "samples": 56
+  },
+  "process_cpu_percent_one_core": {
+    "samples": 56,
+    "mean": 74.02875,
+    "minimum": 70.14,
+    "maximum": 78.84,
+    "first": 70.14,
+    "last": 75.19
+  },
+  "system_cpu_percent": {
+    "samples": 56,
+    "mean": 21.642857142857142,
+    "minimum": 18.65,
+    "maximum": 31.96,
+    "first": 18.86,
+    "last": 21.23
+  },
+  "temperature_c": {
+    "samples": 61,
+    "mean": 58.751639344262294,
+    "minimum": 54.55,
+    "maximum": 61.7,
+    "first": 54.55,
+    "last": 58.4
+  },
+  "rss_mib": {
+    "samples": 61,
+    "mean": 442.3967704918033,
+    "minimum": 193.125,
+    "maximum": 461.453,
+    "first": 193.125,
+    "last": 428.516
+  },
+  "process_peak_rss_mib": {
+    "samples": 61,
+    "mean": 446.21490163934425,
+    "minimum": 192.156,
+    "maximum": 459.125,
+    "first": 192.156,
+    "last": 459.125
+  },
+  "cpu_frequency_mhz": {
+    "samples": 61,
+    "mean": 2378.688524590164,
+    "minimum": 1700.0,
+    "maximum": 2400.0,
+    "first": 2400.0,
+    "last": 2400.0
+  },
+  "throttling": {
+    "samples": 61,
+    "missing_samples": 0,
+    "raw_values": [
+      "0x0"
+    ],
+    "now_true_samples": {
+      "undervoltage": 0,
+      "frequency_capped": 0,
+      "throttled": 0,
+      "soft_temperature_limit": 0
+    },
+    "since_boot_first": {
+      "undervoltage": false,
+      "frequency_capped": false,
+      "throttled": false,
+      "soft_temperature_limit": false
+    },
+    "since_boot_last": {
+      "undervoltage": false,
+      "frequency_capped": false,
+      "throttled": false,
+      "soft_temperature_limit": false
+    }
+  },
+  "sampler_errors": 0,
+  "runtime_errors": 0,
+  "tracking_error_samples": 0,
+  "abort_reason_samples": 0,
+  "capture_failure_counters": {
+    "maximum_during_telemetry": 0,
+    "after_cleanup": 0
+  },
+  "runtime_snapshots": {
+    "unique_valid": 59,
+    "repeated": 0,
+    "conflicting_timestamps_omitted": 0
+  },
+  "final_300_seconds": {
+    "requested_start_seconds": 5,
+    "first_sample_seconds": 5.006,
+    "last_sample_seconds": 60.015,
+    "system_cpu_percent": {
+      "samples": 56,
+      "mean": 21.642857142857142,
+      "minimum": 18.65,
+      "maximum": 31.96,
+      "first": 18.86,
+      "last": 21.23
+    },
+    "temperature_c": {
+      "samples": 56,
+      "mean": 59.058035714285715,
+      "minimum": 56.75,
+      "maximum": 61.7,
+      "first": 56.75,
+      "last": 58.4
+    },
+    "rss_mib": {
+      "samples": 56,
+      "mean": 453.55105357142855,
+      "minimum": 425.734,
+      "maximum": 461.453,
+      "first": 455.078,
+      "last": 428.516
+    },
+    "draw": {
+      "samples": 55,
+      "fps": 39.93207355686141,
+      "first_runtime_seconds": 5.061260461807251,
+      "last_runtime_seconds": 59.82926535606384,
+      "duration_seconds": 54.76800489425659,
+      "drawn_frames": 2187
+    }
+  },
+  "windows_60_seconds": [
+    {
+      "start_seconds": 0,
+      "end_seconds_exclusive": 60,
+      "first_telemetry_seconds": 0.001,
+      "last_telemetry_seconds": 59.014,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 38.67036748007943,
+        "first_runtime_seconds": 0.9986891746520996,
+        "last_runtime_seconds": 59.82926535606384,
+        "duration_seconds": 58.83057618141174,
+        "drawn_frames": 2275
+      },
+      "system_cpu_percent": {
+        "samples": 55,
+        "mean": 21.650363636363636,
+        "minimum": 18.65,
+        "maximum": 31.96,
+        "first": 18.86,
+        "last": 24.34
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 55,
+        "mean": 74.00763636363637,
+        "minimum": 70.14,
+        "maximum": 78.84,
+        "first": 70.14,
+        "last": 70.31
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 58.7575,
+        "minimum": 54.55,
+        "maximum": 61.7,
+        "first": 54.55,
+        "last": 60.6
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 442.62811666666664,
+        "minimum": 193.125,
+        "maximum": 461.453,
+        "first": 193.125,
+        "last": 428.516
+      }
+    },
+    {
+      "start_seconds": 60,
+      "end_seconds_exclusive": 120,
+      "first_telemetry_seconds": 60.015,
+      "last_telemetry_seconds": 60.015,
+      "telemetry_samples": 1,
+      "draw": {
+        "samples": 0,
+        "fps": null
+      },
+      "system_cpu_percent": {
+        "samples": 1,
+        "mean": 21.23,
+        "minimum": 21.23,
+        "maximum": 21.23,
+        "first": 21.23,
+        "last": 21.23
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 1,
+        "mean": 75.19,
+        "minimum": 75.19,
+        "maximum": 75.19,
+        "first": 75.19,
+        "last": 75.19
+      },
+      "temperature_c": {
+        "samples": 1,
+        "mean": 58.4,
+        "minimum": 58.4,
+        "maximum": 58.4,
+        "first": 58.4,
+        "last": 58.4
+      },
+      "rss_mib": {
+        "samples": 1,
+        "mean": 428.516,
+        "minimum": 428.516,
+        "maximum": 428.516,
+        "first": 428.516,
+        "last": 428.516
+      }
+    }
+  ]
+}

@@ -48,7 +48,7 @@ Consulta las [condiciones, scripts y resultados originales](pi5-validation.md). 
 .venv/bin/python scripts/benchmark_pi_system.py --source camera --duration 60 --model /ruta/capitel-original/capitell.obj --motion controls --output-dir /tmp/capitel-render-new
 ```
 
-La [guía de medición](performance.md) explica el registro térmico y el corte por temperatura superior a 85 °C. El ensayo sostenido completó **30 minutos con replay y giro continuo**, a **39,18 FPS**, con CPU total media de **20,53 %** y temperatura máxima de **60,6 °C**. Las 1.800 lecturas de throttling fueron cero. Conservó el capitel, textura, 1080p y MSAA real de 4 muestras; los [resultados por minuto](benchmarks/pi5/capitel-endurance/windows-60s.md) identifican la carga y sus límites. El reinicio del último despliegue sigue pendiente. No se han medido consumo eléctrico ni latencia física de presentación.
+La [guía de medición](performance.md) explica el registro térmico y el corte por temperatura superior a 85 °C. El ensayo sostenido completó **30 minutos con replay y giro continuo**, a **39,18 FPS**, con CPU total media de **20,53 %** y temperatura máxima de **60,6 °C**. Las 1.800 lecturas de throttling fueron cero. Conservó el capitel, textura, 1080p y MSAA real de 4 muestras; los [resultados por minuto](benchmarks/pi5/capitel-endurance/windows-60s.md) identifican la carga y sus límites. Posteriormente se verificó el reinicio del despliegue actualizado con arranque automático y gráfica V3D acelerada; la prueba de cámara de ese despliegue duró 60 segundos, no 30 minutos. No se han medido consumo eléctrico ni latencia física de presentación.
 
 ## Comprobaciones
 

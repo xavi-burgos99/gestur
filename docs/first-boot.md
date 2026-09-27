@@ -75,6 +75,6 @@ bash -n gestur.sh scripts/install-portal.sh
 
 Las pruebas usan raíces temporales y comandos simulados: verifican la preparación, exclusiones, permisos, fallos, reintentos y la marca de finalización sin instalar paquetes ni reiniciar el equipo de desarrollo.
 
-En una Pi 5 física de 4 GB se completó la **instalación manual** y se comprobaron portal, Wi-Fi, cámara y visor con aceleración V3D; véase el [informe de validación](pi5-validation.md). Se corrigió la selección de `vc4` como salida principal de Xorg. Confirmar el arranque automático después de reiniciar con esa corrección sigue pendiente.
+En una Pi 5 física de 4 GB se completó la **instalación manual** y se comprobaron portal, Wi-Fi, cámara y visor con aceleración V3D; véase el [informe de validación](pi5-validation.md). Se corrigió la selección de `vc4` como salida principal de Xorg y se verificó un reinicio real con arranque automático del controlador, gráfica acelerada y portal en HTTP 80.
 
 El proceso completo **imagen preparada → primer encendido → instalación automática → reinicio** no se ha ejecutado todavía en la Pi. La instalación manual y los ensayos gráficos no validan por sí solos ese recorrido.

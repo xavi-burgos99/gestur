@@ -60,7 +60,7 @@ Para aislar el coste de antialiasing, copia `config/default.json` a un archivo l
 - [Geometría y comparación de modelos](performance-research.md): Lite frente a Full, alternativas faciales y compatibilidad del runtime reciente.
 - Los ensayos matemáticos cubren los giros combinados de palma, ambas manos y la pérdida/recuperación de detección. Corrigen errores del cálculo anterior; no sustituyen evaluar la precisión con una cámara y personas reales.
 - La validación de integración ejecutó el controlador, ambos modelos nativos y el visor de 524.288 triángulos durante cinco segundos. La captura se sustituyó por una imagen oficial repetida; se comprobó inferencia, dibujo y cierre sin errores, sin atribuirlo a una prueba de cámara USB o Pi. Las pruebas de ciclo de vida cubren cambios durante una carga lenta, reconexión con callbacks tardíos y una cámara que sigue ocupada tras solicitar su cierre.
-- La verificación inicial en Linux ARM64 cubrió los servicios de primer arranque y la copia de módulos. Después se completó la instalación manual en la Pi física y se ejecutaron portal, seguimiento y visor acelerado. El proceso completo de imagen preparada → instalación en primer arranque → reinicio sigue pendiente, igual que confirmar el arranque automático tras reiniciar con la corrección Xorg.
+- La verificación inicial en Linux ARM64 cubrió los servicios de primer arranque y la copia de módulos. Después se completó la instalación manual en la Pi física y se ejecutaron portal, seguimiento y visor acelerado. Se verificó un reinicio real con arranque automático tras la corrección Xorg, y el portal respondió en HTTP 80. El proceso completo de imagen preparada → instalación en primer arranque → reinicio sigue pendiente.
 
 ## Referencias de implementación
 

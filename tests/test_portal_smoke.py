@@ -3,6 +3,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -128,6 +129,11 @@ def import_cleanup(tmp_path):
 
     def call(method, endpoint, **kwargs):
         state.calls.append((method, endpoint))
+        if method == 'DELETE':
+            assert endpoint == '/api/models'
+            assert kwargs['value'] == {'id': job_id + '/model.glb'}
+            shutil.rmtree(package)
+            return {'config': copy.deepcopy(baseline)}
         assert method == 'GET', 'Cleanup must never overwrite settings or selections'
         if endpoint == '/api/imports/current':
             return {'job': copy.deepcopy(state.current_job)}
@@ -155,6 +161,8 @@ def test_import_cleanup_removes_own_automatically_selected_fixture_and_reconcile
     state = import_cleanup
     result = state.cleanup()
     assert result['removed_own_package'] and result['configuration_restored']
+    assert result['deleted_through_api']
+    assert ('DELETE', '/api/models') in state.calls
     assert not state.package.exists()
     assert (state.root / '.import-job.json').read_text() == 'diagnostic history'
     assert state.calls[-1] == ('GET', '/api/config')

@@ -9,7 +9,8 @@ import sys
 import time
 
 from control_system import create_control_system
-from runtime_config import default_config, load_config, validate_config, reconcile_model_selection
+from runtime_config import (default_config, load_config, validate_config, reconcile_model_selection,
+                            load_model_orientation, validate_model_orientation)
 from runtime_state import FrameMetrics, LatestPose
 from tracking_session import TrackingSession, tracking_request
 from device_metrics import DeviceMetrics
@@ -56,6 +57,7 @@ class PoseController:
         self.config_error = None
         self.requested_model = self.config["active_model"]
         self.rendered_model = None
+        self.rendered_orientation = validate_model_orientation()
         self.exit_code = 0
         self.tracking_session = TrackingSession(self._on_pose_update)
         self.visualizer = None
@@ -67,8 +69,12 @@ class PoseController:
         from visualizer import ControlledObjViewer
         try:
             model_path = self.obj_override or resolve_model(self.config["active_model"], self.models_dir)
-            self.visualizer = ControlledObjViewer(model_path, **self.config["render"], show_fps=show_fps)
+            orientation = (validate_model_orientation() if self.obj_override else
+                           load_model_orientation(self.requested_model, self.models_dir))
+            self.visualizer = ControlledObjViewer(model_path, **self.config["render"],
+                                                 model_orientation=orientation, show_fps=show_fps)
             self.rendered_model = str(self.obj_override) if self.obj_override else self.requested_model
+            self.rendered_orientation = orientation
         except (ValueError, OSError, RuntimeError) as exc:
             if self.obj_override:
                 raise
@@ -124,10 +130,16 @@ class PoseController:
         try:
             candidate = self._read_config()
             self.requested_model = candidate["active_model"]
-            if not self.obj_override and (candidate["active_model"] != self.rendered_model or self.model_error):
+            if not self.obj_override:
                 try:
-                    self.visualizer.load_model(resolve_model(candidate["active_model"], self.models_dir))
-                    self.rendered_model = candidate["active_model"]
+                    orientation = load_model_orientation(candidate["active_model"], self.models_dir)
+                    if candidate["active_model"] != self.rendered_model or self.model_error:
+                        self.visualizer.load_model(resolve_model(candidate["active_model"], self.models_dir),
+                                                   orientation=orientation)
+                        self.rendered_model = candidate["active_model"]
+                    elif orientation != self.rendered_orientation:
+                        self.visualizer.set_model_orientation(orientation)
+                    self.rendered_orientation = orientation
                     self.model_error = None
                 except (ValueError, OSError, RuntimeError) as exc:
                     self.model_error = f"No se pudo cargar el modelo seleccionado: {exc}"
@@ -156,7 +168,9 @@ class PoseController:
         if not self.status_path:
             return
         report = {"updated_at": time.time(), "selected_model": self.requested_model,
-                  "rendered_model": self.rendered_model, "error": self.last_error,
+                  "rendered_model": self.rendered_model,
+                  "rendered_orientation": self.rendered_orientation if self.rendered_model is not None else None,
+                  "error": self.last_error,
                   "render": self.visualizer.render_metrics.summary(),
                   "control_loop": self.metrics.summary(),
                   "render_scheduler": self.visualizer.get_render_status(),

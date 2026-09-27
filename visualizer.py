@@ -17,6 +17,7 @@ from panda3d.core import (
 
 from render_scheduler import RenderCadence
 from runtime_state import FrameMetrics
+from runtime_config import validate_model_orientation
 
 
 def _usable_ipv4(address):
@@ -105,7 +106,7 @@ def _welcome_geometry():
 class ControlledObjViewer(ShowBase):
     def __init__(self, obj_path=None, *, target_fps=60, antialias_samples=2,
                  fullscreen=True, hide_cursor=True, show_fps=False,
-                 window_type=None):
+                 window_type=None, model_orientation=None):
         # Configure before creating the context. Preserve geometry and textures.
         if antialias_samples not in (0, 2, 4):
             raise ValueError("antialias_samples debe ser 0, 2 o 4")
@@ -148,6 +149,9 @@ class ControlledObjViewer(ShowBase):
         }
         self.model = None
         self.model_path = None
+        self.model_orientation = validate_model_orientation()
+        self.model_fit = None
+        self.model_basis = None
         self.welcome = None
         self.welcome_overlay = None
         self.welcome_url = None
@@ -170,7 +174,7 @@ class ControlledObjViewer(ShowBase):
             meter.set_scale(.035)
             meter.set_pos(.03, 0, -.06)
         try:
-            self.load_model(obj_path)
+            self.load_model(obj_path, orientation=model_orientation)
         except Exception:
             self.destroy()
             raise
@@ -242,11 +246,12 @@ class ControlledObjViewer(ShowBase):
             self.taskMgr.remove("gestur-render-cadence")
         super().destroy()
 
-    def load_model(self, obj_path):
+    def load_model(self, obj_path, *, orientation=None):
         """Load before replacing the current scene; failed loads leave it intact."""
         if obj_path is None:
             self.show_welcome()
             return
+        orientation = validate_model_orientation(orientation)
         path = Path(obj_path).expanduser().resolve(strict=True)
         try:
             candidate = self.loader.loadModel(Filename.from_os_specific(str(path)), okMissing=True)
@@ -262,15 +267,10 @@ class ControlledObjViewer(ShowBase):
             candidate.clear_model_nodes()
             candidate.flatten_strong()
             wrapper = self.render.attach_new_node("gestur-object")
-            candidate.reparent_to(wrapper)
-            bounds = candidate.get_tight_bounds()
-            if bounds:
-                low, high = bounds
-                extent = max(high - low)
-                if extent > 1e-8:
-                    factor = 12.0 / extent
-                    candidate.set_scale(factor)
-                    candidate.set_pos(-(low + high) * (0.5 * factor))
+            fit = wrapper.attach_new_node("gestur-model-fit")
+            basis = fit.attach_new_node("gestur-model-orientation")
+            candidate.reparent_to(basis)
+            self._orient_and_fit(basis, fit, orientation)
             wrapper.set_pos(*self.current_state["position"])
             wrapper.set_hpr(*self.current_state["rotation"])
             wrapper.set_scale(*self.current_state["scale"])
@@ -281,6 +281,9 @@ class ControlledObjViewer(ShowBase):
             raise ValueError(f"No se pudo preparar el modelo: {path.name}") from exc
         previous = self.model
         self.model = wrapper
+        self.model_fit = fit
+        self.model_basis = basis
+        self.model_orientation = orientation
         self.model_path = str(path)
         if previous is not None:
             previous.remove_node()
@@ -291,6 +294,30 @@ class ControlledObjViewer(ShowBase):
         # The scene owns its assets; avoid retaining previously selected models.
         self.loader.unloadModel(Filename.from_os_specific(str(path)))
         self.invalidate(frames=2)
+
+    @staticmethod
+    def _orient_and_fit(basis, fit, orientation):
+        # Panda's heading/pitch/roll rotate Z/X/Y. The inner basis is fixed;
+        # the outer exhibition wrapper remains controlled only by gestures.
+        basis.set_hpr(orientation["z"], orientation["x"], orientation["y"])
+        bounds = basis.get_tight_bounds(fit)
+        if bounds:
+            low, high = bounds
+            extent = max(high - low)
+            if extent > 1e-8:
+                factor = 12.0 / extent
+                fit.set_scale(factor)
+                fit.set_pos(-(low + high) * (0.5 * factor))
+
+    def set_model_orientation(self, orientation):
+        """Rotate an existing model without reparsing assets or changing controls."""
+        orientation = validate_model_orientation(orientation)
+        if self.model is None or orientation == self.model_orientation:
+            return False
+        self._orient_and_fit(self.model_basis, self.model_fit, orientation)
+        self.model_orientation = orientation
+        self.invalidate(frames=2)
+        return True
 
     def _set_model_camera(self):
         if self.cam:
@@ -351,6 +378,9 @@ class ControlledObjViewer(ShowBase):
             self.model.remove_node()
         self.model = None
         self.model_path = None
+        self.model_fit = None
+        self.model_basis = None
+        self.model_orientation = validate_model_orientation()
         if self.welcome is not None:
             return
         self.setBackgroundColor(0, 0, 0, 1)

@@ -19,6 +19,7 @@ import {
   TextInput,
   PasswordInput,
   Modal,
+  Menu,
   Alert,
   Loader,
   FileButton,
@@ -46,6 +47,10 @@ import {
   IconRefresh,
   IconDeviceDesktop,
   IconBolt,
+  IconDotsVertical,
+  IconPencil,
+  IconTrash,
+  IconRotateClockwise,
 } from "@tabler/icons-react";
 import "@mantine/core/styles.css";
 import "./styles.css";
@@ -189,27 +194,42 @@ function Models({ config, setConfig, notify }) {
   const [decisionError, setDecisionError] = useState("");
   const [deciding, setDeciding] = useState(null);
   const [dragging, setDragging] = useState(false);
+  const [modelDialog, setModelDialog] = useState(null);
+  const [modelName, setModelName] = useState("");
+  const [orientation, setOrientation] = useState({ x: 0, y: 0, z: 0 });
+  const [modelError, setModelError] = useState("");
   const importRevision = useRef(0);
   const importMutating = useRef(false);
   const completedJob = useRef(null);
   const dragDepth = useRef(0);
   const selectionRevision = useRef(0);
   const selectionMutating = useRef(false);
+  const catalogRequest = useRef(0);
   const pending = ["processing", "awaiting_decision"].includes(job?.state);
-  const importDisabled = restoring || uploading || pending;
+  const importDisabled = restoring || uploading || pending || busy || loading;
   const load = useCallback(async () => {
     const revision = selectionRevision.current;
+    const request = ++catalogRequest.current;
     setLoading(true);
     setError("");
     try {
       const data = await api("models");
+      if (
+        request !== catalogRequest.current ||
+        revision !== selectionRevision.current ||
+        selectionMutating.current
+      )
+        return;
       setModels(data.models);
-      if (revision === selectionRevision.current && !selectionMutating.current)
-        setConfig((current) => ({ ...current, active_model: data.active }));
+      setConfig((current) => ({ ...current, active_model: data.active }));
     } catch (e) {
-      setError(e.message);
+      if (
+        request === catalogRequest.current &&
+        revision === selectionRevision.current
+      )
+        setError(e.message);
     } finally {
-      setLoading(false);
+      if (request === catalogRequest.current) setLoading(false);
     }
   }, [setConfig]);
   useEffect(() => {
@@ -251,7 +271,13 @@ function Models({ config, setConfig, notify }) {
     }
   }, [job?.id, job?.state, load]);
   async function upload(file) {
-    if (!file || importDisabled || importMutating.current) return;
+    if (
+      !file ||
+      importDisabled ||
+      importMutating.current ||
+      selectionMutating.current
+    )
+      return;
     importRevision.current += 1;
     importMutating.current = true;
     setUploading(true);
@@ -289,7 +315,7 @@ function Models({ config, setConfig, notify }) {
     }
   }
   async function activate(id) {
-    if (selectionMutating.current) return;
+    if (importDisabled || selectionMutating.current) return;
     selectionRevision.current += 1;
     selectionMutating.current = true;
     setBusy(true);
@@ -303,9 +329,59 @@ function Models({ config, setConfig, notify }) {
     } catch (e) {
       notify(e.message, true);
     } finally {
+      selectionRevision.current += 1;
       selectionMutating.current = false;
       setBusy(false);
     }
+  }
+  function openModelDialog(kind, model) {
+    if (importDisabled || selectionMutating.current) return;
+    setModelDialog({ kind, model });
+    setModelName(model.name);
+    setOrientation({ x: 0, y: 0, z: 0, ...model.orientation });
+    setModelError("");
+  }
+  function closeModelDialog() {
+    if (!selectionMutating.current) setModelDialog(null);
+  }
+  async function saveModel(event) {
+    event.preventDefault();
+    if (!modelDialog || importDisabled || selectionMutating.current) return;
+    const name = modelName.trim();
+    if (!name || name.length > 100) {
+      setModelError("Escribe un nombre de entre 1 y 100 caracteres.");
+      return;
+    }
+    await changeModel("PATCH", { id: modelDialog.model.id, name, orientation });
+  }
+  async function changeModel(method, body) {
+    if (importDisabled || selectionMutating.current) return;
+    selectionRevision.current += 1;
+    selectionMutating.current = true;
+    setBusy(true);
+    setModelError("");
+    let changed = false;
+    try {
+      const result = await api("models", { method, body });
+      setModels((current) =>
+        method === "DELETE"
+          ? current.filter((model) => model.id !== body.id)
+          : current.map((model) =>
+              model.id === body.id ? result.model : model,
+            ),
+      );
+      setConfig(result.config);
+      setModelDialog(null);
+      notify(method === "DELETE" ? "Modelo eliminado." : "Modelo actualizado.");
+      changed = true;
+    } catch (e) {
+      setModelError(e.message);
+    } finally {
+      selectionRevision.current += 1;
+      selectionMutating.current = false;
+      setBusy(false);
+    }
+    if (changed) await load();
   }
   function drop(event) {
     event.preventDefault();
@@ -525,7 +601,41 @@ function Models({ config, setConfig, notify }) {
                   key={model.id}
                   withBorder
                 >
-                  <ModelArt />
+                  <div className="model-preview">
+                    <ModelArt />
+                    <Menu position="bottom-end" shadow="md" width={190}>
+                      <Menu.Target>
+                        <ActionIcon
+                          className="model-actions"
+                          variant="white"
+                          color="dark"
+                          size="lg"
+                          aria-label={`Opciones de ${model.name}`}
+                          disabled={importDisabled}
+                        >
+                          <IconDotsVertical size={19} stroke={1.7} />
+                        </ActionIcon>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Item
+                          leftSection={<IconPencil size={17} stroke={1.7} />}
+                          onClick={() => openModelDialog("edit", model)}
+                          disabled={importDisabled}
+                        >
+                          Ajustar modelo
+                        </Menu.Item>
+                        <Menu.Divider />
+                        <Menu.Item
+                          color="red"
+                          leftSection={<IconTrash size={17} stroke={1.7} />}
+                          onClick={() => openModelDialog("delete", model)}
+                          disabled={importDisabled}
+                        >
+                          Eliminar
+                        </Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
+                  </div>
                   <Stack p="xl" gap="md">
                     <Group
                       justify="space-between"
@@ -567,7 +677,9 @@ function Models({ config, setConfig, notify }) {
                           <IconArrowUpRight size={17} />
                         )
                       }
-                      disabled={busy || config.active_model === model.id}
+                      disabled={
+                        importDisabled || config.active_model === model.id
+                      }
                       onClick={() => activate(model.id)}
                     >
                       {config.active_model === model.id
@@ -638,6 +750,153 @@ function Models({ config, setConfig, notify }) {
           </Group>
         </Paper>
       )}
+      <Modal
+        opened={modelDialog?.kind === "edit"}
+        onClose={closeModelDialog}
+        closeOnClickOutside={!busy}
+        closeOnEscape={!busy}
+        withCloseButton={!busy}
+        title="Ajustar modelo"
+        centered
+        size="md"
+      >
+        <form onSubmit={saveModel}>
+          <Stack gap="lg">
+            <TextInput
+              label="Nombre"
+              value={modelName}
+              onChange={(event) => setModelName(event.currentTarget.value)}
+              maxLength={100}
+              required
+              disabled={busy || pending}
+              data-autofocus
+            />
+            <div>
+              <Text fw={600} size="sm">
+                Orientación inicial
+              </Text>
+              <Text c="dimmed" size="sm" mt={4}>
+                Giros respecto al archivo original.
+              </Text>
+              <SimpleGrid cols={3} spacing="sm" mt="sm">
+                {["x", "y", "z"].map((axis) => (
+                  <Select
+                    key={axis}
+                    label={`Eje ${axis.toUpperCase()}`}
+                    data={[0, 90, 180, 270].map((degrees) => ({
+                      value: String(degrees),
+                      label: `${degrees}°`,
+                    }))}
+                    value={String(orientation[axis])}
+                    onChange={(value) =>
+                      value !== null &&
+                      setOrientation((current) => ({
+                        ...current,
+                        [axis]: Number(value),
+                      }))
+                    }
+                    allowDeselect={false}
+                    disabled={busy || pending}
+                    comboboxProps={{ withinPortal: false }}
+                  />
+                ))}
+              </SimpleGrid>
+              <Button
+                variant="subtle"
+                size="xs"
+                mt="xs"
+                px={0}
+                leftSection={<IconRotateClockwise size={15} stroke={1.7} />}
+                disabled={
+                  busy ||
+                  pending ||
+                  Object.values(orientation).every((value) => value === 0)
+                }
+                onClick={() => setOrientation({ x: 0, y: 0, z: 0 })}
+              >
+                Restablecer orientación
+              </Button>
+            </div>
+            {pending && (
+              <Text c="dimmed" size="sm">
+                Espera a que termine la importación para guardar.
+              </Text>
+            )}
+            {modelError && <Alert color="red">{modelError}</Alert>}
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                onClick={closeModelDialog}
+                disabled={busy}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                loading={busy}
+                disabled={importDisabled || !modelName.trim()}
+              >
+                Guardar
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+      <Modal
+        opened={modelDialog?.kind === "delete"}
+        onClose={closeModelDialog}
+        closeOnClickOutside={!busy}
+        closeOnEscape={!busy}
+        withCloseButton={!busy}
+        title="Eliminar modelo"
+        centered
+        size="md"
+      >
+        <Stack gap="lg">
+          <Text size="sm">
+            Se eliminará «{modelDialog?.model.name}» y sus archivos.
+          </Text>
+          {models.length === 1 ? (
+            <Text size="sm" c="dimmed">
+              Es el último modelo. El dispositivo mostrará la pantalla de
+              bienvenida.
+            </Text>
+          ) : (
+            config.active_model === modelDialog?.model.id && (
+              <Text size="sm" c="dimmed">
+                Está seleccionado. Se mostrará otro modelo de la biblioteca.
+              </Text>
+            )
+          )}
+          {pending && (
+            <Text c="dimmed" size="sm">
+              Espera a que termine la importación para eliminarlo.
+            </Text>
+          )}
+          {modelError && <Alert color="red">{modelError}</Alert>}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={closeModelDialog}
+              disabled={busy}
+            >
+              Cancelar
+            </Button>
+            <Button
+              color="red"
+              loading={busy}
+              disabled={importDisabled}
+              leftSection={<IconTrash size={17} stroke={1.7} />}
+              onClick={() =>
+                modelDialog &&
+                changeModel("DELETE", { id: modelDialog.model.id })
+              }
+            >
+              Eliminar modelo
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <Modal
         opened={job?.state === "awaiting_decision" && !!proposal}
         onClose={() => {}}

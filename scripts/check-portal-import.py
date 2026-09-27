@@ -3,9 +3,9 @@
 
 Run locally on the Pi after deployment (normally with sudo for token/file access).
 Uses HTTP 80 and requires an empty, otherwise idle library. The first import is
-automatically selected by the portal. The API has no model deletion/download
-endpoint: inspect and delete ONLY the finished UUID package whose name, upload
-hash and private fixture marker match this run, then reconcile the empty library.
+automatically selected by the portal. Inspect and delete through the API ONLY
+the finished UUID package whose name, upload hash and private fixture marker
+match this run, then verify the empty library.
 A terminal import-job record remains as diagnostic history; it is not a model.
 """
 import argparse
@@ -17,7 +17,6 @@ import json
 import math
 from pathlib import Path
 import re
-import shutil
 import signal
 import struct
 import sys
@@ -241,13 +240,15 @@ def cleanup_fixture(client, root, name, marker, upload_hash, job_id, timeout, co
             'Hay otros paquetes o subidas en la biblioteca; se conserva el paquete')
     require(own_job(client, name, job_id) is not None,
             'Ha cambiado la importación actual; se conserva el paquete')
-    require(shutil.rmtree.avoids_symlink_attacks, 'La plataforma no ofrece borrado seguro con descriptores')
-    shutil.rmtree(package)
-    # GET reconciles the removed selection through the same serialized store
-    # used by normal imports. Never PUT an old snapshot over concurrent edits.
+    deleted = client.call('DELETE', '/api/models', value={'id': model_id})
+    require(deleted.get('config', {}).get('active_model') is None,
+            'El borrado del último modelo no ha vaciado la selección')
+    require(not package.exists(), 'El paquete sigue presente tras el borrado')
+    # Never PUT an old snapshot over concurrent edits. The API owns fallback
+    # selection and serializes it with deletion and other configuration changes.
     restored = client.call('GET', '/api/config')['config']
     require(restored == config_before, 'La configuración no se ha restaurado tras retirar la fixture')
-    return {'removed_own_package': True, 'job_id': job_id,
+    return {'removed_own_package': True, 'deleted_through_api': True, 'job_id': job_id,
             'terminal_import_record_retained': True, 'configuration_restored': True}
 
 

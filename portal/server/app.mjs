@@ -34,6 +34,7 @@ export async function createApp(options) {
     onPublished: () => store.read(),
   });
   let receivingUpload = false;
+  let mutatingModels = false;
   try {
     job = JSON.parse(await readFile(jobFile, "utf8"));
   } catch {}
@@ -163,6 +164,7 @@ export async function createApp(options) {
           Math.abs(Date.now() / 1000 - state.updated_at) < 10,
         selected_model: state.selected_model,
         rendered_model: state.rendered_model,
+        rendered_orientation: state.rendered_orientation ?? null,
         error: state.error || null,
         render_fps: state.render?.render_fps ?? null,
       };
@@ -171,9 +173,33 @@ export async function createApp(options) {
     }
   });
   app.get("/api/models", async () => store.catalog());
+  async function mutateModel(action, body) {
+    if (
+      receivingUpload ||
+      mutatingModels ||
+      ["processing", "awaiting_decision"].includes(importer.current()?.state)
+    )
+      throw new ApiError(
+        409,
+        "Espera a que termine la importación o el cambio del modelo.",
+      );
+    mutatingModels = true;
+    try {
+      return await action(body);
+    } finally {
+      mutatingModels = false;
+    }
+  }
+  app.patch("/api/models", async (request) =>
+    mutateModel(store.updateModel, request.body),
+  );
+  app.delete("/api/models", async (request) =>
+    mutateModel(store.deleteModel, request.body),
+  );
   app.post("/api/models", async (request, reply) => {
     if (
       receivingUpload ||
+      mutatingModels ||
       ["processing", "awaiting_decision"].includes(importer.current()?.state)
     )
       throw new ApiError(409, "Ya se está recibiendo otro archivo.");

@@ -5,6 +5,8 @@ import {
   mkdir,
   readdir,
   stat,
+  lstat,
+  rm,
   realpath,
   unlink,
 } from "node:fs/promises";
@@ -31,6 +33,27 @@ export async function atomicJson(filename, data) {
     await unlink(temporary).catch(() => {});
   }
 }
+const zeroOrientation = () => ({ x: 0, y: 0, z: 0 });
+function validOrientation(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 3 &&
+    ["x", "y", "z"].every(
+      (axis) =>
+        Object.hasOwn(value, axis) &&
+        Number.isInteger(value[axis]) &&
+        [0, 90, 180, 270].includes(value[axis]),
+    )
+  );
+}
+function modelOrientation(value) {
+  return validOrientation(value)
+    ? { x: value.x, y: value.y, z: value.z }
+    : zeroOrientation();
+}
+
 export async function createStore({
   configPath,
   modelsDir,
@@ -113,6 +136,7 @@ export async function createStore({
         entries.push({
           id: `${directory}/${metadata.entrypoint}`,
           name: metadata.name,
+          orientation: modelOrientation(metadata.orientation),
           builtin: false,
           format: path.extname(metadata.entrypoint).slice(1).toUpperCase(),
           sourceFormat: metadata.sourceFormat,
@@ -191,6 +215,127 @@ export async function createStore({
       return next;
     });
   }
+  async function locateModel(id, models) {
+    if (typeof id !== "string" || !models.some((model) => model.id === id))
+      throw new ApiError(404, "El modelo ya no está disponible.");
+    const libraryRoot = await realpath(modelsDir);
+    const packageName = id.split("/")[0];
+    if (!/^[a-f0-9-]{36}$/.test(packageName))
+      throw new ApiError(400, "El identificador del modelo no es válido.");
+    const packagePath = path.join(libraryRoot, packageName);
+    const metadataPath = path.join(packagePath, ".gestur-model.json");
+    const info = await lstat(packagePath);
+    if (
+      !info.isDirectory() ||
+      info.isSymbolicLink() ||
+      (await realpath(packagePath)) !== packagePath ||
+      (await lstat(metadataPath)).isSymbolicLink()
+    )
+      throw new ApiError(400, "La carpeta del modelo no es válida.");
+    const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
+    if (`${packageName}/${metadata.entrypoint}` !== id)
+      throw new ApiError(
+        409,
+        "El modelo ha cambiado. Actualiza la biblioteca.",
+      );
+    return { packagePath, packageName, metadataPath, metadata };
+  }
+  function validateMutation(body, editing) {
+    const allowed = editing ? ["id", "name", "orientation"] : ["id"];
+    if (
+      !body ||
+      typeof body !== "object" ||
+      Array.isArray(body) ||
+      typeof body.id !== "string" ||
+      !body.id ||
+      Object.keys(body).some((key) => !allowed.includes(key)) ||
+      (editing &&
+        !Object.hasOwn(body, "name") &&
+        !Object.hasOwn(body, "orientation"))
+    )
+      throw new ApiError(
+        400,
+        "Indica el modelo y los cambios que quieres guardar.",
+      );
+    if (
+      Object.hasOwn(body, "name") &&
+      (typeof body.name !== "string" ||
+        body.name.trim().length < 1 ||
+        body.name.trim().length > 100 ||
+        /[\u0000-\u001f\u007f]/.test(body.name))
+    )
+      throw new ApiError(
+        400,
+        "El nombre debe tener entre 1 y 100 caracteres en una sola línea.",
+      );
+    if (
+      Object.hasOwn(body, "orientation") &&
+      !validOrientation(body.orientation)
+    )
+      throw new ApiError(
+        400,
+        "La orientación debe indicar X, Y y Z con giros de 0, 90, 180 o 270 grados.",
+      );
+  }
+  function updateModel(body) {
+    validateMutation(body, true);
+    return serialized(async () => {
+      const models = await listModels();
+      const located = await locateModel(body.id, models);
+      const config = await readCurrent(models);
+      const metadata = { ...located.metadata };
+      if (Object.hasOwn(body, "name")) metadata.name = body.name.trim();
+      if (Object.hasOwn(body, "orientation"))
+        metadata.orientation = modelOrientation(body.orientation);
+      await atomicJson(located.metadataPath, metadata);
+      // The renderer stats this directory once a second instead of reading all
+      // metadata every frame. A rename within a package does not change it.
+      try {
+        await atomicJson(path.join(modelsDir, ".catalog-revision.json"), {
+          revision: randomUUID(),
+        });
+      } catch (error) {
+        await atomicJson(located.metadataPath, located.metadata);
+        throw error;
+      }
+      const model = {
+        ...models.find((entry) => entry.id === body.id),
+        name: metadata.name,
+        orientation: modelOrientation(metadata.orientation),
+      };
+      return { model, config };
+    });
+  }
+  function deleteModel(body) {
+    validateMutation(body, false);
+    return serialized(async () => {
+      const models = await listModels();
+      const located = await locateModel(body.id, models);
+      const current = await readCurrent(models);
+      const remaining = models.filter((model) => model.id !== body.id);
+      const config = {
+        ...current,
+        active_model:
+          current.active_model === body.id
+            ? (remaining[0]?.id ?? null)
+            : current.active_model,
+      };
+      const trash = path.join(modelsDir, `.trash-${randomUUID()}`);
+      // Hide the complete package atomically. Do not destroy any assets until
+      // the replacement selection has been saved successfully.
+      await rename(located.packagePath, trash);
+      try {
+        await atomicJson(configPath, check(config));
+      } catch (error) {
+        await rename(trash, located.packagePath);
+        throw error;
+      }
+      // Deletion is committed. A failed cleanup leaves a hidden package for
+      // later maintenance; it must not reappear or invalidate the saved choice.
+      await rm(trash, { recursive: true, force: true }).catch(() => {});
+      return { config };
+    });
+  }
   try {
     await read();
   } catch (error) {
@@ -198,7 +343,16 @@ export async function createStore({
     // never reset or overwrite it during startup reconciliation.
     if (!(error instanceof ApiError) || error.statusCode !== 503) throw error;
   }
-  return { read, update, listModels, catalog, defaults, schema };
+  return {
+    read,
+    update,
+    listModels,
+    catalog,
+    updateModel,
+    deleteModel,
+    defaults,
+    schema,
+  };
 }
 
 // Check URI-bearing extensions too; loaders must never follow network references.

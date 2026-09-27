@@ -194,7 +194,7 @@ def viewer_stub(monkeypatch, fail=None):
             self.load_model(path)
         def accept(self, *args):
             pass
-        def load_model(self, path):
+        def load_model(self, path, **kwargs):
             if path and fail and fail(path):
                 raise ValueError("Geometría no válida")
             loaded.append(path)

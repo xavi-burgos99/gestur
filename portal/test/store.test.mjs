@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  writeFile,
+  rm,
+  stat,
+  chmod,
+  readdir,
+  symlink,
+} from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
@@ -184,4 +194,128 @@ test("startup keeps malformed configuration intact and reports it through the st
     /La configuración guardada no es válida/,
   );
   assert.equal(await readFile(configPath, "utf8"), "{broken");
+});
+
+test("model name and fixed orientation persist independently from selection and geometry", async (t) => {
+  const { store, configPath, modelsDir } = await fixture(t);
+  const id = await addModel(modelsDir);
+  const other = await addModel(modelsDir);
+  await store.update((current) => ({ ...current, active_model: other }));
+  const configBefore = await readFile(configPath);
+  const geometryBefore = await readFile(path.join(modelsDir, id));
+  const stampBefore = await stat(modelsDir, { bigint: true });
+  assert.deepEqual(
+    (await store.catalog()).models.find((model) => model.id === id).orientation,
+    { x: 0, y: 0, z: 0 },
+  );
+  const changed = await store.updateModel({
+    id,
+    name: "  Capitel de prueba  ",
+    orientation: { x: 90, y: 180, z: 270 },
+  });
+  assert.equal(changed.model.name, "Capitel de prueba");
+  assert.deepEqual(changed.model.orientation, { x: 90, y: 180, z: 270 });
+  assert.equal(changed.config.active_model, other);
+  assert.deepEqual(await readFile(configPath), configBefore);
+  assert.deepEqual(await readFile(path.join(modelsDir, id)), geometryBefore);
+  const stampAfter = await stat(modelsDir, { bigint: true });
+  assert.notEqual(stampAfter.mtimeNs, stampBefore.mtimeNs);
+  const restarted = await createStore({ configPath, modelsDir });
+  const renamed = (await restarted.catalog()).models.find(
+    (model) => model.id === id,
+  );
+  assert.equal(renamed.name, "Capitel de prueba");
+  assert.deepEqual(renamed.orientation, changed.model.orientation);
+  await restarted.updateModel({ id, name: "Segundo nombre" });
+  assert.deepEqual(
+    (await restarted.catalog()).models.find((model) => model.id === id)
+      .orientation,
+    changed.model.orientation,
+  );
+});
+
+test("delete keeps another selection, falls back deterministically and shows empty only after last model", async (t) => {
+  const { store, configPath, modelsDir } = await fixture(t);
+  const first = await addModel(
+    modelsDir,
+    "11111111-1111-1111-1111-111111111111",
+  );
+  const second = await addModel(
+    modelsDir,
+    "22222222-2222-2222-2222-222222222222",
+  );
+  const third = await addModel(
+    modelsDir,
+    "33333333-3333-3333-3333-333333333333",
+  );
+  await store.update((current) => ({ ...current, active_model: second }));
+  assert.equal(
+    (await store.deleteModel({ id: first })).config.active_model,
+    second,
+  );
+  assert.equal(
+    (await store.deleteModel({ id: second })).config.active_model,
+    third,
+  );
+  const restarted = await createStore({ configPath, modelsDir });
+  assert.equal((await restarted.read()).active_model, third);
+  assert.equal(
+    (await restarted.deleteModel({ id: third })).config.active_model,
+    null,
+  );
+  assert.deepEqual((await restarted.catalog()).models, []);
+  assert.equal(
+    JSON.parse(await readFile(configPath, "utf8")).active_model,
+    null,
+  );
+  assert.equal(
+    (await readdir(modelsDir)).some((entry) => entry.startsWith(".trash-")),
+    false,
+  );
+});
+
+test(
+  "failed selection save rolls deletion back without losing the model",
+  { skip: process.getuid?.() === 0 },
+  async (t) => {
+    const { store, folder, configPath, modelsDir } = await fixture(t);
+    const id = await addModel(modelsDir);
+    await store.read();
+    const before = await readFile(configPath);
+    await chmod(folder, 0o500);
+    try {
+      await assert.rejects(store.deleteModel({ id }), /EACCES|EPERM/);
+      assert.equal(await readFile(path.join(modelsDir, id), "utf8"), "fixture");
+      assert.deepEqual(await readFile(configPath), before);
+      assert.equal(
+        (await readdir(modelsDir)).some((entry) => entry.startsWith(".trash-")),
+        false,
+      );
+    } finally {
+      await chmod(folder, 0o700);
+    }
+    assert.equal((await store.catalog()).active, id);
+  },
+);
+
+test("mutations reject symlink packages without modifying their target", async (t) => {
+  const { store, modelsDir } = await fixture(t);
+  const realId = await addModel(
+    modelsDir,
+    "11111111-1111-1111-1111-111111111111",
+  );
+  const alias = "22222222-2222-2222-2222-222222222222";
+  await symlink(
+    path.join(modelsDir, realId.split("/")[0]),
+    path.join(modelsDir, alias),
+  );
+  await assert.rejects(
+    store.updateModel({ id: `${alias}/model.glb`, name: "No" }),
+    /carpeta del modelo/,
+  );
+  await assert.rejects(
+    store.deleteModel({ id: `${alias}/model.glb` }),
+    /carpeta del modelo/,
+  );
+  assert.equal(await readFile(path.join(modelsDir, realId), "utf8"), "fixture");
 });

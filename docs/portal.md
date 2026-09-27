@@ -37,6 +37,19 @@ La reducción de mallas grandes puede tardar minutos. Solo hay una importación 
 
 Límites de subida: 100 MiB por archivo, 250 MiB al descomprimir, 500 entradas y ratio de expansión máximo 100× por archivo (con margen de 1 MiB para archivos pequeños). Se rechazan enlaces, rutas que salgan del ZIP, nombres duplicados sin distinguir mayúsculas y ZIP cifrados. No se incluyen los temporales ni los datos de desarrollo en una instalación nueva.
 
+### Gestionar modelos
+
+El menú de cada modelo permite **Ajustar modelo** y **Eliminar**. En los ajustes
+puedes cambiar el nombre y corregir su orientación con giros de 0°, 90°, 180° o
+270° sobre los ejes X, Y y Z. Esta orientación se guarda con el modelo y se aplica
+antes de los movimientos controlados por gestos, también tras reiniciar. No se
+reescribe la geometría ni la textura.
+
+El borrado pide confirmación y elimina el modelo junto con su archivo original.
+Si era el modelo seleccionado, se activa otro disponible. Al eliminar el último
+modelo, el visor vuelve a la bienvenida. Durante una importación se bloquean
+los cambios en los modelos hasta que termine.
+
 Los paquetes terminados se guardan en `/var/lib/gestur/models/<uuid>/` con metadatos `.gestur-model.json`. La selección persistente usa `<uuid>/model.glb` o `<uuid>/simplified.glb` al reducir; el original se conserva dentro del paquete. El portal distingue **Seleccionado** de **En pantalla** consultando el estado real del visualizador cada tres segundos; a los diez segundos sin actualización muestra el visor desconectado.
 
 ## Parámetros

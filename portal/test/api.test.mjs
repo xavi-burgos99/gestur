@@ -203,10 +203,13 @@ test("runtime status reports stale/absent viewer without claiming active renderi
       updated_at: Date.now() / 1000,
       selected_model: "capitell.obj",
       rendered_model: "capitell.obj",
+      rendered_orientation: { x: 90, y: 0, z: 270 },
       error: null,
     }),
   );
-  assert.equal((await request("GET", "runtime")).json().online, true);
+  const runtime = (await request("GET", "runtime")).json();
+  assert.equal(runtime.online, true);
+  assert.deepEqual(runtime.rendered_orientation, { x: 90, y: 0, z: 270 });
   await writeFile(
     path.join(folder, "runtime-status.json"),
     JSON.stringify({
@@ -335,4 +338,139 @@ test("first import is selected without polling config, later imports retain it a
   invalid.active_model = null;
   assert.equal((await request("PUT", "config", invalid)).statusCode, 409);
   assert.equal((await persisted()).active_model, first);
+});
+
+async function importedModelFixture(
+  t,
+  checker = async () => ({ triangles: 100 }),
+) {
+  const fixtureData = await fixture(t, undefined, {
+    modelConverter: async ({ workspace }) =>
+      writeFile(path.join(workspace, "model.glb"), testGlb()),
+    modelChecker: checker,
+  });
+  const upload = async () => {
+    const response = await fixtureData.request("POST", "models", uploadBody(), {
+      "content-type": "multipart/form-data; boundary=upload",
+    });
+    assert.equal(response.statusCode, 202);
+    return settledJob(fixtureData.request);
+  };
+  return { ...fixtureData, upload };
+}
+
+test("authenticated model management persists edits, preserves selection and deletes with fallback", async (t) => {
+  const { request, upload } = await importedModelFixture(t);
+  const first = (await upload()).model.id;
+  const second = (await upload()).model.id;
+  const changed = await request("PATCH", "models", {
+    id: second,
+    name: "  Capitel  ",
+    orientation: { x: 270, y: 0, z: 90 },
+  });
+  assert.equal(changed.statusCode, 200, changed.body);
+  assert.equal(changed.json().model.name, "Capitel");
+  assert.deepEqual(changed.json().model.orientation, { x: 270, y: 0, z: 90 });
+  assert.equal(changed.json().config.active_model, first);
+  assert.deepEqual(
+    (await request("GET", "models"))
+      .json()
+      .models.find((model) => model.id === second).orientation,
+    { x: 270, y: 0, z: 90 },
+  );
+  const deleted = await request("DELETE", "models", { id: first });
+  assert.equal(deleted.statusCode, 200);
+  assert.equal(deleted.json().config.active_model, second);
+  const last = await request("DELETE", "models", { id: second });
+  assert.equal(last.statusCode, 200);
+  assert.equal(last.json().config.active_model, null);
+  assert.deepEqual((await request("GET", "models")).json().models, []);
+});
+
+test("model mutation validation rejects malformed ids, nulls, extra fields and invalid rotations", async (t) => {
+  const { app, request, upload } = await importedModelFixture(t);
+  const id = (await upload()).model.id;
+  assert.equal(
+    (
+      await app.inject({
+        method: "DELETE",
+        url: "/api/models",
+        headers: { "x-gestur-request": "1" },
+        payload: { id },
+      })
+    ).statusCode,
+    401,
+  );
+  for (const body of [
+    null,
+    [],
+    {},
+    { id: null },
+    { id },
+    { id, name: null },
+    { id, name: " " },
+    { id, name: "a".repeat(101) },
+    { id, name: "line\nbreak" },
+    { id, name: "Valid", entrypoint: "../../outside.glb" },
+    { id, orientation: null },
+    { id, orientation: { x: 0, y: 0 } },
+    { id, orientation: { x: 0, y: 0, z: 90, extra: 1 } },
+    { id, orientation: { x: -90, y: 0, z: 0 } },
+    { id, orientation: { x: 360, y: 0, z: 0 } },
+    { id, orientation: { x: 45, y: 0, z: 0 } },
+    { id, orientation: { x: "90", y: 0, z: 0 } },
+  ]) {
+    assert.equal(
+      (await request("PATCH", "models", body)).statusCode,
+      400,
+      JSON.stringify(body),
+    );
+  }
+  for (const badId of [
+    "../config.json",
+    "../../etc/passwd",
+    "/tmp/model.glb",
+    "missing/model.glb",
+  ]) {
+    assert.equal(
+      (await request("PATCH", "models", { id: badId, name: "No" })).statusCode,
+      404,
+    );
+    assert.equal(
+      (await request("DELETE", "models", { id: badId })).statusCode,
+      404,
+    );
+  }
+  for (const body of [null, {}, { id: null }, { id, recursive: true }])
+    assert.equal((await request("DELETE", "models", body)).statusCode, 400);
+  assert.equal((await request("GET", "models")).json().active, id);
+});
+
+test("pending imports prevent destructive model management until the import finishes", async (t) => {
+  let triangles = 100;
+  const { request, upload } = await importedModelFixture(t, async () => ({
+    triangles,
+  }));
+  const id = (await upload()).model.id;
+  triangles = 1200000;
+  const pending = await upload();
+  assert.equal(pending.state, "awaiting_decision");
+  assert.equal(
+    (await request("PATCH", "models", { id, name: "Wait" })).statusCode,
+    409,
+  );
+  assert.equal((await request("DELETE", "models", { id })).statusCode, 409);
+  assert.equal(
+    (
+      await request("POST", `imports/${pending.id}/decision`, {
+        simplify: false,
+      })
+    ).statusCode,
+    202,
+  );
+  assert.equal((await settledJob(request)).state, "completed");
+  assert.equal(
+    (await request("PATCH", "models", { id, name: "Ready" })).statusCode,
+    200,
+  );
 });

@@ -224,6 +224,7 @@ export async function createImporter({
     return {
       id: `${id}/${metadata.entrypoint}`,
       name: metadata.name,
+      orientation: metadata.orientation || { x: 0, y: 0, z: 0 },
       format: "GLB",
       builtin: false,
       size: metadata.size,

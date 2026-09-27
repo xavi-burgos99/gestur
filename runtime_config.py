@@ -171,6 +171,38 @@ def available_models(models_dir):
     return models
 
 
+def validate_model_orientation(orientation=None):
+    """Fixed import rotation uses Cartesian degrees, independently of gestures."""
+    if orientation is None:
+        return {"x": 0, "y": 0, "z": 0}
+    if (not isinstance(orientation, dict) or set(orientation) != {"x", "y", "z"}
+            or any(type(value) is not int or value not in (0, 90, 180, 270)
+                   for value in orientation.values())):
+        raise ConfigurationError("La orientación requiere x, y, z de 0, 90, 180 o 270 grados")
+    return dict(orientation)
+
+
+def load_model_orientation(model_id, models_dir):
+    """Read a package's small metadata file only after the catalog has changed."""
+    if model_id is None:
+        return validate_model_orientation()
+    root = Path(models_dir).resolve()
+    package = (root / model_id.split("/", 1)[0]).resolve(strict=True)
+    if package == root or not package.is_relative_to(root):
+        raise ConfigurationError("La orientación debe pertenecer a la biblioteca de Gestur")
+    source = (package / ".gestur-model.json").resolve(strict=True)
+    if not source.is_relative_to(package):
+        raise ConfigurationError("Los metadatos deben estar dentro del paquete del modelo")
+    with source.open(encoding="utf-8") as handle:
+        serialized = handle.read(MAX_CONFIG_BYTES + 1)
+    if len(serialized.encode("utf-8")) > MAX_CONFIG_BYTES:
+        raise ConfigurationError("Los metadatos del modelo superan 1 MiB")
+    metadata = json.loads(serialized)
+    if not isinstance(metadata, dict):
+        raise ConfigurationError("Los metadatos del modelo no son válidos")
+    return validate_model_orientation(metadata.get("orientation"))
+
+
 def reconcile_model_selection(config, models_dir, *, preferred_model=None):
     """Resolve an existing selection without writing shared portal state.
 

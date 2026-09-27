@@ -6,6 +6,11 @@ La configuración completa contiene `active_model`, `tracking`, `render` y `cont
 
 `GESTUR_PORTAL_URL` permite indicar una URL alternativa con una IP válida. Sin esa variable se detecta la IP de la LAN, o la del punto de acceso si no hay ruta de red, y se usa HTTP en el puerto 80. Si todavía no hay IP disponible, la bienvenida espera y reintenta. Nunca se añade la clave de administración al QR.
 
+El nombre y la orientación de cada modelo se guardan en su `.gestur-model.json`,
+dentro de la biblioteca. `orientation` contiene `x`, `y` y `z` en grados
+(0, 90, 180 o 270); si no existe, se conserva la orientación original. Esta
+corrección es independiente de las rotaciones asignadas a gestos.
+
 ## Valores iniciales para Raspberry Pi 5
 
 - Cámara: 640 × 480, inferencia de cabeza a un máximo de 24 Hz y manos a 15 Hz cuando están activadas.

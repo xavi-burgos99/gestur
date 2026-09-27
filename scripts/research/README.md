@@ -52,7 +52,7 @@ reinicio del servicio. Comprueba dos triángulos, UV, material y los bytes de la
 textura PNG, incluida la reparación de su ruta. La primera importación debe
 seleccionarse automáticamente. La limpieza comprueba el marcador, el nombre y
 el hash de su paquete, y lo conserva si aparecen otros modelos, subidas o cambios
-de configuración. Tras retirarlo, solicita al portal reconciliar la selección y
+de configuración. Lo retira mediante la API de modelos, verifica la selección vacía y
 comprueba que la configuración inicial se haya restaurado sin escribir una copia
 antigua sobre los ajustes actuales. Se mantiene en `scripts/` sin duplicarlo aquí.
 

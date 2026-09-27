@@ -39,7 +39,9 @@ Los paquetes terminados se guardan en `/var/lib/gestur/models/<uuid>/` con metad
 
 ## Parámetros
 
-Primero se elige un movimiento del modelo y después su gesto. El selector muestra, con iconos, la parte del cuerpo (Cabeza, Cuerpo, Manos o Combinado), la mano cuando corresponde, el tipo de movimiento y el eje. Las opciones aparecen al completar el paso anterior. Las rotaciones se llaman Giro horizontal, Giro vertical e Inclinación lateral; los desplazamientos, Horizontal, Vertical y Profundidad. Las manos añaden Apertura de la mano y Combinado ofrece Distancia entre manos. «Otros gestos» conserva la pinza, el giro de mano en pantalla y los movimientos conjuntos anteriores.
+Primero se elige un movimiento del modelo y después su gesto. El selector muestra, con iconos, la parte del cuerpo (Cabeza, Cuerpo, Manos o Combinado), la mano cuando corresponde, el tipo de movimiento y el eje. Las opciones aparecen al completar el paso anterior. Las rotaciones se llaman Giro horizontal, Giro vertical e Inclinación lateral; los desplazamientos, Horizontal, Vertical y Profundidad. Cada mano ofrece también Apertura de la mano y Pinza, sin pedir un eje. Combinado ofrece Distancia entre manos.
+
+El selector permite 29 gestos. Las asignaciones anteriores de giro de mano en pantalla (2D), centro de ambas manos y separación horizontal se siguen mostrando y admiten ajustes, pero ya no se pueden seleccionar. Al cambiar uno de esos gestos, el selector empieza sin selección en Parte del cuerpo y exige completar una opción válida antes de asignarla. Abrir o cancelar el selector conserva la asignación y sus valores.
 
 La UI edita el contrato compartido `config/schema.json` / `config/default.json`; ver [configuration.md](configuration.md). Conserva intensidad, inversión, respuesta proporcional/continua/dos tamaños y umbrales al cambiar un gesto. Cada salida admite un gesto activo. Incluye reconocimiento de manos, suavizado, regreso al centro, cámara, frecuencias, antialiasing y cursor oculto. Los cambios de controles se aplican en vivo; cambios de captura, MSAA o pantalla completa reinician el visualizador automáticamente.
 

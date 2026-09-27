@@ -8,8 +8,10 @@ Raspberry Pi OS Lite de 64 bits / Debian 13 trixie, kernel
 El capitel original, con 491.038 triángulos y textura 2048 × 2048, se dibujó a
 38,62 FPS con cámara y seguimiento activos en una prueba de 60 segundos a 1080p.
 La CPU media del proceso fue 73,45 % de un núcleo y la temperatura máxima,
-59,5 °C, sin indicadores de throttling en las muestras. La prueba sostenida de
-30 minutos sigue pendiente.
+59,5 °C. En una prueba separada de **30 minutos**, con una fotografía repetida
+para la inferencia y giro continuo impuesto, se midieron **39,18 FPS**, CPU total
+media de **20,53 %** y temperatura máxima de **60,6 °C**. Ambas pruebas conservaron
+la calidad gráfica y registraron `get_throttled=0x0` en todas sus muestras.
 
 En ensayos separados sin visor, añadir manos a Pose reduce la cadencia observada
 de pose de 18,45 a 7,33 FPS bajo el
@@ -75,6 +77,76 @@ Fuentes: [escena y condiciones](benchmarks/pi5/capitel-camera/manifest.json),
 [resumen original](benchmarks/pi5/capitel-camera/summary.json) y
 [agregados de telemetría](benchmarks/pi5/capitel-camera/telemetry-summary.json).
 Se conserva el hash del JSONL completo sin añadir la traza al repositorio.
+
+## Ensayo sostenido de 30 minutos con el capitel
+
+El proceso completó **1.800,011 s** de bucle y 1.800,180 s incluyendo cierre,
+con resultado `completed`, código de salida 0 y sin solicitar aborto. Se mantuvo
+el capitel original de 491.038 triángulos, su textura de 2048 × 2048, pantalla
+completa de 1920 × 1080, V3D 7.1.7.0 y MSAA real de 4 muestras. No hubo
+simplificación de geometría ni reducción de textura.
+
+Pose Lite y manos Lite procesaron una fotografía repetida a 24 FPS, adaptada a
+640 × 480. El giro continuo impuesto después de los controles mantuvo el trabajo
+gráfico. Se conservaron los límites de inferencia de 24/15 FPS, presupuesto
+conjunto de 0,6 y configuración de ensayo independiente. **Fue una carga de
+replay, no una sesión de 30 minutos con cámara ni movimientos humanos reales.**
+
+El despliegue medido correspondía a `35f8383`, antes de los controles añadidos
+después del ensayo. Los archivos del controlador, seguimiento, visor, métricas,
+configuración y benchmark son idénticos a los de `7a40706`; sus hashes se
+registran en el [manifiesto de resultados](benchmarks/pi5/manifest.json).
+Esto identifica la versión medida y no certifica cambios posteriores.
+
+| Medida | Resultado |
+| --- | ---: |
+| Dibujo medio / control medio | 39,18 FPS / 39,18 Hz |
+| FPS por ventanas de 60 s, mínimo / máximo | 39,03 / 39,42 |
+| FPS en los últimos 300 s observados | 39,13 |
+| CPU media del proceso desde 5 s, % de un núcleo | 73,64 % |
+| CPU media total del sistema desde 5 s | 20,53 % |
+| Temperatura inicial / final / máxima | 56,20 / 57,30 / 60,60 °C |
+| RSS final / máximo muestreado | 426,50 / 458,73 MiB |
+| RSS medio en los últimos 300 s observados | 428,57 MiB |
+| Fotogramas de replay / inferencias de pose / de manos | 42.412 / 10.267 / 10.267 |
+| Muestras térmicas / lecturas con throttling | 1.800 / 0 |
+
+Las 1.800 muestras cubren del segundo 0,001 al 1.799,453. Las medias de CPU
+usan 1.795 muestras válidas desde el segundo 5; son medias aritméticas, no
+integrales temporales. La CPU del sistema se mide por separado de la del proceso.
+Temperatura y RSS incluyen el arranque del runtime. No hubo registros malformados,
+errores del muestreador, errores del runtime ni del seguimiento. Todas las
+lecturas de `get_throttled` fueron `0x0`, incluidos sus indicadores históricos.
+
+Los FPS de cada ventana se calculan dividiendo el incremento de dibujos por el
+tiempo entre sus estados de runtime primero y último, eliminando estados
+repetidos. No se usa el promedio acumulado, no se interpolan bordes ni se añade
+un punto inicial ficticio. Los extremos exactos constan en la
+[tabla de 60 segundos](benchmarks/pi5/capitel-endurance/windows-60s.md), su
+[CSV](benchmarks/pi5/capitel-endurance/windows-60s.csv) y el
+[agregado JSON](benchmarks/pi5/capitel-endurance/telemetry-summary.json).
+Los percentiles del resumen original conservan únicamente los últimos 18.000
+intervalos; no describen todos los dibujos de los 30 minutos.
+
+El contador de fallos de captura fue cero en todas las muestras y uno tras el
+cierre, como en los otros ensayos de replay. Se conserva esa diferencia; el
+lector devuelve fin de captura al recibir la orden de detenerse.
+
+![Temperatura, CPU total, FPS por ventanas de 60 s y RSS durante el ensayo](benchmarks/pi5/capitel-endurance/telemetry.png)
+
+El resultado documenta la carga térmica y de recursos durante este ensayo con
+esta refrigeración. No demuestra precisión de gestos, consumo en vatios,
+latencia óptica, un cuello de botella concreto ni estabilidad indefinida.
+Tampoco alcanza el objetivo de 60 FPS. El reinicio y la comprobación del último
+despliegue siguen pendientes.
+
+Fuentes sin modificar: [condiciones y escena](benchmarks/pi5/capitel-endurance/manifest.json)
+y [resumen final](benchmarks/pi5/capitel-endurance/summary.json). El JSONL completo
+se conserva fuera de Git: 4.071.285 bytes, SHA-256
+`3217ddd15b3210fb010d1e7f2124c514f1fd4c44ca56c2fd6cf08bb3b68cc204`.
+El [agregador](../scripts/research/aggregate_pi_trial.py) reproduce los JSON y las
+tablas a partir de esos datos; el [script del gráfico](../scripts/research/plot_pi_system.py)
+genera la figura.
 
 ## Ensayo de cuatro configuraciones del reloj de Panda3D
 
@@ -372,9 +444,10 @@ FaceLandmarker: 3.758.596 bytes, SHA-256
 
 ## Pendiente de completar
 
-Quedan pendientes la sesión térmica sostenida de 30 minutos con inferencia,
-pantalla y capitel funcionando juntos, y el reinicio que confirme el arranque
-automático con la corrección gráfica instalada. Tampoco se han medido
+Quedan pendientes el reinicio que confirme el arranque automático con la
+corrección gráfica instalada y la comprobación del último despliegue. El ensayo
+térmico de 30 minutos está completado con replay; no sustituye una sesión
+prolongada con visitantes y cámara real. Tampoco se han medido
 vatios, latencia óptica cámara→pantalla, error angular 3D, oclusiones anotadas,
 dos manos persistentes ni pérdida y recuperación en secuencias reproducibles.
 

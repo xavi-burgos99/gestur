@@ -1,19 +1,45 @@
-# Bases generadas para los iconos de movimiento
+# Iconos de movimiento
+
+La interfaz utiliza dibujos SVG propios en `portal/src/MotionIcon.jsx`,
+inspirados en el estilo de trazo redondeado de la [referencia visual Hugeicons](https://hugeicons.com/icons/stroke-rounded).
+No se utiliza su biblioteca, sus archivos SVG ni ningún servicio externo en la
+aplicación. Esta familia no añade dependencias, cuentas ni claves.
+
+Los dibujos comparten una cuadrícula de 24 unidades, trazo de 1,5 unidades,
+extremos y uniones redondeados y `currentColor`. Cabeza, cuerpo y manos tienen
+contornos cerrados. La mano izquierda refleja la derecha y la pinza tiene su
+propia silueta. Las dos manos se reducen juntas conservando las proporciones
+del trazo para evitar que los dedos se fusionen en tamaños pequeños.
+
+Los pasos de movimiento y eje utilizan símbolos de dirección y rotación; la
+parte del cuerpo ya elegida se muestra en el resumen del selector. Así se evita
+superponer flechas sobre todas las siluetas. El catálogo
+`portal/src/control-catalog.mjs` mantiene el contrato `subject`, `motion` y `side`.
+
+Al ampliar la familia, dibujar geometría propia con estos mismos criterios y
+comprobar la lectura a 36 y 48 píxeles. No añadir ilustraciones raster, texturas,
+volumen ni composiciones decorativas.
+
+## Archivo de la primera propuesta
+
+Las siguientes bases y prompts se conservan como antecedentes de diseño. Se
+retiraron de la interfaz por exceso de detalle y falta de uniformidad; no forman
+parte de los archivos públicos del portal.
 
 Estas dos imágenes se generaron con la herramienta integrada de generación de imágenes, sin API externa, clave de API, CLI ni Blender. Se conservan como PNG separados con su canal alfa original; no se recortaron ni retocaron mediante código. La cabeza se generó primero y se inspeccionó antes de utilizarla como referencia de estilo para la mano.
 
-Archivos preparados para la interfaz:
+Archivos conservados:
 
-- `portal/public/motion-icons/head-base.png`: cabeza genérica con giro leve hacia la derecha del observador.
-- `portal/public/motion-icons/hand-base.png`: mano derecha vista desde la palma, con cinco dedos y el pulgar a la izquierda del observador.
+- `docs/design-assets/head-base.png`: cabeza genérica con giro leve hacia la derecha del observador.
+- `docs/design-assets/hand-base.png`: mano derecha vista desde la palma, con cinco dedos y el pulgar a la izquierda del observador.
 
-## Criterios que deben conservarse
+## Criterios de la primera propuesta
 
 La cabeza y la mano comparten contornos verdes redondeados y rellenos claros. La paleta solicitada fue `#41675b` para el trazo y `#e4ede8` para el relleno; la generación raster puede aproximar estos colores. El fondo es transparente. Los sujetos están centrados y dejan margen para las indicaciones de movimiento.
 
 No deben añadirse texto, letras, números, flechas, sombras, volumen realista, fondos decorativos ni logotipos a las bases. Las flechas y los indicadores se dibujarán como elementos vectoriales en la interfaz. La mano izquierda se obtendrá reflejando esta misma base en la interfaz; no se generará otra mano. Las variantes de gesto deben reutilizar las bases para mantener el mismo estilo.
 
-Estos archivos se reutilizan en `portal/src/MotionIcon.jsx`. El catálogo de `portal/src/control-catalog.mjs` asigna a cada gesto la misma base y una indicación vectorial de su movimiento. El editor de Parámetros muestra estos iconos al elegir y asignar controles.
+Estos archivos se reutilizaban en la primera versión de `MotionIcon.jsx`.
 
 ## Prompt definitivo de la cabeza
 

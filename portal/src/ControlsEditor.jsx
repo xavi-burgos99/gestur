@@ -24,7 +24,6 @@ import {
 import {
   CONTROL_OPTIONS,
   GESTURE_OPTIONS,
-  LEGACY_GESTURE_OPTIONS,
   emptyGestureSelection,
   selectionForGesture,
   gestureFromSelection,
@@ -164,7 +163,6 @@ export default function ControlsEditor({ draft, update, mapping }) {
   const [dialog, setDialog] = useState(null);
   const [selectedOutput, setSelectedOutput] = useState(null);
   const [selection, setSelection] = useState(emptyGestureSelection);
-  const [showLegacy, setShowLegacy] = useState(false);
   const selectedGesture = gestureFromSelection(selection);
   const [opened, setOpened] = useState([]);
   const editingIndex =
@@ -183,19 +181,16 @@ export default function ControlsEditor({ draft, update, mapping }) {
     setDialog(null);
     setSelectedOutput(null);
     setSelection(emptyGestureSelection());
-    setShowLegacy(false);
   }
   function addControl() {
     setSelectedOutput(null);
     setSelection(emptyGestureSelection());
-    setShowLegacy(false);
     setDialog({ kind: "add" });
   }
   function editGesture(control) {
     const restored = selectionForGesture(control.input);
     setSelectedOutput(control.output);
     setSelection(restored);
-    setShowLegacy(!!restored.legacy);
     setDialog({ kind: "gesture", id: control.id });
   }
   function applySelection() {
@@ -557,7 +552,6 @@ export default function ControlsEditor({ draft, update, mapping }) {
                       onClick={() => {
                         setSelectedOutput(null);
                         setSelection(emptyGestureSelection());
-                        setShowLegacy(false);
                       }}
                     >
                       Cambiar control
@@ -565,59 +559,18 @@ export default function ControlsEditor({ draft, update, mapping }) {
                   )}
                 </Group>
                 <div className="gesture-selector">
-                  {showLegacy ? (
-                    <section aria-label="Otros gestos">
-                      <Text fw={600} size="sm" mb="sm">
-                        Otros gestos
-                      </Text>
-                      <div
-                        className="motion-choice-grid"
-                        role="group"
-                        aria-label="Otros gestos disponibles"
-                      >
-                        {LEGACY_GESTURE_OPTIONS.map((option) => (
-                          <ChoiceCard
-                            key={option.id}
-                            option={{ ...option, label: gestureLabel(option) }}
-                            selected={selectedGesture === option.id}
-                            onClick={() =>
-                              setSelection(
-                                changeGestureSelection(
-                                  selection,
-                                  "legacy",
-                                  option.id,
-                                ),
-                              )
-                            }
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  ) : (
-                    gestureSteps(selection).map((step) => (
-                      <GestureStep
-                        key={step.id}
-                        step={step}
-                        value={selection[step.id]}
-                        onChange={(value) =>
-                          setSelection((current) =>
-                            changeGestureSelection(current, step.id, value),
-                          )
-                        }
-                      />
-                    ))
-                  )}
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    className="gesture-other"
-                    onClick={() => {
-                      setShowLegacy((current) => !current);
-                      setSelection(emptyGestureSelection());
-                    }}
-                  >
-                    {showLegacy ? "Volver al selector" : "Otros gestos"}
-                  </Button>
+                  {gestureSteps(selection).map((step) => (
+                    <GestureStep
+                      key={step.id}
+                      step={step}
+                      value={selection[step.id]}
+                      onChange={(value) =>
+                        setSelection((current) =>
+                          changeGestureSelection(current, step.id, value),
+                        )
+                      }
+                    />
+                  ))}
                 </div>
                 <TrackingNotice
                   input={selectedGesture}

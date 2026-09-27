@@ -5,6 +5,31 @@ No se importan desde la aplicación ni cambian sus dependencias. Los scripts de
 medición y exportación se conservan byte por byte; el
 [manifiesto de resultados](../../docs/benchmarks/pi5/manifest.json) registra sus hashes.
 
+## Nuevas entradas y gráficos
+
+`benchmark_new_inputs.py` comprueba durante 60 segundos el contrato de los
+controles de torso y proximidad de cada mano con los modelos instalados. No
+modifica la configuración ni inicia el visor. Distingue entre un error y falta
+de cobertura cuando una parte no aparece en la imagen; no mide precisión.
+
+```sh
+.venv/bin/python scripts/research/benchmark_new_inputs.py --project /opt/gestur --source replay --image /ruta/woman_hands.jpg --seconds 60 --output /tmp/new-inputs.json
+```
+
+`plot_pi_system.py` genera un PNG a partir de una captura de telemetría existente
+sin modificarla. Requiere Matplotlib en el ordenador de análisis, no en la Pi
+instalada. La traza JSONL no se distribuye con los agregados del repositorio.
+
+```sh
+python scripts/research/plot_pi_system.py /ruta/ensayo /tmp/telemetry.png
+```
+
+La comprobación `scripts/check-portal-import.py` prueba una subida real a través
+del portal HTTP local y exige una biblioteca inicialmente vacía. Se ejecuta
+como root para leer la clave local y verificar el GLB sin exponer credenciales.
+Sube un OBJ con textura, comprueba su conversión y elimina únicamente su paquete
+de prueba; no selecciona modelos ni cambia parámetros.
+
 ## MobRecon en ONNX
 
 `benchmark_mobrecon.py` era `benchmark_onnx.py` durante la medición. Necesita

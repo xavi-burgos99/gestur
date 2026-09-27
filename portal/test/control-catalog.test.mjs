@@ -6,7 +6,6 @@ import path from "node:path";
 import {
   CONTROL_OPTIONS,
   GESTURE_OPTIONS,
-  LEGACY_GESTURE_OPTIONS,
   emptyGestureSelection,
   selectionForGesture,
   gestureFromSelection,
@@ -17,6 +16,14 @@ import {
   responseOptions,
 } from "../src/control-catalog.mjs";
 import { createStore } from "../server/store.mjs";
+
+const displayOnlyInputs = [
+  "hands_center_x",
+  "hands_center_y",
+  "hands_separation_x",
+  "left_hand_rotation",
+  "right_hand_rotation",
+];
 
 test("progressive choices expose the next step only after its parent, with an icon on every option", () => {
   let selection = emptyGestureSelection();
@@ -51,6 +58,8 @@ test("progressive choices expose the next step only after its parent, with an ic
     }
   }
   visit(emptyGestureSelection());
+  assert.equal(reachable.size, 29);
+  for (const input of displayOnlyInputs) assert.ok(!reachable.has(input));
   assert.deepEqual(
     [...reachable].sort(),
     GESTURE_OPTIONS.filter((item) => item.selection)
@@ -77,12 +86,24 @@ test("changing a parent clears incompatible descendants and cannot retain a prev
   assert.deepEqual(cleared, emptyGestureSelection());
 });
 
-test("opening hands and combined distance finish without asking for an axis or an unrelated type", () => {
-  const opening = selectionForGesture("right_hand_openness");
-  assert.deepEqual(
-    gestureSteps(opening).map((step) => step.id),
-    ["body", "side", "movement"],
-  );
+test("opening, pinching and combined distance finish without asking for an axis or an unrelated type", () => {
+  for (const side of ["left", "right"]) {
+    for (const movement of ["openness", "pinch"]) {
+      const input = `${side}_hand_${movement}`;
+      const selection = selectionForGesture(input);
+      const steps = gestureSteps(selection);
+      assert.deepEqual(
+        steps.map((step) => step.id),
+        ["body", "side", "movement"],
+      );
+      assert.deepEqual(
+        steps.at(-1).options.map((option) => option.id),
+        ["translation", "rotation", "openness", "pinch"],
+      );
+      assert.equal(selection.axis, null);
+      assert.equal(gestureFromSelection(selection), input);
+    }
+  }
   const combined = changeGestureSelection(
     emptyGestureSelection(),
     "body",
@@ -101,24 +122,41 @@ test("opening hands and combined distance finish without asking for an axis or a
   );
 });
 
-test("editing reconstructs every progressive and legacy gesture without silently replacing its input", () => {
+test("editing reconstructs selectable gestures and starts unselected for display-only gestures", () => {
   for (const gesture of GESTURE_OPTIONS) {
     const selection = selectionForGesture(gesture.id);
-    assert.equal(gestureFromSelection(selection), gesture.id);
-    assert.equal(!!selection.legacy, !gesture.selection);
+    if (gesture.selection) {
+      assert.equal(gestureFromSelection(selection), gesture.id);
+    } else {
+      assert.deepEqual(selection, emptyGestureSelection());
+      assert.deepEqual(
+        gestureSteps(selection).map((step) => step.id),
+        ["body"],
+      );
+      assert.equal(gestureFromSelection(selection), null);
+      assert.equal(
+        createControlMapping("new", "rotation_roll", gesture.id),
+        null,
+      );
+    }
   }
-  assert.deepEqual(LEGACY_GESTURE_OPTIONS.map((gesture) => gesture.id).sort(), [
-    "hands_center_x",
-    "hands_center_y",
-    "hands_separation_x",
-    "left_hand_pinch",
-    "left_hand_rotation",
-    "right_hand_pinch",
-    "right_hand_rotation",
-  ]);
+  assert.deepEqual(
+    GESTURE_OPTIONS.filter((gesture) => !gesture.selection)
+      .map((gesture) => gesture.id)
+      .sort(),
+    displayOnlyInputs,
+  );
+  assert.deepEqual(selectionForGesture("unknown"), emptyGestureSelection());
+  assert.equal(
+    gestureFromSelection({
+      ...emptyGestureSelection(),
+      legacy: "left_hand_rotation",
+    }),
+    null,
+  );
 });
 
-test("the gesture and movement selectors cover the runtime schema without dropping legacy gestures", async () => {
+test("the full display catalog covers the runtime schema including existing legacy gestures", async () => {
   const schema = JSON.parse(
     await readFile(
       new URL("../../config/schema.json", import.meta.url),
@@ -135,6 +173,7 @@ test("the gesture and movement selectors cover the runtime schema without droppi
     GESTURE_OPTIONS.map((option) => option.id).sort(),
     properties.input.enum.toSorted(),
   );
+  assert.equal(GESTURE_OPTIONS.length, 34);
   for (const side of ["left", "right"]) {
     const legacy = GESTURE_OPTIONS.find(
       (option) => option.id === `${side}_hand_rotation`,
@@ -164,7 +203,9 @@ test("every selectable gesture and response saves through the real configuration
     modelsDir: path.join(folder, "models"),
   });
   for (const output of CONTROL_OPTIONS) {
-    for (const gesture of GESTURE_OPTIONS) {
+    for (const gesture of GESTURE_OPTIONS.filter(
+      (option) => option.selection,
+    )) {
       for (const mode of responseOptions(output.id)) {
         const control = createControlMapping(
           "test_control",
@@ -181,9 +222,57 @@ test("every selectable gesture and response saves through the real configuration
   }
 });
 
+test("saved display-only gestures and their tuning remain valid without choosing a replacement", async (t) => {
+  const folder = await mkdtemp(
+    path.join(os.tmpdir(), "gestur-existing-controls-"),
+  );
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  const store = await createStore({
+    configPath: path.join(folder, "config.json"),
+    modelsDir: path.join(folder, "models"),
+  });
+  for (const input of displayOnlyInputs) {
+    const existing = {
+      ...createControlMapping("existing", "rotation_roll", "left_hand_roll"),
+      input,
+      scale: 74,
+      center: 0.3,
+      invert: true,
+    };
+    await store.update((config) => ({
+      ...config,
+      controls: { ...config.controls, mappings: [existing] },
+    }));
+    const draft = await store.read();
+    const original = structuredClone(draft.controls.mappings[0]);
+    const selection = selectionForGesture(draft.controls.mappings[0].input);
+    assert.equal(gestureFromSelection(selection), null);
+    assert.deepEqual(draft.controls.mappings[0], original);
+    const updated = await store.update((config) => ({
+      ...config,
+      controls: {
+        ...config.controls,
+        mappings: config.controls.mappings.map((mapping) => ({
+          ...mapping,
+          enabled: false,
+        })),
+      },
+    }));
+    assert.deepEqual(updated.controls.mappings[0], {
+      ...existing,
+      enabled: false,
+    });
+    assert.deepEqual((await store.read()).controls.mappings[0], {
+      ...existing,
+      enabled: false,
+    });
+  }
+});
+
 test("response changes keep the selected movement and previous tuning", () => {
   const control = {
-    ...createControlMapping("existing", "rotation_roll", "left_hand_rotation"),
+    ...createControlMapping("existing", "rotation_roll", "left_hand_roll"),
+    input: "left_hand_rotation",
     center: 0.3,
     left_threshold: 0.1,
     right_threshold: 0.9,

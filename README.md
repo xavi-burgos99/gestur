@@ -81,7 +81,7 @@ El objetivo de simplificación de **500.000 triángulos** toma como referencia l
 
 Los valores de 60 FPS de render y 24 detecciones/s son **objetivos configurables, no resultados garantizados en una Pi**. Ver [la guía de medición](docs/performance.md) para comprobar tiempos de fotograma, carga y temperatura en el dispositivo real.
 
-En una **Pi 5 física de 4 GB**, el capitel original alcanzó **38,62 FPS** a 1080p con cámara, pose y manos activas durante 60 segundos, conservando geometría y textura. La CPU media del proceso desde el segundo 5 fue 73,45 % de un núcleo y la temperatura máxima, 59,5 °C. El [informe de validación y sus JSON](docs/pi5-validation.md) separa estas medidas de las pruebas en Mac. La sesión térmica de 30 minutos y el reinicio que confirme el arranque automático con la corrección gráfica siguen pendientes.
+En una **Pi 5 física de 4 GB**, el capitel original alcanzó **38,62 FPS** a 1080p con cámara, pose y manos activas durante 60 segundos, conservando geometría y textura. La CPU media del proceso desde el segundo 5 fue 73,45 % de un núcleo y la temperatura máxima, 59,5 °C. Un ensayo separado de **30 minutos con replay y giro continuo** terminó a **39,18 FPS**, con CPU total media de **20,53 %**, máximo térmico de **60,6 °C** y todas las lecturas de throttling a cero. El [informe de validación y sus JSON](docs/pi5-validation.md) registra condiciones, versión medida y límites. El reinicio que confirme el arranque automático con la corrección gráfica sigue pendiente.
 
 ## Controles y parámetros
 
@@ -102,7 +102,7 @@ El archivo [config/default.json](config/default.json) define captura, render y a
 bash -n gestur.sh scripts/kiosk-session.sh
 ```
 
-Las pruebas cubren pérdida y recuperación de seguimiento, cadencia de control, orientación circular, configuración inválida, transferencia entre hilos, bienvenida sin modelos e importación y simplificación de mallas de prueba. La instalación manual, el portal, la cámara y la salida gráfica V3D se han comprobado en la Pi descrita en el informe. Quedan por evaluar la precisión de los gestos y la estabilidad térmica sostenida; el proceso completo de imagen preparada y primer arranque también está pendiente.
+Las pruebas cubren pérdida y recuperación de seguimiento, cadencia de control, orientación circular, configuración inválida, transferencia entre hilos, bienvenida sin modelos e importación y simplificación de mallas de prueba. La instalación manual, el portal, la cámara y la salida gráfica V3D se han comprobado en la Pi descrita en el informe, junto con 30 minutos de carga térmica con replay. Quedan por evaluar la precisión de los gestos y las sesiones prolongadas con visitantes; el proceso completo de imagen preparada y primer arranque también está pendiente.
 
 ## Créditos
 

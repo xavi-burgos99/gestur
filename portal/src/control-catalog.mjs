@@ -152,7 +152,7 @@ function movementPath(body, id, side = null) {
     return { body, side, movement: "translation", axis: id };
   if (["yaw", "pitch", "roll"].includes(id))
     return { body, side, movement: "rotation", axis: id };
-  if (id === "openness") return { body, side, movement: "openness" };
+  if (["openness", "pinch"].includes(id)) return { body, side, movement: id };
   return null;
 }
 
@@ -214,10 +214,6 @@ export const GESTURE_OPTIONS = [
   },
 ];
 
-export const LEGACY_GESTURE_OPTIONS = GESTURE_OPTIONS.filter(
-  (option) => !option.selection,
-);
-
 export function emptyGestureSelection() {
   return {
     body: null,
@@ -225,7 +221,6 @@ export function emptyGestureSelection() {
     movement: null,
     axis: null,
     combined: null,
-    legacy: null,
   };
 }
 
@@ -233,16 +228,11 @@ export function selectionForGesture(input) {
   const option = GESTURE_OPTIONS.find((item) => item.id === input);
   return {
     ...emptyGestureSelection(),
-    ...(option?.selection || (option ? { legacy: input } : {})),
+    ...(option?.selection || {}),
   };
 }
 
 export function gestureFromSelection(selection) {
-  if (selection.legacy)
-    return (
-      LEGACY_GESTURE_OPTIONS.find((option) => option.id === selection.legacy)
-        ?.id || null
-    );
   return (
     GESTURE_OPTIONS.find(
       (option) =>
@@ -255,16 +245,16 @@ export function gestureFromSelection(selection) {
 }
 
 export function changeGestureSelection(current, field, value) {
-  if (field === "body" || field === "legacy")
-    return { ...emptyGestureSelection(), [field]: value };
-  const next = { ...current, [field]: value, legacy: null };
+  if (field === "body") return { ...emptyGestureSelection(), [field]: value };
   const descendants = {
     side: ["movement", "axis", "combined"],
     movement: ["axis", "combined"],
     axis: [],
     combined: [],
   };
-  for (const key of descendants[field] || []) next[key] = null;
+  if (!Object.hasOwn(descendants, field)) return current;
+  const next = { ...current, [field]: value };
+  for (const key of descendants[field]) next[key] = null;
   return next;
 }
 
@@ -338,11 +328,13 @@ export function gestureSteps(selection) {
               label: "Apertura de la mano",
               icon: icon("openness"),
             },
+            { id: "pinch", label: "Pinza", icon: icon("pinch") },
           ]
         : []),
     ],
   });
-  if (!selection.movement || selection.movement === "openness") return steps;
+  if (!selection.movement || ["openness", "pinch"].includes(selection.movement))
+    return steps;
   const axes =
     selection.movement === "translation"
       ? [
@@ -411,7 +403,7 @@ export function modeChanges(control, mode) {
 export function createControlMapping(id, output, input) {
   if (
     !CONTROL_OPTIONS.some((option) => option.id === output) ||
-    !GESTURE_OPTIONS.some((option) => option.id === input)
+    !GESTURE_OPTIONS.some((option) => option.id === input && option.selection)
   )
     return null;
   return {

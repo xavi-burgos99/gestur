@@ -104,6 +104,18 @@
     "capitel-no-callback/manifest.json": {
       "bytes": 3254,
       "sha256": "5a84b1959456d0f57ab49a7499007ebac1d9ac0fc11d985de40f8af5e083877d"
+    },
+    "capitel-endurance/manifest.json": {
+      "bytes": 2286,
+      "sha256": "083fcd132a02110bc1270f1d1542fc26ef9da7283ae709dda94149230758825e"
+    },
+    "capitel-endurance/summary.json": {
+      "bytes": 2539,
+      "sha256": "4aa5a0c2fef35830d50f4e70971cc8694d7751bd63720cd9dbf1adc26781757a"
+    },
+    "capitel-endurance/trial-config.json": {
+      "bytes": 1687,
+      "sha256": "1d9a6c4544cad99a56c23e76ac5f98e84400a3cd15f7a4e7daf1daea1b563cca"
     }
   },
   "measurement_scripts": {
@@ -169,6 +181,18 @@
       "bytes": 4598,
       "sha256": "b0cb1deb8c2e106dff3a6fef84845da76b4e57aa77ad264407b1654e300bfb35",
       "availability": "Preserved version used by operator for Pi renderer diagnostics; experimental, not imported by application runtime."
+    },
+    "scripts/research/aggregate_pi_trial.py": {
+      "original_filename": "aggregate_gestur_pi_trial.py",
+      "bytes": 13632,
+      "sha256": "ea8139fe5d6570ca3ade2fb0d7b7dccd2f4f491ca1645fb014c9e0cb4193fae7",
+      "availability": "Preserved byte-for-byte from the local analysis script; reads completed trial files only, not imported by application runtime."
+    },
+    "scripts/research/plot_pi_system.py": {
+      "original_filename": "plot_gestur_pi_trial.py",
+      "bytes": 10352,
+      "sha256": "e6e99a974f81ec54a0ffba9b3ffeca39b317eea6a88b882a5bd172c761dc1849",
+      "availability": "Preserved byte-for-byte from the local analysis script; reads completed trial files only, not imported by application runtime."
     }
   },
   "experimental_preparation_sources": {
@@ -208,6 +232,11 @@
       "bytes": 46345,
       "sha256": "a583276791d3f2fe7f7415772053ad1ab47ea6c79f49b6bb7da8b67f934b896f",
       "reason": "Full JSONL retained under artifacts/pi5, not committed; compact aggregates published."
+    },
+    "capitel-endurance/telemetry.jsonl": {
+      "bytes": 4071285,
+      "sha256": "3217ddd15b3210fb010d1e7f2124c514f1fd4c44ca56c2fd6cf08bb3b68cc204",
+      "reason": "Full JSONL retained under artifacts/pi5, not committed; compact aggregates and 60-second tables published."
     }
   },
   "derived_files": {
@@ -240,6 +269,26 @@
       "bytes": 1715,
       "sha256": "6ad5354d94ad4c5dcf536aa867a545bb2eaaa4f34e48ba5bc1e0acde3162dcda",
       "derived_from": "capitel-no-callback/telemetry.jsonl"
+    },
+    "capitel-endurance/telemetry-summary.json": {
+      "bytes": 41965,
+      "sha256": "944c326ddd89435c35607661c5b391aff5ba0fb9f48ed0070afaef1bfbdf89f6",
+      "derived_from": "capitel-endurance/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
+    },
+    "capitel-endurance/windows-60s.csv": {
+      "bytes": 4524,
+      "sha256": "38abd70f614a9c930181f351e178d7e30e590e460d75993af360265f206193ca",
+      "derived_from": "capitel-endurance/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
+    },
+    "capitel-endurance/windows-60s.md": {
+      "bytes": 3062,
+      "sha256": "9051e35952735d61c428bd43b72b36ee9b1e67ead21d4524fbc132a2b4df065f",
+      "derived_from": "capitel-endurance/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
+    },
+    "capitel-endurance/telemetry.png": {
+      "bytes": 276790,
+      "sha256": "d25d800119b337d6ea84b57df2aae7fa3cdc0d329b4d1fef90c5501b59dcd5c1",
+      "derived_from": "capitel-endurance/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
     }
   },
   "redacted_files": {
@@ -260,5 +309,82 @@
       ],
       "redaction": "Only SSID values replaced with [SSID omitido]; all checks, status flags and timings preserved. Not byte-identical to original."
     }
+  },
+  "endurance_validation": {
+    "source_commit_reported_by_operator": "35f8383b5d0275c044998d83b99069d939972fb3",
+    "equivalent_runtime_commit": "7a4070621bf69edd12407f763ff6c94dc8fe1fa2",
+    "equivalence_scope": "The listed runtime, configuration, model manifest and benchmark files are byte-identical between both Git commits. This is Git-source verification, not a fresh remote filesystem attestation. The run predates subsequent controls and portal deployment changes.",
+    "code_files_at_measured_commit": {
+      "scripts/benchmark_pi_system.py": {
+        "bytes": 19528,
+        "sha256": "6d0ec6716273e38d46f8079ebc264bdafc3511624df383421c00df01288c6364"
+      },
+      "scripts/benchmark_render.py": {
+        "bytes": 5925,
+        "sha256": "b1aa44dc5f2358b1ce26d4066436f1b01dd862ddebe96a8ff108cefe2753f55f"
+      },
+      "controller.py": {
+        "bytes": 12913,
+        "sha256": "39cdb6b4097f38624dc93dfae924f64f3283304c2ed7268b26b2aee31ffbc49e"
+      },
+      "visualizer.py": {
+        "bytes": 18679,
+        "sha256": "d8012cf1a28dbcf2159ba25d169ac9f3116fc31c92bf8b4571ba15771ef67ac0"
+      },
+      "render_scheduler.py": {
+        "bytes": 2052,
+        "sha256": "403fedf34fc54820f01c141a3642a978f3b4ac37ed6827a9ef308c398fc997f8"
+      },
+      "runtime_state.py": {
+        "bytes": 1933,
+        "sha256": "cfeed0a2925c542709e39b4a2a759e51a2c6e2559042e985462a502cf0c740fb"
+      },
+      "device_metrics.py": {
+        "bytes": 2119,
+        "sha256": "bb0f0b51ab79279a7fc427e6ebf0222dba1ce5bd2080d28cab6735116978ffe7"
+      },
+      "tracking_session.py": {
+        "bytes": 9174,
+        "sha256": "24c12740c4349d8b2f46d8dbd3c3befa2dc24b709e228dfc88526b92557fbcb8"
+      },
+      "pose_detector.py": {
+        "bytes": 23339,
+        "sha256": "9008877adc473669fb4e876d31ad482a0da0504799446705fc567ddb0e6dd97b"
+      },
+      "pose_hand_tracker.py": {
+        "bytes": 8557,
+        "sha256": "db26dfffdee01ee51e232b281060af9908ed2962d0583e6ad8b339620a77dd61"
+      },
+      "tracking_geometry.py": {
+        "bytes": 10556,
+        "sha256": "dfbad72ee46d04f3ac88608f45b0ec905ab9896ae01c5ce4f4fa0436409f78b9"
+      },
+      "control_system.py": {
+        "bytes": 21150,
+        "sha256": "1a9fa7b8d20013aed8cd00d76dc23b10c1af36de37de1e14f0bb70f7c9be2bdd"
+      },
+      "runtime_config.py": {
+        "bytes": 8185,
+        "sha256": "bf5123dd55f3f8c2bd68a748d3905b7e7930faa88fa9d97c23a69707803e8d5b"
+      },
+      "config/default.json": {
+        "bytes": 1693,
+        "sha256": "4248cf62dca250161904ee878496fafa67748c0a4ff220283a59c09c6cd3bc66"
+      },
+      "config/schema.json": {
+        "bytes": 4920,
+        "sha256": "88c1762e2c9b59257942b9e274edbf224de04f206ff1571a2a424280ba2ef3c3"
+      },
+      "tracking_models/manifest.json": {
+        "bytes": 1376,
+        "sha256": "b51f8bd2a4d39d6ee937f5d1a57540a5c5f7dc93ca1f75d212728c91dae34bb4"
+      }
+    },
+    "published_data_directory": "capitel-endurance",
+    "source_telemetry": "artifacts/pi5/capitel-endurance/telemetry.jsonl",
+    "publication_base_commit": "003482be496f1c2b858fd0a86776d772bf8cada9",
+    "aggregation_script": "scripts/research/aggregate_pi_trial.py",
+    "plot_script": "scripts/research/plot_pi_system.py",
+    "scope": "1800-second replay with the original capitel, continuous imposed movement, real Lite pose and hand inference, 1920x1080 visible framebuffer and 4 actual MSAA samples. Not a live-camera accuracy test or a validation of later changes."
   }
 }

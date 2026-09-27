@@ -126,9 +126,6 @@
   background: #eaf4ee;
   border-color: #619983;
 }
-.gesture-other {
-  align-self: flex-start;
-}
 .selected-control {
   padding: 12px 16px;
   border: 1px solid #e2e8e3;

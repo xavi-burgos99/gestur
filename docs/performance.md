@@ -1,6 +1,6 @@
 # Medir el rendimiento de Gestur
 
-Esta versión se ha probado en una **Raspberry Pi 5 física de 4 GB**. Con el capitel original de 491.038 triángulos, cámara, pose y manos, se midieron **38,62 FPS a 1080p durante 60 segundos**. La CPU media del proceso desde el segundo 5 fue 73,45 % de un núcleo y el máximo térmico, 59,5 °C. El [informe de validación](pi5-validation.md) conserva los JSON, condiciones y límites de estas pruebas. No son una comparación porcentual contra la versión antigua ni una validación térmica de 30 minutos.
+Esta versión se ha probado en una **Raspberry Pi 5 física de 4 GB**. Con el capitel original de 491.038 triángulos, cámara, pose y manos, se midieron **38,62 FPS a 1080p durante 60 segundos**. La CPU media del proceso desde el segundo 5 fue 73,45 % de un núcleo y el máximo térmico, 59,5 °C. Un ensayo separado de **30 minutos con replay y giro continuo** terminó a **39,18 FPS**, CPU total media de **20,53 %** y temperatura máxima de **60,6 °C**, con todas las lecturas de throttling a cero. El [informe de validación](pi5-validation.md) conserva los JSON, versión medida, condiciones y límites. No se ha medido una mejora porcentual frente a la versión antigua.
 
 ## Medición reproducible en Pi 5
 
@@ -36,7 +36,7 @@ La herramienta activa pose y manos con una configuración de ensayo aislada, con
 
 `--show-fps --verbose` muestra dibujo y control por separado. Con el arranque habitual, `/var/lib/gestur/runtime-status.json` se actualiza una vez por segundo con CPU del proceso, CPU total del sistema, temperatura y frecuencia de CPU cuando Linux las ofrece. La CPU del proceso usa 100 % por núcleo; puede superar 100 %. El presupuesto de inferencia del 60 % mide tiempo de trabajo entre pausas, no equivale a un uso del 60 % de CPU. El indicador térmico avisa desde 78 °C; no modifica el firmware ni certifica ausencia de throttling.
 
-Para verificar estabilidad térmica, compara el principio y el final del ensayo de 1.800 segundos con la misma interacción. La Raspberry Pi [reduce la frecuencia al alcanzar sus límites térmicos](https://www.raspberrypi.com/news/heating-and-cooling-raspberry-pi-5/); optimizar software no sustituye medir la instalación y su refrigeración. La prueba física prolongada sigue pendiente de resultados; las mediciones breves publicadas no la sustituyen.
+Para verificar estabilidad térmica, compara el principio y el final del ensayo de 1.800 segundos con la misma interacción. La Raspberry Pi [reduce la frecuencia al alcanzar sus límites térmicos](https://www.raspberrypi.com/news/heating-and-cooling-raspberry-pi-5/); optimizar software no sustituye medir la instalación y su refrigeración. El ensayo físico publicado completó 30 minutos con replay y giro impuesto, con temperatura inicial/final de 56,2/57,3 °C y máxima de 60,6 °C. Describe esa carga y refrigeración; no sustituye probar sesiones reales prolongadas ni otras instalaciones.
 
 Para aislar el coste de antialiasing, copia `config/default.json` a un archivo local y repite las pruebas del controlador con `render.antialias_samples` en 0, 2 y 4. No cambies simultáneamente frecuencia, resolución y antialiasing. Por defecto se solicitan 2 muestras; en la Pi probada el framebuffer concedió **4 muestras reales**. Registra siempre el valor efectivo: cambiar la solicitud no garantiza cambiar el trabajo gráfico. `benchmark_pi_system.py` mantiene fija la solicitud de 2; el proyecto original no solicitaba muestras de forma explícita.
 
@@ -55,7 +55,7 @@ Para aislar el coste de antialiasing, copia `config/default.json` a un archivo l
 
 ## Evidencia medida y comparación de alternativas
 
-- [Validación física en Pi 5](pi5-validation.md): capitel con cámara y seguimiento, carga de CPU, temperaturas breves, motores de inferencia, API y diagnóstico de render. Con replay, cuatro ajustes del reloj dieron 39,32–39,54 FPS; retirar el callback de métricas no aportó una mejora útil y se conserva la instrumentación. Estos ensayos no identifican todavía el cuello de botella ni miden ocupación de GPU.
+- [Validación física en Pi 5](pi5-validation.md): capitel con cámara y seguimiento, carga de CPU, ensayo térmico de 30 minutos con replay, motores de inferencia, API y diagnóstico de render. Con replay, cuatro ajustes del reloj dieron 39,32–39,54 FPS; retirar el callback de métricas no aportó una mejora útil y se conserva la instrumentación. Estos ensayos no identifican todavía el cuello de botella ni miden ocupación de GPU.
 - [Pruebas de dibujo y consumo del reloj de Panda3D](render-performance.md): distingue la escena sintética medida en Mac de los ensayos posteriores con capitel real en Pi; no extrapola el ahorro observado entre equipos.
 - [Geometría y comparación de modelos](performance-research.md): Lite frente a Full, alternativas faciales y compatibilidad del runtime reciente.
 - Los ensayos matemáticos cubren los giros combinados de palma, ambas manos y la pérdida/recuperación de detección. Corrigen errores del cálculo anterior; no sustituyen evaluar la precisión con una cámara y personas reales.

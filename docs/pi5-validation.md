@@ -96,7 +96,9 @@ El despliegue medido correspondía a `35f8383`, antes de los controles añadidos
 después del ensayo. Los archivos del controlador, seguimiento, visor, métricas,
 configuración y benchmark son idénticos a los de `7a40706`; sus hashes se
 registran en el [manifiesto de resultados](benchmarks/pi5/manifest.json).
-Esto identifica la versión medida y no certifica cambios posteriores.
+Esto identifica la versión medida y no certifica cambios posteriores. El ensayo
+de 60 segundos de las nuevas entradas descrito más abajo sí usó el seguimiento
+de `003482b`; es una comprobación de contratos separada de esta referencia térmica.
 
 | Medida | Resultado |
 | --- | ---: |
@@ -267,6 +269,63 @@ máximo configurado. Con `num_hands=2` y una sola mano seguida, la búsqueda de
 palmas se repite en cada llamada. Esto justifica investigar una búsqueda menos
 frecuente de nuevas manos, pero no demuestra qué proporción exacta de esta prueba
 consume el detector. No se cambió a una mano fija ni se alteró ese grafo.
+
+## Contratos de torso y proximidad de manos tras el despliegue
+
+El seguimiento instalado de `003482b` completó **60,0002 s** de replay con
+resultado `passed`. Los hashes de los cinco archivos de seguimiento,
+extractores y esquema registrados por la prueba coinciden con ese commit. Esta
+versión incorpora las ocho entradas nuevas y es posterior al seguimiento
+medido durante los 30 minutos del capitel (`35f8383`). **No son dos mediciones
+comparables de rendimiento ni una prueba térmica del nuevo despliegue.**
+
+Se repitió la fotografía oficial `woman_hands.jpg`, de 640 × 960, adaptada sin
+deformar a 640 × 480 y entregada a 24 FPS. Pose Lite y manos Lite ejecutaron
+inferencia nativa en CPU, con máximos solicitados de 24/15 FPS y presupuesto
+conjunto de 0,6. La demanda de pose incluía solo `torso`. Dos sistemas de
+controles independientes consumieron el mismo seguimiento para comprobar la
+proximidad de cada mano. No se inició cámara ni visor y no se modificó la
+configuración de producción.
+
+| Entradas comprobadas | Valores finitos por entrada | Ausentes por entrada | Inválidos / fuera de rango |
+| --- | ---: | ---: | ---: |
+| `torso_x`, `torso_y`, `torso_scale`, `torso_pitch`, `torso_yaw`, `torso_roll` | 179 | 179 | 0 / 0 |
+| `left_hand_scale`, `right_hand_scale` | 358 | 0 | 0 / 0 |
+
+Son **358 publicaciones del seguimiento**, que pueden incluir caducidad de
+estado; no son fotogramas independientes ni anotaciones de precisión. `passed`
+significa que las ocho entradas tuvieron cobertura finita y no hubo errores de
+contrato, no que todas estuvieran disponibles continuamente. La prueba no
+establece la causa de las ausencias de torso. Las proximidades se mantuvieron
+en el intervalo 0–1; siguen siendo medidas relativas monoculares, no metros.
+Cada sistema de controles produjo 1.192 salidas finitas.
+
+Pasaron las cinco comprobaciones de demanda: ambos perfiles solicitan los
+mismos detectores, la presencia solicitada es torso, desactivar pose conserva
+solo manos y la ausencia de modelo o el modo sin cámara desactivan el seguimiento.
+**No hubo ninguna publicación con torso detectado y cabeza ausente**, por lo
+que no se verificó con esta imagen el caso de cabeza ocluida. Tampoco se evaluó
+precisión de movimientos, recuperación tras oclusiones ni latencia visual.
+
+Se registraron 358 inferencias de pose y 358 de manos antes del cierre, CPU
+media del proceso de 64,53 % de un núcleo durante el bucle y pico RSS de
+298,68 MB decimales, que incluye la preparación. Son observaciones de esta
+carga sin visor; no demuestran una mejora de CPU o memoria. El contador de
+fallos de captura fue cero antes del cierre y uno tras detener el replay; se
+conservan ambas lecturas.
+
+Fuentes: [resultado original sin modificar](benchmarks/pi5/new-inputs/summary.json),
+[manifiesto, hashes y condiciones](benchmarks/pi5/new-inputs/manifest.json) y
+[script exacto de la prueba](../scripts/research/benchmark_new_inputs.py).
+Para repetirla desde la raíz del repositorio, con los modelos instalados y una
+copia local de la fotografía identificada por el manifiesto:
+
+```sh
+.venv/bin/python scripts/research/benchmark_new_inputs.py --project . --source replay --image /ruta/woman_hands.jpg --seconds 60 --output /tmp/new-inputs-replay.json
+```
+
+El archivo de salida debe ser nuevo. El script no instala dependencias ni
+modifica parámetros del portal.
 
 ## Motores de manos: trabajos diferentes
 

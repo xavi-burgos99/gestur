@@ -1,0 +1,77 @@
+{
+  "date": "2026-09-27",
+  "trial": "torso-and-hand-proximity-contract",
+  "hardware": "Raspberry Pi 5, 4 GB, aarch64; see parent manifest for system details.",
+  "source_commit_reported_by_operator": "003482be496f1c2b858fd0a86776d772bf8cada9",
+  "code_verification": "All five code_sha256 values captured by the probe match these files in commit 003482b. The measured 30-minute capitel baseline predates this deployment; no performance equivalence is claimed.",
+  "code_sha256": {
+    "tracking_geometry.py": "f5b382cd26434718955221933cc32d0029deb4f0e029c9877679629e3f060b1c",
+    "tracking_session.py": "7fb71b09e4826e960c661b989f992aae6a91433ff31d14a535f1b26a1d61f678",
+    "pose_detector.py": "4920999a442d2af262e561c087e49ec3e81b0e01f0e220d3553a2739013fd463",
+    "control_system.py": "d48eca12fb9d65c8134ebdce19fc1e3ae08e19034f193c7013661112ee1b355a",
+    "config/schema.json": "b5bb85c1c573d07f17968823327c4e0b6a06ae3d104692f92902a14121093527"
+  },
+  "raw_file_unchanged": {
+    "path": "summary.json",
+    "source": "artifacts/pi5/new-inputs-replay.json",
+    "bytes": 5206,
+    "sha256": "0ab0a2375539d5b92c6674a61ed83dc0dddcec358e2f67afd335898765ec16de"
+  },
+  "privacy": "Aggregate statistics only; original JSON contains no images, coordinates, network addresses, credentials or absolute asset paths. Published byte-for-byte without redaction.",
+  "measurement_script": {
+    "path": "scripts/research/benchmark_new_inputs.py",
+    "bytes": 14201,
+    "sha256": "dd7a8ea6b782af220c6b1d81fe623037defed69de4401e9bae6b503436afa1fe",
+    "availability": "Preserved byte-for-byte in repository; not imported by the production runtime."
+  },
+  "reproduction": {
+    "working_directory": "Repository root with the installed production Python environment and Lite model assets.",
+    "command": ".venv/bin/python scripts/research/benchmark_new_inputs.py --project . --source replay --image /ruta/woman_hands.jpg --seconds 60 --output /tmp/new-inputs-replay.json",
+    "image_path": "Replace /ruta/woman_hands.jpg with the local copy of the fixture; output must not already exist.",
+    "dependencies": {
+      "python": "3.12.14",
+      "mediapipe": "0.10.18",
+      "numpy": "1.26.4",
+      "opencv-contrib-python": "4.11.0.86"
+    },
+    "model_asset_manifest": "tracking_models/manifest.json",
+    "model_manifest_sha256_at_measured_commit": "b51f8bd2a4d39d6ee937f5d1a57540a5c5f7dc93ca1f75d212728c91dae34bb4",
+    "model_provenance_scope": "Installed Pose Lite and Hand Lite as reported by the probe; source URLs and expected hashes are in the model asset manifest. This probe did not independently hash installed model files.",
+    "fixture": {
+      "url": "https://storage.googleapis.com/mediapipe-assets/woman_hands.jpg",
+      "sha256": "70cbeb38e198c9862202e0979c21a99b40ca980d3e7b250176c85b1636a40f12",
+      "original_size": [
+        640,
+        960
+      ],
+      "preparation": "Aspect-preserving letterbox to 640x480.",
+      "replay_fps": 24
+    }
+  },
+  "measurement_scope": {
+    "seconds": 60.00019752199978,
+    "camera_requested": false,
+    "renderer_started": false,
+    "production_state_modified": false,
+    "requested_pose_parts": [
+      "torso"
+    ],
+    "publications": 358,
+    "interpretation": "Fresh tracker publications may include expiry; they are not independent video frames or ground-truth accuracy observations. PASS requires finite coverage of all eight inputs without contract errors, not detection in every publication.",
+    "torso_coverage": "Each torso input was finite in 179 publications and missing in 179; no nonfinite values or range violations. No cause of missing torso samples is established by this report.",
+    "hand_proximity_coverage": "Both hand proximity inputs were finite in all 358 publications.",
+    "torso_without_head_observed": 0,
+    "gating_scope": "The five configuration-demand checks passed. A torso-visible/head-occluded physical sequence was not observed and is not validated.",
+    "cpu": "64.53297641195746 percent of one logical core during the measured loop; excludes model startup and cleanup. No equivalent before/after comparison or resource improvement demonstrated.",
+    "rss": "298.68032 MB decimal peak RSS for the entire process, including setup; not comparable to current RSS or model weight size.",
+    "capture_failures": "Zero before cleanup, one after replay teardown; both original snapshots are retained.",
+    "limitations": [
+      "Single still-image replay cannot validate movement accuracy, occlusion recovery or true 3D distance.",
+      "Scale is a monocular relative proximity proxy, not absolute world.z or metres.",
+      "Missing torso or hand detections may make coverage incomplete; not automatically a runtime defect.",
+      "Body-only cadence with an occluded head is observed only if such frames occur.",
+      "Replay teardown can increment the final capture-failure counter; pre-cleanup metrics are separate.",
+      "No renderer, optical latency or comparison with historical system benchmarks."
+    ]
+  }
+}

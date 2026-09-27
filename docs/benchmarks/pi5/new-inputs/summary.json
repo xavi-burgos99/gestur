@@ -1,0 +1,173 @@
+{
+  "trial": "torso-and-hand-proximity-contract",
+  "source": "replay",
+  "requested_seconds": 60.0,
+  "platform": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.41",
+  "python": "3.12.14",
+  "fixture": {
+    "sha256": "70cbeb38e198c9862202e0979c21a99b40ca980d3e7b250176c85b1636a40f12",
+    "original_size": [
+      640,
+      960
+    ],
+    "preparation": "Aspect-preserving letterbox to 640x480."
+  },
+  "outcome": "passed",
+  "scope": {
+    "camera_requested": false,
+    "renderer_started": false,
+    "production_state_modified": false,
+    "inference_models": "Installed MediaPipe Pose Lite and Hand Lite, CPU VIDEO",
+    "input_size": [
+      640,
+      480
+    ],
+    "replay_fps": 24,
+    "signal_samples": "Fresh tracker publications, which can include expiry; not independent video frames.",
+    "control_samples": "Two independent control mappers for left/right proximity, consuming the same tracker."
+  },
+  "limitations": [
+    "Single still-image replay cannot validate movement accuracy, occlusion recovery or true 3D distance.",
+    "Scale is a monocular relative proximity proxy, not absolute world.z or metres.",
+    "Missing torso or hand detections may make coverage incomplete; not automatically a runtime defect.",
+    "Body-only cadence with an occluded head is observed only if such frames occur.",
+    "Replay teardown can increment the final capture-failure counter; pre-cleanup metrics are separate.",
+    "No renderer, optical latency or comparison with historical system benchmarks."
+  ],
+  "probe_sha256": "dd7a8ea6b782af220c6b1d81fe623037defed69de4401e9bae6b503436afa1fe",
+  "versions": {
+    "mediapipe": "0.10.18",
+    "numpy": "1.26.4",
+    "opencv-contrib-python": "4.11.0.86"
+  },
+  "code_sha256": {
+    "tracking_geometry.py": "f5b382cd26434718955221933cc32d0029deb4f0e029c9877679629e3f060b1c",
+    "tracking_session.py": "7fb71b09e4826e960c661b989f992aae6a91433ff31d14a535f1b26a1d61f678",
+    "pose_detector.py": "4920999a442d2af262e561c087e49ec3e81b0e01f0e220d3553a2739013fd463",
+    "control_system.py": "d48eca12fb9d65c8134ebdce19fc1e3ae08e19034f193c7013661112ee1b355a",
+    "config/schema.json": "b5bb85c1c573d07f17968823327c4e0b6a06ae3d104692f92902a14121093527"
+  },
+  "requested_tracking": {
+    "use_pose": true,
+    "use_hands": true,
+    "pose_parts": [
+      "torso"
+    ],
+    "smoothing_time_ms": 60,
+    "mirror": true,
+    "camera_index": 0,
+    "inference_fps": 24,
+    "hand_fps": 15,
+    "width": 640,
+    "height": 480
+  },
+  "gating_checks": {
+    "left_and_right_profiles_request_identical_detectors": true,
+    "torso_only_pose_presence": true,
+    "global_pose_switch_leaves_only_hands": true,
+    "no_model_disables_tracking": true,
+    "no_camera_disables_tracking": true
+  },
+  "startup_seconds": 1.1388308780001353,
+  "metrics_before_cleanup": {
+    "captured_frames": 1436,
+    "pose_frames": 358,
+    "hand_frames": 358,
+    "capture_failures": 0,
+    "inference_ms": 80.72097400008715,
+    "frame_age_ms": 108.83818699994663,
+    "inference_wall_seconds": 35.90117049399987,
+    "inference_duty_limit": 0.6,
+    "budget_pauses": 358,
+    "budget_pause_seconds": 23.911245344665076,
+    "pose_scheduled_fps": 24.0,
+    "hand_scheduled_fps": 15.0,
+    "pose_idle": false,
+    "hand_idle": false
+  },
+  "signals": {
+    "torso_x": {
+      "finite": 179,
+      "missing": 179,
+      "invalid": 0,
+      "range_violations": 0
+    },
+    "torso_y": {
+      "finite": 179,
+      "missing": 179,
+      "invalid": 0,
+      "range_violations": 0
+    },
+    "torso_scale": {
+      "finite": 179,
+      "missing": 179,
+      "invalid": 0,
+      "range_violations": 0
+    },
+    "torso_pitch": {
+      "finite": 179,
+      "missing": 179,
+      "invalid": 0,
+      "range_violations": 0
+    },
+    "torso_yaw": {
+      "finite": 179,
+      "missing": 179,
+      "invalid": 0,
+      "range_violations": 0
+    },
+    "torso_roll": {
+      "finite": 179,
+      "missing": 179,
+      "invalid": 0,
+      "range_violations": 0
+    },
+    "left_hand_scale": {
+      "finite": 358,
+      "missing": 0,
+      "invalid": 0,
+      "range_violations": 0
+    },
+    "right_hand_scale": {
+      "finite": 358,
+      "missing": 0,
+      "invalid": 0,
+      "range_violations": 0
+    }
+  },
+  "observations": {
+    "publications": 358,
+    "head_detected": 179,
+    "torso_detected": 179,
+    "left_hand_detected": 358,
+    "right_hand_detected": 358,
+    "torso_without_head": 0,
+    "torso_without_head_idle": 0
+  },
+  "control_samples": {
+    "left": 1192,
+    "right": 1192
+  },
+  "unobserved_signals": [],
+  "metrics_after_cleanup": {
+    "captured_frames": 1436,
+    "pose_frames": 359,
+    "hand_frames": 359,
+    "capture_failures": 1,
+    "inference_ms": 142.06731100011893,
+    "frame_age_ms": 179.60708300006445,
+    "inference_wall_seconds": 36.04323780499999,
+    "inference_duty_limit": 0.6,
+    "budget_pauses": 358,
+    "budget_pause_seconds": 23.911245344665076,
+    "pose_scheduled_fps": 24.0,
+    "hand_scheduled_fps": 15.0,
+    "pose_idle": false,
+    "hand_idle": false
+  },
+  "seconds": 60.00019752199978,
+  "process_cpu_seconds": 38.719913314,
+  "process_cpu_percent_one_core": 64.53297641195746,
+  "peak_rss_MB": 298.68032,
+  "errors": []
+}

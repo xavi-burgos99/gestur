@@ -116,6 +116,10 @@
     "capitel-endurance/trial-config.json": {
       "bytes": 1687,
       "sha256": "1d9a6c4544cad99a56c23e76ac5f98e84400a3cd15f7a4e7daf1daea1b563cca"
+    },
+    "new-inputs/summary.json": {
+      "bytes": 5206,
+      "sha256": "0ab0a2375539d5b92c6674a61ed83dc0dddcec358e2f67afd335898765ec16de"
     }
   },
   "measurement_scripts": {
@@ -193,6 +197,12 @@
       "bytes": 10352,
       "sha256": "e6e99a974f81ec54a0ffba9b3ffeca39b317eea6a88b882a5bd172c761dc1849",
       "availability": "Preserved byte-for-byte from the local analysis script; reads completed trial files only, not imported by application runtime."
+    },
+    "scripts/research/benchmark_new_inputs.py": {
+      "original_filename": "gestur_new_inputs_probe.py",
+      "bytes": 14201,
+      "sha256": "dd7a8ea6b782af220c6b1d81fe623037defed69de4401e9bae6b503436afa1fe",
+      "availability": "Preserved byte-for-byte from the 60-second native new-input contract probe; not imported by the application runtime."
     }
   },
   "experimental_preparation_sources": {
@@ -386,5 +396,17 @@
     "aggregation_script": "scripts/research/aggregate_pi_trial.py",
     "plot_script": "scripts/research/plot_pi_system.py",
     "scope": "1800-second replay with the original capitel, continuous imposed movement, real Lite pose and hand inference, 1920x1080 visible framebuffer and 4 actual MSAA samples. Not a live-camera accuracy test or a validation of later changes."
+  },
+  "new_inputs_validation": {
+    "source_commit_reported_by_operator": "003482be496f1c2b858fd0a86776d772bf8cada9",
+    "published_data_directory": "new-inputs",
+    "manifest": {
+      "path": "new-inputs/manifest.json",
+      "bytes": 5031,
+      "sha256": "58cf0f179dc7c8589c08f4fb7b9d890d9283b745b7ce379f2175366643fb17e7"
+    },
+    "source_summary": "artifacts/pi5/new-inputs-replay.json",
+    "runtime_hashes_verified_against_commit": true,
+    "scope": "60-second still-image replay with the installed 003482b tracker and two control mappers. Finite contracts for eight new torso and hand-proximity inputs; no renderer, webcam, accuracy claim, torso-without-head observation or CPU improvement comparison. Separate from the earlier 35f8383 30-minute capitel baseline."
   }
 }

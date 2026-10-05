@@ -628,6 +628,12 @@ class ControlledObjViewer(ShowBase):
                 0,
                 0.045,
             )
+            if not hasattr(self, "_description_font"):
+                self._description_font = DynamicTextFont(self._welcome_font)
+                self._description_font.set_line_height(
+                    self._welcome_font.get_line_height() * 1.15
+                )
+            self.content_description.node().set_font(self._description_font)
             self.content_description.set_color_scale(1, 1, 1, 0.8)
             self._layout_model_content()
         self.invalidate(frames=2)
@@ -658,11 +664,11 @@ class ControlledObjViewer(ShowBase):
         height = title_height + description_height + 0.33
         if self.model_content["placement"] == "top":
             self.content_title.set_z(-0.24)
-            self.content_description.set_z(-0.24 - title_height - 0.04)
+            self.content_description.set_z(-0.24 - title_height - 0.025)
             self.content_gradient.set_pos(0, 0, 0)
         else:
             self.content_title.set_z(height - 0.06)
-            self.content_description.set_z(height - 0.1 - title_height)
+            self.content_description.set_z(height - 0.085 - title_height)
             self.content_gradient.set_pos(0, 0, height + 0.24)
         self.content_gradient.set_scale(width, 1, height + 0.24)
 

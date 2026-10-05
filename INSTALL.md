@@ -20,7 +20,7 @@ Abre [Raspberry Pi Imager](https://www.raspberrypi.com/software/), selecciona
 - País: España (`ES`); ciudad: Madrid; zona horaria: `Europe/Madrid`.
 - Idioma/región: español (`es_ES.UTF-8`); teclado: español (`es`).
 - Usuario: `gestur` (recomendado); contraseña segura.
-- **No configurar ninguna red Wi-Fi.** Sí selecciona España como país Wi-Fi.
+- **No configurar Wi-Fi: deja sus campos vacíos.**
 - Activar SSH con contraseña o con tu clave pública.
 - Desactivar Raspberry Pi Connect.
 
@@ -41,9 +41,7 @@ ssh gestur@gestur.local
 Usa la contraseña o clave SSH configurada en Imager. Si elegiste otro usuario,
 sustituye `gestur` por ese usuario en los comandos. Si `.local` no resuelve,
 usa la IP del dispositivo, por ejemplo `ssh gestur@192.168.1.93`.
-Si Imager no permitió fijar el país Wi-Fi sin configurar una red, establece
-España en `sudo raspi-config` antes de instalar. Una vez comprobado el acceso,
-ejecuta `exit` para volver al ordenador.
+Una vez comprobado el acceso, ejecuta `exit` para volver al ordenador.
 
 ## 4. Copiar e instalar
 

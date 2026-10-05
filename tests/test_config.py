@@ -24,7 +24,7 @@ class ConfigTests(unittest.TestCase):
         self.assertIsNone(default_config()["active_model"])
         self.assertEqual(default_config()["render"]["ambient_light"], "none")
         self.assertEqual(default_config()["render"]["exposure"], 50)
-        self.assertEqual(default_config()["controls"]["idle_mode"], "return")
+        self.assertEqual(default_config()["controls"]["idle_mode"], "float")
 
     def test_legacy_v1_lighting_and_idle_defaults_preserve_user_parameters(self):
         legacy = default_config()

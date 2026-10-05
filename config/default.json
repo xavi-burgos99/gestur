@@ -21,7 +21,7 @@
     "exposure": 50
   },
   "controls": {
-    "idle_mode": "return",
+    "idle_mode": "float",
     "smoothing_ms": 90,
     "reset_timeout_seconds": 3,
     "reset_duration_seconds": 1,

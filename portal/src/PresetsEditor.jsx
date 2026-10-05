@@ -102,7 +102,11 @@ export default function PresetsEditor({
         setPresets(list);
         setSelected(preset.name);
         setName(preset.name);
-        notify(overwritten ? "Preset sobrescrito." : "Preset guardado.");
+        notify(
+          overwritten
+            ? "Parámetros preestablecidos sobrescritos."
+            : "Parámetros preestablecidos guardados.",
+        );
       },
     );
   }
@@ -114,7 +118,7 @@ export default function PresetsEditor({
       ({ config }) => {
         onApply(config);
         setDialog(null);
-        notify("Preset aplicado.");
+        notify("Parámetros preestablecidos aplicados.");
       },
     );
   }
@@ -128,7 +132,7 @@ export default function PresetsEditor({
         setSelected(null);
         if (normalizedName === target) setName("");
         setDialog(null);
-        notify("Preset eliminado.");
+        notify("Parámetros preestablecidos eliminados.");
       },
     );
   }
@@ -136,7 +140,7 @@ export default function PresetsEditor({
   return (
     <>
       <Paper withBorder p="lg" mb="xl">
-        <Title order={3}>Presets</Title>
+        <Title order={3}>Parámetros preestablecidos</Title>
         <Text size="sm" c="dimmed" mt={4} mb="md">
           Guarda todos los parámetros de esta pestaña, incluidos los cambios sin
           guardar.
@@ -161,13 +165,13 @@ export default function PresetsEditor({
         <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="xl">
           <Group align="flex-end" wrap="nowrap" gap="sm">
             <Select
-              label="Preset guardado"
+              label="Parámetros guardados"
               placeholder={
                 loading
                   ? "Cargando…"
                   : presets.length
-                    ? "Selecciona un preset"
-                    : "No hay presets"
+                    ? "Selecciona parámetros preestablecidos"
+                    : "No hay parámetros preestablecidos"
               }
               data={presets.map((preset) => preset.name)}
               value={selected}
@@ -193,12 +197,12 @@ export default function PresetsEditor({
             >
               Cargar
             </Button>
-            <Tooltip label="Eliminar preset">
+            <Tooltip label="Eliminar parámetros">
               <ActionIcon
                 size="input-sm"
                 variant="subtle"
                 color="gray"
-                aria-label="Eliminar preset"
+                aria-label="Eliminar parámetros"
                 disabled={locked || !selected}
                 onClick={() => {
                   setError("");
@@ -211,8 +215,8 @@ export default function PresetsEditor({
           </Group>
           <Group align="flex-end" gap="sm">
             <TextInput
-              label="Nombre del preset"
-              placeholder="Nuevo preset"
+              label="Nombre"
+              placeholder="Nuevos parámetros"
               value={name}
               maxLength={80}
               error={nameError}
@@ -229,13 +233,13 @@ export default function PresetsEditor({
               loading={busy === "save"}
               onClick={save}
             >
-              {overwrites ? "Sobrescribir preset" : "Guardar preset"}
+              {overwrites ? "Sobrescribir" : "Guardar"}
             </Button>
           </Group>
         </SimpleGrid>
         <Text size="xs" c="dimmed" mt="sm">
-          Guardar un preset no aplica cambios. Cargarlo los aplica al
-          dispositivo.
+          Guardar parámetros preestablecidos no aplica cambios. Cargarlos los
+          aplica al dispositivo.
         </Text>
       </Paper>
       <Modal
@@ -243,8 +247,8 @@ export default function PresetsEditor({
         onClose={() => !busy && setDialog(null)}
         title={
           displayedDialog.action === "delete"
-            ? "Eliminar preset"
-            : "Cargar preset"
+            ? "Eliminar parámetros"
+            : "Cargar parámetros"
         }
         centered
         closeOnClickOutside={!busy}
@@ -277,8 +281,8 @@ export default function PresetsEditor({
               }
             >
               {displayedDialog.action === "delete"
-                ? "Eliminar preset"
-                : "Cargar preset"}
+                ? "Eliminar parámetros"
+                : "Cargar parámetros"}
             </Button>
           </Group>
         </Stack>

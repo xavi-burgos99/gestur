@@ -544,7 +544,7 @@ test("lighting and standby settings round-trip through API and legacy requests k
   const initial = (await request("GET", "config")).json();
   assert.equal(initial.defaults.render.ambient_light, "none");
   assert.equal(initial.defaults.render.exposure, 50);
-  assert.equal(initial.defaults.controls.idle_mode, "return");
+  assert.equal(initial.defaults.controls.idle_mode, "float");
   const config = initial.config;
   config.controls.smoothing_ms = 123;
   for (const light of ["none", "studio", "gallery", "sunset", "rim"]) {

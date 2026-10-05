@@ -113,7 +113,8 @@ export default function Models({ config, setConfig, notify }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [job, setJob] = useState(null);
-  const [catalogImport, setCatalogImport] = useState(null);
+  const observedImport = useRef(null);
+  const [dismissedImport, setDismissedImport] = useState(null);
   const [restoring, setRestoring] = useState(true);
   const [jobError, setJobError] = useState("");
   const [decisionError, setDecisionError] = useState("");
@@ -140,7 +141,6 @@ export default function Models({ config, setConfig, notify }) {
   const importDisabled = restoring || uploading || pending || busy || loading;
   const load = useCallback(async () => {
     const revision = selectionRevision.current;
-    const importedJob = completedJob.current;
     const request = ++catalogRequest.current;
     setLoading(true);
     setError("");
@@ -153,7 +153,6 @@ export default function Models({ config, setConfig, notify }) {
       )
         return;
       setModels(data.models);
-      setCatalogImport(importedJob);
       setConfig((current) => ({ ...current, active_model: data.active }));
     } catch (e) {
       if (
@@ -177,6 +176,8 @@ export default function Models({ config, setConfig, notify }) {
         if (!importMutating.current) {
           const data = await api("imports/current");
           if (!stopped && revision === importRevision.current) {
+            if (["processing", "awaiting_decision"].includes(data.job?.state))
+              observedImport.current = data.job.id;
             setJob(data.job);
             setJobError("");
           }
@@ -203,6 +204,11 @@ export default function Models({ config, setConfig, notify }) {
       load();
     }
   }, [job?.id, job?.state, load]);
+  useEffect(() => {
+    if (!job || !["completed", "failed"].includes(job.state)) return;
+    const timer = setTimeout(() => setDismissedImport(job.id), 10000);
+    return () => clearTimeout(timer);
+  }, [job?.id, job?.state]);
   async function upload(file) {
     if (
       !file ||
@@ -220,6 +226,7 @@ export default function Models({ config, setConfig, notify }) {
       const form = new FormData();
       form.append("file", file);
       const data = await api("models", { method: "POST", body: form });
+      observedImport.current = data.job.id;
       setJob(data.job);
     } catch (e) {
       notify(e.message, true);
@@ -375,9 +382,8 @@ export default function Models({ config, setConfig, notify }) {
   const showImportStatus =
     job &&
     !uploading &&
-    (job.state !== "completed" ||
-      catalogImport !== job.id ||
-      models.some((model) => model.id === job.model?.id));
+    (pending ||
+      (observedImport.current === job.id && dismissedImport !== job.id));
   return (
     <>
       <SectionTitle
@@ -391,26 +397,15 @@ export default function Models({ config, setConfig, notify }) {
           />
         }
       />
-      <Alert
-        color={runtime.online ? (runtime.error ? "red" : "teal") : "gray"}
-        mb="lg"
-        title={
-          runtime.online
-            ? runtime.error
-              ? "El visor no ha podido cargar la selección"
-              : "Visor conectado"
-            : "Visor no conectado"
-        }
-      >
-        {runtime.online
-          ? runtime.error ||
-            (runtime.rendered_model === config.active_model
-              ? config.active_model
-                ? "El modelo seleccionado se está mostrando en el dispositivo."
-                : "El dispositivo muestra la bienvenida con el QR de este portal."
-              : "El visor está aplicando la selección.")
-          : "Los cambios se aplicarán cuando el visor esté conectado."}
-      </Alert>
+      {runtime.online && runtime.error && (
+        <Alert
+          color="red"
+          mb="lg"
+          title="El visor no ha podido cargar la selección"
+        >
+          {runtime.error}
+        </Alert>
+      )}
       {jobError && (
         <Alert
           color="yellow"
@@ -630,7 +625,7 @@ export default function Models({ config, setConfig, notify }) {
                       wrap="nowrap"
                     >
                       <Title order={3} className="model-name">
-                        {model.name}
+                        {model.content?.title || model.name}
                       </Title>
                       <Badge
                         variant="light"
@@ -646,12 +641,20 @@ export default function Models({ config, setConfig, notify }) {
                             : model.sourceFormat || model.format}
                       </Badge>
                     </Group>
+                    {model.content?.description && (
+                      <Text
+                        c="dimmed"
+                        size="sm"
+                        style={{ whiteSpace: "pre-line" }}
+                      >
+                        {model.content.description}
+                      </Text>
+                    )}
                     <Text c="dimmed" size="sm">
                       {model.triangles != null &&
                         `${formatCount(model.triangles)} triángulos · `}
                       {(model.size / 1024 / 1024).toFixed(1)} MB
                     </Text>
-                    <ImportWarnings warnings={model.warnings} />
                     <Button
                       fullWidth
                       variant={

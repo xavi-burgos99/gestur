@@ -22,7 +22,13 @@ export function createPreviews({ store, modelsDir }) {
     const info = await stat(filename);
     const key = createHash("sha256")
       .update(
-        JSON.stringify([model.id, model.orientation, info.size, info.mtimeMs]),
+        JSON.stringify([
+          "v2",
+          model.id,
+          model.orientation,
+          info.size,
+          info.mtimeMs,
+        ]),
       )
       .digest("hex");
     const folder = path.join(path.dirname(root), ".previews");

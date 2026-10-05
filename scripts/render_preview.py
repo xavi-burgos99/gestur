@@ -22,9 +22,10 @@ def main():
         resource.setrlimit(resource.RLIMIT_AS, (2 * 1024**3, 2 * 1024**3))
     from panda3d.core import Filename, loadPrcFileData
 
+    engine = "p3headlessgl" if sys.platform == "linux" else "p3tinydisplay"
     loadPrcFileData(
         "preview",
-        "load-display p3tinydisplay\nwin-size 640 360\naudio-library-name null",
+        f"load-display {engine}\nwin-size 640 360\naudio-library-name null",
     )
     from visualizer import ControlledObjViewer
 

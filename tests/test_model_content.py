@@ -66,3 +66,17 @@ def test_content_overlay_is_optional_and_survives_resize_without_reloading_model
         assert viewer.content_overlay is None
     finally:
         viewer.destroy()
+
+
+def test_model_import_validation_does_not_require_a_camera(tmp_path):
+    pytest.importorskip("panda3d.core")
+    from visualizer import ControlledObjViewer
+
+    asset = tmp_path / "triangle.obj"
+    asset.write_text("v -1 0 0\nv 1 0 0\nv 0 0 2\nf 1 2 3\n")
+    viewer = ControlledObjViewer(asset, window_type="none", fullscreen=False)
+    try:
+        assert viewer.model is not None
+        assert viewer.camLens is None
+    finally:
+        viewer.destroy()

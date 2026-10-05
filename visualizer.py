@@ -668,6 +668,7 @@ class ControlledObjViewer(ShowBase):
         title_height *= factor
         description_height *= factor
         height = title_height + description_height + 0.33
+        framing = 0.025
         if self.model_content["placement"] == "top":
             self.content_title.set_z(-0.24)
             self.content_description.set_z(-0.24 - title_height - 0.025)
@@ -691,8 +692,13 @@ class ControlledObjViewer(ShowBase):
                 for label in (self.content_title, self.content_description):
                     label.set_z(label.get_z() + offset)
                 height += offset
+                framing += min(0.015, offset * 0.08)
             self.content_gradient.set_pos(0, 0, height + 0.24)
         self.content_gradient.set_scale(width, 1, height + 0.24)
+        direction = -1 if self.model_content["placement"] == "bottom" else 1
+        self.camLens.set_film_offset(
+            0, direction * self.camLens.get_film_size().y * framing
+        )
 
     def set_model_url(self, url):
         """Update a static screen overlay without reloading geometry or textures."""

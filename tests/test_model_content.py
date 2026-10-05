@@ -55,7 +55,9 @@ def test_content_overlay_is_optional_and_survives_resize_without_reloading_model
         text_low, _ = viewer.content_description.get_tight_bounds(viewer.render2d)
         assert (text_low.z - qr_high.z) * viewer.win.get_y_size() / 2 >= 19.9
         raised = viewer.content_description.get_z()
+        qr_framing = viewer.camLens.get_film_offset().y
         viewer.set_model_url(None)
+        assert qr_framing < viewer.camLens.get_film_offset().y
         assert viewer.content_description.get_z() < raised
         viewer.set_model_content(None)
         assert viewer.content_overlay is None

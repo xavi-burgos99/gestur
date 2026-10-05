@@ -647,17 +647,17 @@ class ControlledObjViewer(ShowBase):
             self.content_description.node().get_height()
             * self.content_description.get_sz()
         )
-        height = title_height + description_height + 0.25
+        height = title_height + description_height + 0.37
         # Long text must stay within the viewport, including portrait displays.
         factor = min(1, 0.75 / max(height, 0.01))
         self.content_title.set_scale(0.07 * content_factor * factor)
         self.content_description.set_scale(0.04 * content_factor * factor)
         title_height *= factor
         description_height *= factor
-        height = title_height + description_height + 0.25
+        height = title_height + description_height + 0.37
         if self.model_content["placement"] == "top":
-            self.content_title.set_z(-0.16)
-            self.content_description.set_z(-0.16 - title_height - 0.04)
+            self.content_title.set_z(-0.28)
+            self.content_description.set_z(-0.28 - title_height - 0.04)
             self.content_gradient.set_pos(0, 0, 0)
         else:
             self.content_title.set_z(height - 0.06)

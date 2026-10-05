@@ -513,7 +513,9 @@ test("public model content persists without touching geometry and validates befo
     { ...content, title: "x".repeat(161) },
     { ...content, description: "bad\u0001text" },
   ])
-    await assert.rejects(restarted.updateModel({ id, content: invalid }));
+    await assert.rejects(async () =>
+      restarted.updateModel({ id, content: invalid }),
+    );
   await restarted.updateModel({
     id,
     content: { title: "", description: "", placement: "bottom" },

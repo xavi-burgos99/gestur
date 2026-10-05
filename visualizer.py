@@ -526,6 +526,7 @@ class ControlledObjViewer(ShowBase):
             previous.remove_node()
         self._remove_welcome()
         self._remove_model_error()
+        self.author_credit.set_color_scale(1, 1, 1, 0.65)
         self.set_model_url(model_url)
         self._set_model_camera()
         self.setBackgroundColor(0, 0, 0, 1)
@@ -763,6 +764,7 @@ class ControlledObjViewer(ShowBase):
         """Keep attribution anchored to the viewport across all scene states."""
         self.author_credit = self.a2dBottomLeft.attach_new_node("gestur-author-credit")
         self.author_credit.set_pos(0.06, 0, 0.045)
+        self.author_credit.set_transparency(TransparencyAttrib.M_alpha)
         self._configure_screen_overlay(self.author_credit)
         # A separate glyph atlas keeps static credits unchanged when welcome
         # labels add characters and regenerate their font texture.
@@ -781,6 +783,7 @@ class ControlledObjViewer(ShowBase):
             label.node().set_align(TextNode.A_left)
 
     def show_welcome(self):
+        self.author_credit.set_color_scale(1, 1, 1, 1)
         self.invalidate(frames=2)
         self._idle_animation = False
         self._clear_model_lighting()

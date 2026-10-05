@@ -585,10 +585,11 @@ class ControlledObjViewer(ShowBase):
         self.model_content = content
         # Shift the projection slightly without changing gesture coordinates.
         offset = 0
-        if content["title"] or content["description"]:
-            direction = -1 if content["placement"] == "bottom" else 1
-            offset = direction * self.camLens.get_film_size().y * 0.025
-        self.camLens.set_film_offset(0, offset)
+        if self.camLens is not None:
+            if content["title"] or content["description"]:
+                direction = -1 if content["placement"] == "bottom" else 1
+                offset = direction * self.camLens.get_film_size().y * 0.025
+            self.camLens.set_film_offset(0, offset)
         if self.content_overlay is not None:
             self.content_overlay.remove_node()
             self.content_overlay = None

@@ -57,6 +57,13 @@ install_gestur() {
             "$GESTUR_SOURCE/" "$GESTUR_PREFIX/"
     fi
 
+    # Remove only the old flat runtime modules after copying the package layout.
+    for retired in control_system controller device_metrics pose_detector \
+        pose_hand_tracker primary_person render_scheduler runtime_config \
+        runtime_state screen_settings tracking_geometry tracking_session visualizer; do
+        rm -f "$GESTUR_PREFIX/$retired.py"
+    done
+
     # Pi OS can ship Python 3.13+, but the verified ARM64 MediaPipe wheel
     # targets 3.12. A private, managed interpreter leaves system Python intact.
     python3 -m venv "$GESTUR_PREFIX/.bootstrap"
@@ -72,7 +79,7 @@ install_gestur() {
         "$GESTUR_PREFIX/.bootstrap/bin/uv" venv --python 3.12.14 --managed-python "$GESTUR_PREFIX/.venv"
     fi
     "$GESTUR_PREFIX/.bootstrap/bin/uv" pip install \
-        --only-binary :all: --python "$GESTUR_PREFIX/.venv/bin/python" -r "$GESTUR_PREFIX/requirements.txt"
+        --only-binary :all: --python "$GESTUR_PREFIX/.venv/bin/python" -r "$GESTUR_PREFIX/requirements/runtime.txt"
     "$GESTUR_PREFIX/.venv/bin/python" "$GESTUR_PREFIX/scripts/provision_models.py"
     chown -R root:root "$GESTUR_PREFIX"
     if [[ ! -f "$GESTUR_STATE/config.json" ]]; then
@@ -82,7 +89,7 @@ install_gestur() {
     fi
     # Validate without opening a camera or changing existing parameters.
     (cd "$GESTUR_PREFIX" && .venv/bin/python -c \
-        'from runtime_config import load_config; load_config("/var/lib/gestur/config.json")')
+        'from gestur.runtime_config import load_config; load_config("/var/lib/gestur/config.json")')
 
     # Complete all downloads and portal checks before enabling the kiosk login.
     bash "$GESTUR_PREFIX/scripts/install-portal.sh" "$GESTUR_PREFIX" "$@"

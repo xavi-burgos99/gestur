@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from runtime_config import ConfigurationError, load_model_url, validate_model_url
+from gestur.runtime_config import ConfigurationError, load_model_url, validate_model_url
 
 
 @pytest.mark.parametrize(

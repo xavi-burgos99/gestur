@@ -3,7 +3,7 @@ from types import SimpleNamespace as Point
 
 import pytest
 
-from tracking_geometry import (
+from gestur.tracking_geometry import (
     TrackingFilter,
     anatomical_hand,
     empty_part,
@@ -495,11 +495,12 @@ def test_head_roll_filter_respects_unoriented_eye_line_and_clears_loss():
 
 
 def test_head_roll_control_crosses_eye_line_wrap_and_returns_upright_on_loss():
-    from control_system import create_control_system
-    from runtime_config import default_config
+    from gestur.control_system import create_control_system
+    from gestur.runtime_config import default_config
 
     now = 0.0
     config = default_config()
+    config["controls"]["idle_mode"] = "return"
     config["controls"]["mappings"] = [
         {
             "id": "tilt",
@@ -534,11 +535,12 @@ def test_head_roll_control_crosses_eye_line_wrap_and_returns_upright_on_loss():
 def test_head_roll_reacquisition_preserves_output_turns_at_nondivisor_sensitivity(
     invert,
 ):
-    from control_system import create_control_system
-    from runtime_config import default_config
+    from gestur.control_system import create_control_system
+    from gestur.runtime_config import default_config
 
     now = 0.0
     config = default_config()
+    config["controls"]["idle_mode"] = "return"
     config["controls"]["smoothing_ms"] = 0
     config["controls"]["mappings"] = [
         {

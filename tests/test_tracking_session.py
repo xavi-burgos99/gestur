@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-from runtime_config import default_config
-from tracking_session import TrackingSession, tracking_request
+from gestur.runtime_config import default_config
+from gestur.tracking_session import TrackingSession, tracking_request
 
 
 def until(predicate):

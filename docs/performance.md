@@ -10,10 +10,10 @@ Usa siempre la misma pantalla/resolución, cámara, iluminación, distancia al v
 cd /opt/gestur
 # Selecciona un modelo en el portal antes de medir.
 # Ejecutar desde la sesión gráfica, deteniendo antes la otra instancia del visor.
-.venv/bin/python controller.py --no-camera --benchmark-seconds 60 --metrics /tmp/render.json
-.venv/bin/python controller.py --benchmark-seconds 60 --metrics /tmp/pose.json
+.venv/bin/python -m gestur --no-camera --benchmark-seconds 60 --metrics /tmp/render.json
+.venv/bin/python -m gestur --benchmark-seconds 60 --metrics /tmp/pose.json
 # Activar también una asignación de manos en Parámetros antes de esta medición:
-.venv/bin/python controller.py --hands --benchmark-seconds 60 --metrics /tmp/pose-hands.json
+.venv/bin/python -m gestur --hands --benchmark-seconds 60 --metrics /tmp/pose-hands.json
 vcgencmd measure_temp
 vcgencmd get_throttled
 ```

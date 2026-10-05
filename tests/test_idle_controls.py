@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from control_system import create_control_system
-from runtime_config import default_config
+from gestur.control_system import create_control_system
+from gestur.runtime_config import default_config
 
 
 class Clock:

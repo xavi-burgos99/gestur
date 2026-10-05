@@ -160,7 +160,7 @@ def prepare(root, source, country, admin, hostname=None):
         names = {member.name for member in members}
         required = {
             "gestur.sh",
-            "requirements.txt",
+            "requirements/runtime.txt",
             "scripts/first-boot.py",
             "scripts/install-portal.sh",
             "scripts/gestur-device.py",

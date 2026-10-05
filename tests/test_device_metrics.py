@@ -1,7 +1,7 @@
 import io
 from pathlib import Path
 
-from device_metrics import DeviceMetrics
+from gestur.device_metrics import DeviceMetrics
 
 
 def test_cpu_is_reported_per_core_and_linux_totals_do_not_double_count_guests(

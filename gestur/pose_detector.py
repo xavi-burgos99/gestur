@@ -13,8 +13,8 @@ import threading
 import time
 from pathlib import Path
 
-from primary_person import PrimaryPersonLock
-from tracking_geometry import (
+from gestur.primary_person import PrimaryPersonLock
+from gestur.tracking_geometry import (
     TrackingFilter,
     anatomical_hand,
     empty_data,
@@ -24,7 +24,7 @@ from tracking_geometry import (
 )
 
 _LOG = logging.getLogger(__name__)
-_MODEL_DIR = Path(__file__).resolve().parent / "tracking_models"
+_MODEL_DIR = Path(__file__).resolve().parents[1] / "tracking_models"
 
 
 class _MediaPipeBackend:

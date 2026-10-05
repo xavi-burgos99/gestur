@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from runtime_config import ConfigurationError, default_config, validate_config
-from screen_settings import DEFAULT_SCREEN, rotate_display
+from gestur.runtime_config import ConfigurationError, default_config, validate_config
+from gestur.screen_settings import DEFAULT_SCREEN, rotate_display
 
 
 def test_legacy_screen_defaults_and_invalid_screen_never_silently_reset():

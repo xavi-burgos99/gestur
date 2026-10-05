@@ -15,7 +15,7 @@ openbox-session &
 GESTUR_WM_PID=$!
 trap 'kill "$GESTUR_WM_PID" 2>/dev/null || true' EXIT
 while true; do
-    /opt/gestur/.venv/bin/python /opt/gestur/controller.py >> /var/log/gestur/viewer.log 2>&1
+    /opt/gestur/.venv/bin/python -m gestur >> /var/log/gestur/viewer.log 2>&1
     GESTUR_RESULT=$?
     if [[ $GESTUR_RESULT == 0 ]]; then
         break

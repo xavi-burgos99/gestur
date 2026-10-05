@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from control_system import (
+from gestur.control_system import (
     DataProcessor,
     ExponentialSmoother,
     HybridRotationController,
@@ -9,7 +9,14 @@ from control_system import (
     create_control_system,
     create_extractors,
 )
-from runtime_config import default_config
+from gestur.runtime_config import default_config as current_defaults
+
+
+def neutral_config():
+    """Use return-to-origin when testing recovery rather than decorative motion."""
+    config = current_defaults()
+    config["controls"]["idle_mode"] = "return"
+    return config
 
 
 class Clock:
@@ -58,16 +65,16 @@ class ControlTests(unittest.TestCase):
 
     def test_default_capitell_channels_and_initial_acquisition(self):
         clock = Clock()
-        system = create_control_system(clock=clock)
+        system = create_control_system(neutral_config(), clock=clock)
         self.assertEqual(system.process_input({})["rotation"], [0, 0, 0])
-        result = system.process_input(head(x=0.75, y=0.75))
+        result = system.process_input(head(x=0.75, y=0.75, scale=0.1))
         self.assertEqual(result["rotation"], [-5, 15, -15])
         self.assertEqual(result["scale"], 1)
         self.assertEqual(result["position"], [0, 0, 0])
 
     def test_lost_tracking_stops_motion_then_resets(self):
         clock = Clock()
-        system = create_control_system(clock=clock)
+        system = create_control_system(neutral_config(), clock=clock)
         system.process_input(head(x=1))
         for _ in range(60):
             clock.advance(1 / 60)
@@ -126,7 +133,7 @@ class ControlTests(unittest.TestCase):
 
     def test_circular_hand_roll_crosses_wrap_without_spinning(self):
         clock = Clock()
-        config = default_config()
+        config = neutral_config()
         config["controls"]["mappings"] = [
             {
                 "id": "palm",
@@ -152,7 +159,7 @@ class ControlTests(unittest.TestCase):
         self.assertLess(second - first, 2)
 
     def test_pinch_can_be_mapped_to_zoom_and_disabled(self):
-        config = default_config()
+        config = neutral_config()
         config["controls"]["mappings"] = [
             {
                 "id": "pinch",
@@ -173,7 +180,7 @@ class ControlTests(unittest.TestCase):
 
     def test_hand_pitch_and_yaw_are_independent_circular_inputs(self):
         clock = Clock()
-        config = default_config()
+        config = neutral_config()
         config["controls"]["mappings"] = [
             {
                 "id": "pitch",
@@ -217,7 +224,7 @@ class ControlTests(unittest.TestCase):
         self.assertAlmostEqual(second["rotation"][0], -45)
 
     def test_head_angles_control_each_rotation_independently(self):
-        config = default_config()
+        config = neutral_config()
         config["controls"]["mappings"] = [
             {
                 "id": angle,
@@ -249,7 +256,7 @@ class ControlTests(unittest.TestCase):
 
     def test_head_yaw_wrap_and_tracking_loss_keep_shortest_rotation(self):
         clock = Clock()
-        config = default_config()
+        config = neutral_config()
         config["controls"]["mappings"] = [
             {
                 "id": "head_turn",
@@ -281,7 +288,7 @@ class ControlTests(unittest.TestCase):
         self.assertAlmostEqual(neutral % 360, 0, places=8)
 
     def test_individual_hand_positions_and_openness_are_independent(self):
-        config = default_config()
+        config = neutral_config()
         config["controls"]["mappings"] = [
             {
                 "id": input_name,
@@ -346,7 +353,7 @@ class ControlTests(unittest.TestCase):
 
     def test_lost_head_angle_stops_hybrid_rotation_before_reset(self):
         clock = Clock()
-        config = default_config()
+        config = neutral_config()
         config["controls"]["mappings"] = [
             {
                 "id": "head_turn",
@@ -395,7 +402,7 @@ class ControlTests(unittest.TestCase):
             for invert in (False, True):
                 with self.subTest(scale=scale, invert=invert):
                     clock = Clock()
-                    config = default_config()
+                    config = neutral_config()
                     config["controls"]["mappings"] = [
                         {
                             "id": "palm",
@@ -433,7 +440,7 @@ class ControlTests(unittest.TestCase):
         self,
     ):
         clock = Clock()
-        config = default_config()
+        config = neutral_config()
         config["controls"]["smoothing_ms"] = 0
         config["controls"]["mappings"] = [
             {
@@ -496,7 +503,7 @@ class ControlTests(unittest.TestCase):
                         input=input_name, output=output_name, invert=invert
                     ):
                         clock = Clock()
-                        config = default_config()
+                        config = neutral_config()
                         config["controls"]["smoothing_ms"] = 0
                         config["controls"]["mappings"] = [
                             {
@@ -538,7 +545,7 @@ class ControlTests(unittest.TestCase):
 
     def test_missing_projected_rotation_preserves_other_valid_hand_channels(self):
         clock = Clock()
-        config = default_config()
+        config = neutral_config()
         config["controls"]["smoothing_ms"] = 0
         config["controls"]["mappings"] = [
             {
@@ -602,7 +609,7 @@ class ControlTests(unittest.TestCase):
         self,
     ):
         clock = Clock()
-        config = default_config()
+        config = neutral_config()
         config["controls"]["smoothing_ms"] = 0
         config["controls"]["mappings"] = [
             {
@@ -651,7 +658,7 @@ class ControlTests(unittest.TestCase):
 
     def test_proximity_accepts_existing_hybrid_and_stepped_modes(self):
         clock = Clock()
-        config = default_config()
+        config = neutral_config()
         config["controls"]["smoothing_ms"] = 0
         hybrid = dict(config["controls"]["mappings"][0])
         hybrid.update(input="torso_scale", output="rotation_yaw", invert=False)

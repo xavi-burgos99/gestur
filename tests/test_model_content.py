@@ -1,6 +1,6 @@
 import pytest
 
-from runtime_config import ConfigurationError, validate_model_content
+from gestur.runtime_config import ConfigurationError, validate_model_content
 
 
 def test_content_validation_rejects_control_sequences_and_unsupported_positions():
@@ -17,7 +17,7 @@ def test_content_overlay_is_optional_and_survives_resize_without_reloading_model
     tmp_path,
 ):
     pytest.importorskip("panda3d.core")
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     asset = tmp_path / "triangle.obj"
     asset.write_text("v -1 0 0\nv 1 0 0\nv 0 0 2\nf 1 2 3\n")
@@ -70,7 +70,7 @@ def test_content_overlay_is_optional_and_survives_resize_without_reloading_model
 
 def test_model_import_validation_does_not_require_a_camera(tmp_path):
     pytest.importorskip("panda3d.core")
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     asset = tmp_path / "triangle.obj"
     asset.write_text("v -1 0 0\nv 1 0 0\nv 0 0 2\nf 1 2 3\n")

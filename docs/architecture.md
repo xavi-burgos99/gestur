@@ -8,18 +8,18 @@ the portal does not need to run inside the graphics or inference loop.
 
 | Module | Responsibility |
 | --- | --- |
-| `controller.py` | Start the application, reload settings, coordinate tracking and drawing, and publish runtime status. |
-| `runtime_config.py` | Validate and migrate configuration; resolve model files and metadata within their library. |
-| `runtime_state.py` | Transfer the latest tracking snapshot between threads and collect bounded frame timing samples. |
-| `tracking_session.py` | Own tracker lifecycle, background startup, cancellation, and reconnection. |
-| `pose_detector.py` | Capture the latest frame, run the required MediaPipe tasks within an inference budget, and extract gesture inputs. |
-| `pose_hand_tracker.py` | Run the standalone tracking benchmark; this legacy entry point is not another tracking engine. |
-| `primary_person.py` | Keep tracking associated with the first selected person rather than switching between visitors. |
-| `tracking_geometry.py` | Convert landmarks into position, orientation, opening, and pinching measurements. |
-| `control_system.py` | Map gesture inputs to object transforms, smoothing, and standby behavior. |
-| `visualizer.py` | Load models, manage lighting and QR overlays, and render the scene. |
-| `render_scheduler.py` | Decide whether another draw is necessary without slowing control updates. |
-| `device_metrics.py` | Sample process load and device temperature for diagnostics. |
+| `gestur/controller.py` | Start the application, reload settings, coordinate tracking and drawing, and publish runtime status. |
+| `gestur/runtime_config.py` | Validate and migrate configuration; resolve model files and metadata within their library. |
+| `gestur/runtime_state.py` | Transfer the latest tracking snapshot between threads and collect bounded frame timing samples. |
+| `gestur/tracking_session.py` | Own tracker lifecycle, background startup, cancellation, and reconnection. |
+| `gestur/pose_detector.py` | Capture the latest frame, run the required MediaPipe tasks within an inference budget, and extract gesture inputs. |
+| `scripts/benchmark_tracking.py` | Run the standalone tracking benchmark, separately from the runtime package. |
+| `gestur/primary_person.py` | Keep tracking associated with the first selected person rather than switching between visitors. |
+| `gestur/tracking_geometry.py` | Convert landmarks into position, orientation, opening, and pinching measurements. |
+| `gestur/control_system.py` | Map gesture inputs to object transforms, smoothing, and standby behavior. |
+| `gestur/visualizer.py` | Load models, manage lighting and QR overlays, and render the scene. |
+| `gestur/render_scheduler.py` | Decide whether another draw is necessary without slowing control updates. |
+| `gestur/device_metrics.py` | Sample process load and device temperature for diagnostics. |
 
 These root modules remain in place because the installed entry points and model
 validation subprocess import them directly. Heavy native libraries and camera

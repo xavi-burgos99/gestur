@@ -48,8 +48,8 @@ def main(argv=None):
 
     from panda3d.core import ClockObject, ConfigVariableBool, ConfigVariableDouble
 
+    from gestur.visualizer import ControlledObjViewer
     from scripts import benchmark_pi_system as benchmark
-    from visualizer import ControlledObjViewer
 
     args = benchmark.arguments(remaining)
     # Keeping a continuous draw workload isolates clock/presentation pacing;

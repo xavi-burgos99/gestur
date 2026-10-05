@@ -29,9 +29,9 @@ def main(argv=None):
 
     from panda3d.core import ClockObject, ConfigVariableBool, ConfigVariableDouble
 
-    from runtime_state import FrameMetrics
+    from gestur.runtime_state import FrameMetrics
+    from gestur.visualizer import ControlledObjViewer
     from scripts import benchmark_pi_system as benchmark
-    from visualizer import ControlledObjViewer
 
     args = benchmark.arguments(remaining)
     if args.motion != "continuous" or args.offscreen or args.duration > 60:

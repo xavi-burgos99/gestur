@@ -2,7 +2,8 @@
 
 ## Install and operate
 
-- [Project overview and installation](../README.md)
+- [Step-by-step installation](../INSTALL.md)
+- [Project overview](../README.md)
 - [Prepared OS images and first boot](first-boot.md)
 - [Portal, onboarding, model management, presets, and networking](portal.md)
 - [Configuration schema and controls](configuration.md)
@@ -21,7 +22,6 @@
 - [Tracker/runtime comparisons](performance-research.md)
 - [Hand tracking alternatives](hand-tracking-alternatives.md)
 - [Experimental tools and their limitations](../scripts/research/README.md)
-- [Original icon experiments](motion-icon-prompts.md)
 
 The detailed operational guides and historical reports are in Spanish. Code,
 comments, contributor guidance, and the repository overview are in English.

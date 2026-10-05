@@ -27,7 +27,7 @@ def main():
         "preview",
         f"load-display {engine}\nwin-size 640 640\nframebuffer-alpha true\nalpha-bits 8\naudio-library-name null",
     )
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     viewer = ControlledObjViewer(
         args.model,

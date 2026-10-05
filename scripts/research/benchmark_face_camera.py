@@ -81,7 +81,7 @@ def main():
         RunningMode,
     )
 
-    from tracking_geometry import pose_features
+    from gestur.tracking_geometry import pose_features
 
     cv2.setNumThreads(1)
     cap = cv2.VideoCapture(args.camera)

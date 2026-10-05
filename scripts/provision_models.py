@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Download verified official Lite assets and assemble the MediaPipe hand task.
 
-Run after installing requirements.txt, never at inference startup. MediaPipe
+Run after installing requirements/runtime.txt, never at inference startup. MediaPipe
 adds the image normalization metadata missing from the Lite source models.
 --check uses only the standard library and performs no network I/O.
 """
@@ -105,7 +105,7 @@ def provision(destination, check=False):
                 )
                 if not verified(data, bundle["processed_assets"][member]):
                     raise RuntimeError(
-                        f"Metadatos generados no reproducibles para {member}; usa requirements.txt."
+                        f"Metadatos generados no reproducibles para {member}; usa requirements/runtime.txt."
                     )
                 archive.writestr(info, data)
         atomic_write(path, output.getvalue())

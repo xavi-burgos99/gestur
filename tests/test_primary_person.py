@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from primary_person import PrimaryPersonLock
+from gestur.primary_person import PrimaryPersonLock
 
 
 def point(x=0, y=0, visibility=1):

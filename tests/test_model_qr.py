@@ -5,13 +5,13 @@ import os
 
 import pytest
 
-from runtime_config import default_config, save_config
+from gestur.runtime_config import default_config, save_config
 
 
 @pytest.fixture
 def viewer(tmp_path):
     pytest.importorskip("panda3d.core")
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     asset = tmp_path / "model.obj"
     asset.write_text("v -1 0 0\nv 1 0 0\nv 0 0 2\nf 1 2 3\n")
@@ -88,8 +88,7 @@ def test_controller_hot_reload_and_restart_restore_link_without_reloading_mesh(
     tmp_path, monkeypatch
 ):
     pytest.importorskip("panda3d.core")
-    import controller
-    import visualizer
+    from gestur import controller, visualizer
 
     models = tmp_path / "models"
     package = models / "11111111-1111-1111-1111-111111111111"

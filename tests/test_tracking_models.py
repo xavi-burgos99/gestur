@@ -95,7 +95,7 @@ def test_real_lite_tasks_accept_cpu_video_frames():
         pytest.skip("Run scripts/provision_models.py to test installed Lite models")
     np = pytest.importorskip("numpy")
     pytest.importorskip("mediapipe")
-    from pose_detector import _MediaPipeBackend
+    from gestur.pose_detector import _MediaPipeBackend
 
     provision_models.provision(model_dir, check=True)
     backend = _MediaPipeBackend(model_dir, True, True, 0.5)

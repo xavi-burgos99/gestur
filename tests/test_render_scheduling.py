@@ -2,7 +2,7 @@
 
 import pytest
 
-from render_scheduler import RenderCadence
+from gestur.render_scheduler import RenderCadence
 
 
 def test_static_refresh_does_not_lower_control_or_changed_scene_cadence():
@@ -38,7 +38,7 @@ def test_clock_jitter_does_not_drop_welcome_to_twenty_fps():
 @pytest.fixture
 def offscreen_viewer(tmp_path, monkeypatch):
     core = pytest.importorskip("panda3d.core")
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     monkeypatch.setenv("GESTUR_PORTAL_URL", "http://10.42.0.1:3000")
     # A textured card facing the exhibition camera, with no external assets.

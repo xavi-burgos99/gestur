@@ -5,8 +5,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from pose_detector import PoseHandTracker, _MediaPipeBackend
-from tracking_geometry import empty_part
+from gestur.pose_detector import PoseHandTracker, _MediaPipeBackend
+from gestur.tracking_geometry import empty_part
 
 
 def pose(center):
@@ -113,7 +113,7 @@ def test_new_hands_cannot_control_without_a_pose_owner_or_during_its_loss(monkey
         handedness=[[SimpleNamespace(category_name="Left", score=0.99)]],
     )
     monkeypatch.setattr(
-        "pose_detector.hand_features",
+        "gestur.pose_detector.hand_features",
         lambda *args: pytest.fail("unowned hand was processed"),
     )
     tracker._update_hands(result, 1.0, 4 / 3)

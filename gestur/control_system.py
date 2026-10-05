@@ -707,7 +707,7 @@ def create_appliers(clock=time.monotonic):
 
 
 def create_control_system(config=None, clock=time.monotonic):
-    from runtime_config import default_config, validate_config
+    from gestur.runtime_config import default_config, validate_config
 
     config = validate_config(default_config() if config is None else config)
     controls = config["controls"]

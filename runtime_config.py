@@ -112,6 +112,9 @@ def validate_config(config):
     # Version 1 predates these optional behaviors. Fill absent fields and
     # recognized retired presets; reject explicitly invalid values as before.
     if isinstance(config, dict) and config.get("schema_version") == 1:
+        from screen_settings import DEFAULT_SCREEN
+
+        config.setdefault("screen", dict(DEFAULT_SCREEN))
         for section, key, value in (
             ("render", "ambient_light", "none"),
             ("render", "exposure", 50),

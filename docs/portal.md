@@ -35,9 +35,27 @@ Las modificaciones de Wi-Fi posteriores al asistente son independientes de la
 contraseña de acceso al portal. Actualizar una instalación anterior conserva su
 acceso, sus modelos y su configuración; no equivale a restablecerla.
 
+## Ajustes de pantalla
+
+En **Configuración → Ajustes de pantalla**, guarda la orientación (0º, 90º,
+180º o 270º) y los tamaños de contenido y modelo. La orientación utiliza la
+rotación nativa de Xorg y afecta a todo el visualizador, incluida la bienvenida.
+El tamaño de contenido afecta a textos y códigos QR; el tamaño del modelo es
+independiente de los controles de gestos. Ambos ofrecen cinco tamaños, desde
+**Muy pequeño** hasta **Muy grande**, con **Por defecto** como valor inicial.
+
+Estos ajustes se aplican al guardar, se mantienen tras reiniciar y no cambian
+al cargar un preset de parámetros. **Borrar contenido y ajustes** los restablece.
+
 ## Modelos 3D
 
-En **Ajustar modelo** puedes guardar o quitar una **URL** opcional. Se admiten
+El menú de cada modelo separa **Ajustar modelo** (nombre y orientación inicial)
+de **Cambiar contenido** (título, descripción, posición y URL). El título y la
+descripción son opcionales y aparecen centrados sobre un degradado superior o
+inferior. Sin texto no se dibuja el degradado. Los cambios se conservan al
+reiniciar y se aplican sin volver a cargar la geometría.
+
+En **Cambiar contenido** puedes guardar o quitar una **URL** opcional. Se admiten
 enlaces HTTP/HTTPS de hasta 2048 bytes UTF-8, sin credenciales. Si hay una URL,
 el visor muestra un QR blanco con fondo transparente en la esquina inferior
 derecha, separado de ambos bordes y más pequeño que el de bienvenida. Vaciar

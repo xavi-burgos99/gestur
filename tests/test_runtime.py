@@ -226,6 +226,9 @@ def viewer_stub(monkeypatch, fail=None):
         def show_model_error(self, error):
             errors.append(error)
 
+        def apply_screen_settings(self, settings):
+            pass
+
         def apply_settings(self, **kwargs):
             pass
 

@@ -8,10 +8,14 @@
     "active_model",
     "tracking",
     "render",
-    "controls"
+    "controls",
+    "screen"
   ],
   "properties": {
-    "schema_version": { "type": "integer", "enum": [1] },
+    "schema_version": {
+      "type": "integer",
+      "enum": [1]
+    },
     "active_model": {
       "type": ["string", "null"],
       "minLength": 1,
@@ -33,15 +37,45 @@
         "smoothing_ms"
       ],
       "properties": {
-        "use_pose": { "type": "boolean" },
-        "use_hands": { "type": "boolean" },
-        "inference_fps": { "type": "number", "minimum": 5, "maximum": 60 },
-        "hand_fps": { "type": "number", "minimum": 5, "maximum": 30 },
-        "camera_index": { "type": "integer", "minimum": 0, "maximum": 16 },
-        "width": { "type": "integer", "minimum": 160, "maximum": 1920 },
-        "height": { "type": "integer", "minimum": 120, "maximum": 1080 },
-        "mirror": { "type": "boolean" },
-        "smoothing_ms": { "type": "number", "minimum": 0, "maximum": 1000 }
+        "use_pose": {
+          "type": "boolean"
+        },
+        "use_hands": {
+          "type": "boolean"
+        },
+        "inference_fps": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 60
+        },
+        "hand_fps": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 30
+        },
+        "camera_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 160,
+          "maximum": 1920
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 120,
+          "maximum": 1080
+        },
+        "mirror": {
+          "type": "boolean"
+        },
+        "smoothing_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000
+        }
       }
     },
     "render": {
@@ -56,15 +90,30 @@
         "exposure"
       ],
       "properties": {
-        "target_fps": { "type": "integer", "minimum": 15, "maximum": 120 },
-        "antialias_samples": { "type": "integer", "enum": [0, 2, 4] },
-        "fullscreen": { "type": "boolean" },
-        "hide_cursor": { "type": "boolean" },
+        "target_fps": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 120
+        },
+        "antialias_samples": {
+          "type": "integer",
+          "enum": [0, 2, 4]
+        },
+        "fullscreen": {
+          "type": "boolean"
+        },
+        "hide_cursor": {
+          "type": "boolean"
+        },
         "ambient_light": {
           "type": "string",
           "enum": ["none", "studio", "gallery", "sunset", "rim"]
         },
-        "exposure": { "type": "integer", "minimum": 0, "maximum": 100 }
+        "exposure": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
       }
     },
     "controls": {
@@ -78,7 +127,11 @@
         "idle_mode"
       ],
       "properties": {
-        "smoothing_ms": { "type": "number", "minimum": 0, "maximum": 1000 },
+        "smoothing_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000
+        },
         "reset_timeout_seconds": {
           "type": "number",
           "minimum": 0,
@@ -89,7 +142,10 @@
           "minimum": 0.1,
           "maximum": 10
         },
-        "idle_mode": { "type": "string", "enum": ["hold", "return", "float"] },
+        "idle_mode": {
+          "type": "string",
+          "enum": ["hold", "return", "float"]
+        },
         "mappings": {
           "type": "array",
           "maxItems": 32,
@@ -168,10 +224,22 @@
                 "type": "string",
                 "enum": ["absolute", "hybrid", "stepped"]
               },
-              "enabled": { "type": "boolean" },
-              "scale": { "type": "number", "minimum": 0, "maximum": 360 },
-              "invert": { "type": "boolean" },
-              "center": { "type": "number", "minimum": 0, "maximum": 1 },
+              "enabled": {
+                "type": "boolean"
+              },
+              "scale": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 360
+              },
+              "invert": {
+                "type": "boolean"
+              },
+              "center": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
               "left_threshold": {
                 "type": "number",
                 "minimum": 0.01,
@@ -187,19 +255,41 @@
                 "minimum": 0,
                 "maximum": 360
               },
-              "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
-              "small_scale": { "type": "number", "minimum": 0.1, "maximum": 5 },
-              "large_scale": { "type": "number", "minimum": 0.1, "maximum": 5 },
+              "threshold": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "small_scale": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 5
+              },
+              "large_scale": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 5
+              },
               "transition_ms": {
                 "type": "number",
                 "minimum": 0,
                 "maximum": 5000
               },
-              "hysteresis": { "type": "number", "minimum": 0, "maximum": 0.2 }
+              "hysteresis": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.2
+              }
             },
             "allOf": [
               {
-                "if": { "properties": { "mode": { "const": "hybrid" } } },
+                "if": {
+                  "properties": {
+                    "mode": {
+                      "const": "hybrid"
+                    }
+                  }
+                },
                 "then": {
                   "required": [
                     "left_threshold",
@@ -218,7 +308,13 @@
                 }
               },
               {
-                "if": { "properties": { "mode": { "const": "stepped" } } },
+                "if": {
+                  "properties": {
+                    "mode": {
+                      "const": "stepped"
+                    }
+                  }
+                },
                 "then": {
                   "required": [
                     "threshold",
@@ -227,11 +323,34 @@
                     "transition_ms",
                     "hysteresis"
                   ],
-                  "properties": { "output": { "const": "scale_uniform" } }
+                  "properties": {
+                    "output": {
+                      "const": "scale_uniform"
+                    }
+                  }
                 }
               }
             ]
           }
+        }
+      }
+    },
+    "screen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["orientation", "content_size", "model_size"],
+      "properties": {
+        "orientation": {
+          "type": "integer",
+          "enum": [0, 90, 180, 270]
+        },
+        "content_size": {
+          "type": "string",
+          "enum": ["very_small", "small", "default", "large", "very_large"]
+        },
+        "model_size": {
+          "type": "string",
+          "enum": ["very_small", "small", "default", "large", "very_large"]
         }
       }
     }

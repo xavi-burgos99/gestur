@@ -75,5 +75,10 @@
         "hysteresis": 0.02
       }
     ]
+  },
+  "screen": {
+    "orientation": 0,
+    "content_size": "default",
+    "model_size": "default"
   }
 }

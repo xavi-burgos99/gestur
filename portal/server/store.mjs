@@ -152,6 +152,8 @@ export async function createStore({
   function check(config) {
     config = structuredClone(config);
     if (config?.schema_version === 1) {
+      if (!Object.hasOwn(config, "screen"))
+        config.screen = structuredClone(defaults.screen);
       for (const [section, key, value] of [
         ["render", "ambient_light", "none"],
         ["render", "exposure", 50],

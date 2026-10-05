@@ -525,3 +525,27 @@ test("public model content persists without touching geometry and validates befo
     "https://example.org",
   );
 });
+
+test("screen settings migrate, persist independently and reject unsupported values", async (t) => {
+  const { store, configPath, modelsDir } = await fixture(t);
+  const old = structuredClone(store.defaults);
+  delete old.screen;
+  await writeFile(configPath, JSON.stringify(old));
+  assert.deepEqual((await store.read()).screen, store.defaults.screen);
+  const screen = {
+    orientation: 270,
+    content_size: "large",
+    model_size: "small",
+  };
+  await store.update((current) => ({ ...current, screen }));
+  const restarted = await createStore({ configPath, modelsDir });
+  assert.deepEqual((await restarted.read()).screen, screen);
+  const before = await readFile(configPath);
+  await assert.rejects(
+    restarted.update((current) => ({
+      ...current,
+      screen: { ...screen, orientation: 45 },
+    })),
+  );
+  assert.deepEqual(await readFile(configPath), before);
+});

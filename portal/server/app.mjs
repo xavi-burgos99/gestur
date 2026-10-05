@@ -380,8 +380,14 @@ export async function createApp(options) {
           409,
           "El modelo ha cambiado. Vuelve a Modelos 3D antes de guardar parámetros.",
         );
-      return request.body;
+      return { ...request.body, screen: current.screen };
     }),
+  }));
+  app.put("/api/screen", async (request) => ({
+    config: await store.update((current) => ({
+      ...current,
+      screen: request.body,
+    })),
   }));
   app.get("/api/presets", async () => presets.list());
   app.put("/api/presets", async (request) => presets.save(request.body));

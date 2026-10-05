@@ -39,6 +39,7 @@ from panda3d.core import (
 from render_scheduler import RenderCadence
 from runtime_config import validate_model_orientation, validate_model_url
 from runtime_state import FrameMetrics
+from screen_settings import DEFAULT_SCREEN, SIZE_FACTORS, rotate_display
 
 # Positions are in the fixed exhibition camera's frame: X right, Y away
 # from the viewer, Z up. These are distinct light rigs, not exposure filters.
@@ -280,6 +281,8 @@ class ControlledObjViewer(ShowBase):
         self._exposure_stage = None
         self._exposure_texture = None
         self._model_light_root = None
+        self._screen_settings = dict(DEFAULT_SCREEN)
+        self._screen_applied = False
         self._idle_animation = False
         self._render_cadence = RenderCadence(target_fps)
         self.render_metrics = FrameMetrics()
@@ -470,6 +473,36 @@ class ControlledObjViewer(ShowBase):
             ),
         }
 
+    def apply_screen_settings(self, settings):
+        """Apply only changed display settings; no extra work in the draw loop."""
+        if self._screen_applied and settings == self._screen_settings:
+            return
+        old = self._screen_settings
+        if not self._screen_applied or settings["orientation"] != old["orientation"]:
+            try:
+                size = rotate_display(settings["orientation"])
+                if size and self.win:
+                    properties = WindowProperties()
+                    properties.set_size(*size)
+                    self.win.request_properties(properties)
+            except (OSError, RuntimeError, TimeoutError) as error:
+                raise RuntimeError(
+                    f"No se pudo aplicar la orientación de pantalla: {error}"
+                ) from error
+        self._screen_settings = dict(settings)
+        self._screen_applied = True
+        self.author_credit.set_scale(SIZE_FACTORS[settings["content_size"]])
+        if self.model is not None:
+            self._orient_and_fit(
+                self.model_basis, self.model_fit, self.model_orientation
+            )
+        self._refresh_welcome_overlay(force=True)
+        self._layout_model_qr()
+        self._layout_model_content()
+        if self.model_error_overlay is not None:
+            self.model_error_overlay.set_scale(SIZE_FACTORS[settings["content_size"]])
+        self.invalidate(frames=2)
+
     def destroy(self):
         if getattr(self, "_draw_region", None) is not None:
             self._draw_region.clear_draw_callback()
@@ -594,8 +627,9 @@ class ControlledObjViewer(ShowBase):
         if self.content_overlay is None:
             return
         width = abs(self.content_overlay.get_relative_point(self.render2d, (1, 0, 0)).x)
-        self.content_title.set_scale(0.07)
-        self.content_description.set_scale(0.04)
+        content_factor = SIZE_FACTORS[self._screen_settings["content_size"]]
+        self.content_title.set_scale(0.07 * content_factor)
+        self.content_description.set_scale(0.04 * content_factor)
         for label in (self.content_title, self.content_description):
             label.node().set_wordwrap(width * 1.35 / label.get_sx())
         title_height = (
@@ -608,8 +642,8 @@ class ControlledObjViewer(ShowBase):
         height = title_height + description_height + 0.18
         # Long text must stay within the viewport, including portrait displays.
         factor = min(1, 0.75 / max(height, 0.01))
-        self.content_title.set_scale(0.07 * factor)
-        self.content_description.set_scale(0.04 * factor)
+        self.content_title.set_scale(0.07 * content_factor * factor)
+        self.content_description.set_scale(0.04 * content_factor * factor)
         title_height *= factor
         description_height *= factor
         height = title_height + description_height + 0.18
@@ -655,7 +689,9 @@ class ControlledObjViewer(ShowBase):
         # Typical URLs use ~17% of the short edge; dense codes get more room,
         # still below the welcome QR (36%). Anchor follows every window resize.
         size = max(0.32, min(0.60, modules * 4 * 2 / max(1, short_side)))
-        self.model_qr.set_scale(size)
+        self.model_qr.set_scale(
+            size * SIZE_FACTORS[self._screen_settings["content_size"]]
+        )
         self.model_qr.set_pos(-0.06, 0, 0.06)
 
     def _clear_model_lighting(self):
@@ -755,8 +791,7 @@ class ControlledObjViewer(ShowBase):
             # Also immediately wake both buffers when a person starts controlling.
             self.invalidate(frames=2)
 
-    @staticmethod
-    def _orient_and_fit(basis, fit, orientation):
+    def _orient_and_fit(self, basis, fit, orientation):
         # Panda's heading/pitch/roll rotate Z/X/Y. The inner basis is fixed;
         # the outer exhibition wrapper remains controlled only by gestures.
         basis.set_hpr(orientation["z"], orientation["x"], orientation["y"])
@@ -765,7 +800,9 @@ class ControlledObjViewer(ShowBase):
             low, high = bounds
             extent = max(high - low)
             if extent > 1e-8:
-                factor = 12.0 / extent
+                factor = (
+                    12.0 * SIZE_FACTORS[self._screen_settings["model_size"]] / extent
+                )
                 fit.set_scale(factor)
                 fit.set_pos(-(low + high) * (0.5 * factor))
 
@@ -805,6 +842,9 @@ class ControlledObjViewer(ShowBase):
         self._remove_model_error()
         self.setBackgroundColor(0, 0, 0, 1)
         self.model_error_overlay = self.aspect2d.attach_new_node("gestur-model-error")
+        self.model_error_overlay.set_scale(
+            SIZE_FACTORS[self._screen_settings["content_size"]]
+        )
         self._overlay_label(
             self.model_error_overlay, "model-error-brand", "GESTUR", 0.24, 0.13
         )
@@ -919,15 +959,20 @@ class ControlledObjViewer(ShowBase):
         # ShowBase keeps aspect2d's shortest viewport dimension at two units,
         # so this compact centered stack fits both portrait and landscape.
 
-    def _refresh_welcome_overlay(self):
+    def _refresh_welcome_overlay(self, force=False):
+        if self.welcome is None:
+            return
         self._last_url_check = time.monotonic()
         url = portal_url()
-        if url == self.welcome_url and self.welcome_overlay is not None:
+        if not force and url == self.welcome_url and self.welcome_overlay is not None:
             return
         if self.welcome_overlay is not None:
             self.welcome_overlay.remove_node()
         self.welcome_url = url
         self.welcome_overlay = self.aspect2d.attach_new_node("gestur-onboarding")
+        self.welcome_overlay.set_scale(
+            SIZE_FACTORS[self._screen_settings["content_size"]]
+        )
         self._configure_screen_overlay(self.welcome_overlay)
 
         def label(name, text, z, size):

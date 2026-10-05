@@ -140,6 +140,7 @@ class PoseController:
                 None, **self.config["render"], show_fps=show_fps
             )
             self.visualizer.show_model_error(self.model_error)
+        self.visualizer.apply_screen_settings(self.config["screen"])
         self.visualizer.accept("escape", self.request_stop)
         self.visualizer.taskMgr.add(self._render_tick, "gestur-control", sort=10)
 
@@ -248,6 +249,7 @@ class PoseController:
                 ambient_light=candidate["render"]["ambient_light"],
                 exposure=candidate["render"]["exposure"],
             )
+            self.visualizer.apply_screen_settings(candidate["screen"])
             self.config = candidate
             self.config_error = None
             self.last_error = self.model_error or self.tracking_error

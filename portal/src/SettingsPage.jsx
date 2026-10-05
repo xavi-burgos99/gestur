@@ -26,6 +26,7 @@ import {
 import { DeviceSettings } from "./DeviceManagement.jsx";
 import { api } from "./api.mjs";
 import SectionTitle from "./SectionTitle.jsx";
+import ScreenSettings from "./ScreenSettings.jsx";
 
 export default function Settings({ notify, onOperation }) {
   const [wifi, setWifi] = useState(null);
@@ -77,6 +78,7 @@ export default function Settings({ notify, onOperation }) {
   return (
     <>
       <SectionTitle title="Configuración" />
+      <ScreenSettings notify={notify} />
       <DeviceSettings
         api={api}
         onOperation={onOperation}

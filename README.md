@@ -17,8 +17,11 @@ CSI cameras need a capture adapter if they do not expose a compatible V4L2 devic
 
 ## Install
 
+See [INSTALL.md](INSTALL.md) for the short, step-by-step Raspberry Pi setup guide
+(materials, Imager, SSH, transfer, and portal onboarding).
+
 ```bash
-git clone --branch gestur-integrated https://github.com/xavi-burgos99/gestur.git
+git clone https://github.com/xavi-burgos99/gestur.git
 cd gestur
 sudo bash gestur.sh install
 sudo reboot

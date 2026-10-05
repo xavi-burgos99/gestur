@@ -594,14 +594,22 @@ class ControlledObjViewer(ShowBase):
             )
             self.content_overlay = anchor.attach_new_node("gestur-model-content")
             self._configure_screen_overlay(self.content_overlay)
-            image = PNMImage(1, 64, 4)
-            for row in range(64):
-                alpha = 0.8 * (1 - row / 63) ** 1.5
+            image = PNMImage(1, 256, 4)
+            for row in range(256):
+                distance = row / 255
                 if content["placement"] == "bottom":
-                    alpha = 0.8 * (row / 63) ** 1.5
+                    distance = 1 - distance
+                # Keep the first quarter dark, then fade with flat endpoints.
+                progress = max(0, min(1, (distance - 0.25) / 0.75))
+                alpha = 0.8 * (1 - progress * progress * (3 - 2 * progress))
                 image.set_xel_a(0, row, 0, 0, 0, alpha)
             texture = Texture("content-gradient")
             texture.load(image)
+            # Repeating the texture blends the dark edge into the clear edge.
+            texture.set_wrap_u(Texture.WM_clamp)
+            texture.set_wrap_v(Texture.WM_clamp)
+            texture.set_minfilter(Texture.FT_linear)
+            texture.set_magfilter(Texture.FT_linear)
             card = CardMaker("content-gradient")
             card.set_frame(-1, 1, -1, 0)
             self.content_gradient = self.content_overlay.attach_new_node(
@@ -654,8 +662,8 @@ class ControlledObjViewer(ShowBase):
         else:
             self.content_title.set_z(height - 0.06)
             self.content_description.set_z(height - 0.1 - title_height)
-            self.content_gradient.set_pos(0, 0, height + 0.08)
-        self.content_gradient.set_scale(width, 1, height + 0.08)
+            self.content_gradient.set_pos(0, 0, height + 0.24)
+        self.content_gradient.set_scale(width, 1, height + 0.24)
 
     def set_model_url(self, url):
         """Update a static screen overlay without reloading geometry or textures."""

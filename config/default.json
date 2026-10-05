@@ -68,11 +68,11 @@
         "scale": 1,
         "invert": false,
         "center": 0.3,
-        "threshold": 0.4,
+        "threshold": 0.2,
         "small_scale": 1,
         "large_scale": 1.75,
         "transition_ms": 750,
-        "hysteresis": 0.02
+        "hysteresis": 0.08
       }
     ]
   },

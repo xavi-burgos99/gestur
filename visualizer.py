@@ -619,15 +619,16 @@ class ControlledObjViewer(ShowBase):
             self.content_gradient.set_transparency(TransparencyAttrib.M_alpha)
             self.content_gradient.set_bin("fixed", 39)
             self.content_title = self._overlay_label(
-                self.content_overlay, "content-title", content["title"], 0, 0.07
+                self.content_overlay, "content-title", content["title"], 0, 0.10
             )
             self.content_description = self._overlay_label(
                 self.content_overlay,
                 "content-description",
                 content["description"],
                 0,
-                0.04,
+                0.045,
             )
+            self.content_description.set_color_scale(1, 1, 1, 0.8)
             self._layout_model_content()
         self.invalidate(frames=2)
 
@@ -636,8 +637,8 @@ class ControlledObjViewer(ShowBase):
             return
         width = abs(self.content_overlay.get_relative_point(self.render2d, (1, 0, 0)).x)
         content_factor = SIZE_FACTORS[self._screen_settings["content_size"]]
-        self.content_title.set_scale(0.07 * content_factor)
-        self.content_description.set_scale(0.04 * content_factor)
+        self.content_title.set_scale(0.10 * content_factor)
+        self.content_description.set_scale(0.045 * content_factor)
         for label in (self.content_title, self.content_description):
             label.node().set_wordwrap(width * 1.35 / label.get_sx())
         title_height = (
@@ -647,17 +648,17 @@ class ControlledObjViewer(ShowBase):
             self.content_description.node().get_height()
             * self.content_description.get_sz()
         )
-        height = title_height + description_height + 0.37
+        height = title_height + description_height + 0.33
         # Long text must stay within the viewport, including portrait displays.
         factor = min(1, 0.75 / max(height, 0.01))
-        self.content_title.set_scale(0.07 * content_factor * factor)
-        self.content_description.set_scale(0.04 * content_factor * factor)
+        self.content_title.set_scale(0.10 * content_factor * factor)
+        self.content_description.set_scale(0.045 * content_factor * factor)
         title_height *= factor
         description_height *= factor
-        height = title_height + description_height + 0.37
+        height = title_height + description_height + 0.33
         if self.model_content["placement"] == "top":
-            self.content_title.set_z(-0.28)
-            self.content_description.set_z(-0.28 - title_height - 0.04)
+            self.content_title.set_z(-0.24)
+            self.content_description.set_z(-0.24 - title_height - 0.04)
             self.content_gradient.set_pos(0, 0, 0)
         else:
             self.content_title.set_z(height - 0.06)

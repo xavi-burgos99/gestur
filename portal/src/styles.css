@@ -76,6 +76,9 @@ body {
 }
 .model-preview {
   position: relative;
+  height: 226px;
+  background: radial-gradient(ellipse at 50% 40%, #ebf2f4, #dfe9ec);
+  border-bottom: 1px solid #e7eae5;
 }
 .model-actions {
   position: absolute;
@@ -165,7 +168,8 @@ body {
   .mantine-Title-root[data-order="1"] {
     font-size: 27px;
   }
-  .model-art {
+  .model-art,
+  .model-preview {
     height: 200px;
   }
 }

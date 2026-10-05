@@ -33,6 +33,9 @@ def test_content_overlay_is_optional_and_survives_resize_without_reloading_model
                     "placement": placement,
                 }
             )
+            offset = viewer.camLens.get_film_offset().y
+            assert offset > 0 if placement == "top" else offset < 0
+            assert viewer.model.get_pos() == (0, 0, 0)
             for ratio in (16 / 9, 9 / 16):
                 viewer.win.set_size(960, round(960 / ratio))
                 viewer.adjustWindowAspectRatio(ratio)
@@ -56,6 +59,7 @@ def test_content_overlay_is_optional_and_survives_resize_without_reloading_model
         assert viewer.content_description.get_z() < raised
         viewer.set_model_content(None)
         assert viewer.content_overlay is None
+        assert viewer.camLens.get_film_offset().y == 0
         viewer.show_welcome()
         assert viewer.content_overlay is None
     finally:

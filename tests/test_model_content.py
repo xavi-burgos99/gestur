@@ -43,6 +43,17 @@ def test_content_overlay_is_optional_and_survives_resize_without_reloading_model
                 low, high = viewer.content_overlay.get_tight_bounds(viewer.render2d)
                 assert -1.01 <= low.x <= high.x <= 1.01
                 assert -1.01 <= low.z <= high.z <= 1.01
+        viewer.set_model_content(
+            {"title": "Mi pieza", "description": "Descripción", "placement": "bottom"}
+        )
+        viewer.set_model_url("https://example.org")
+        viewer._layout_model_content()
+        _, qr_high = viewer.model_qr.get_tight_bounds(viewer.render2d)
+        text_low, _ = viewer.content_description.get_tight_bounds(viewer.render2d)
+        assert (text_low.z - qr_high.z) * viewer.win.get_y_size() / 2 >= 19.9
+        raised = viewer.content_description.get_z()
+        viewer.set_model_url(None)
+        assert viewer.content_description.get_z() < raised
         viewer.set_model_content(None)
         assert viewer.content_overlay is None
         viewer.show_welcome()

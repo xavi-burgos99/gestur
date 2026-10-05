@@ -669,6 +669,22 @@ class ControlledObjViewer(ShowBase):
         else:
             self.content_title.set_z(height - 0.06)
             self.content_description.set_z(height - 0.085 - title_height)
+            if self.model_qr is not None:
+                # Keep the centered text above the QR, with a physical 20 px gap.
+                _, qr_high = self.model_qr.get_tight_bounds(self.content_overlay)
+                text_low = min(
+                    label.get_tight_bounds(self.content_overlay)[0].z
+                    for label in (self.content_title, self.content_description)
+                    if label.node().get_text()
+                )
+                pixels = max(1, self.win.get_y_size()) if self.win else 1080
+                gap = self.content_overlay.get_relative_vector(
+                    self.render2d, (0, 0, 40 / pixels)
+                ).z
+                offset = max(0, qr_high.z + gap - text_low)
+                for label in (self.content_title, self.content_description):
+                    label.set_z(label.get_z() + offset)
+                height += offset
             self.content_gradient.set_pos(0, 0, height + 0.24)
         self.content_gradient.set_scale(width, 1, height + 0.24)
 
@@ -691,6 +707,7 @@ class ControlledObjViewer(ShowBase):
             self.model_qr.set_transparency(TransparencyAttrib.M_alpha)
             self._configure_screen_overlay(self.model_qr)
             self._layout_model_qr()
+        self._layout_model_content()
         self.invalidate(frames=2)
         return True
 

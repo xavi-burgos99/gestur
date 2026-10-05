@@ -288,16 +288,19 @@ export default function Models({ config, setConfig, notify }) {
     event.preventDefault();
     if (!modelDialog || importDisabled || selectionMutating.current) return;
     const name = modelName.trim();
-    if (!name || name.length > 100) {
+    if (modelDialog.kind === "edit" && (!name || name.length > 100)) {
       setModelError("Escribe un nombre de entre 1 y 100 caracteres.");
       return;
     }
     const url = modelUrl.trim();
-    if (new TextEncoder().encode(url).length > 2048) {
+    if (
+      modelDialog.kind === "content" &&
+      new TextEncoder().encode(url).length > 2048
+    ) {
       setModelError("La URL es demasiado larga.");
       return;
     }
-    if (url) {
+    if (modelDialog.kind === "content" && url) {
       try {
         const parsed = new URL(url);
         if (
@@ -318,10 +321,9 @@ export default function Models({ config, setConfig, notify }) {
     }
     await changeModel("PATCH", {
       id: modelDialog.model.id,
-      name,
-      orientation,
-      url: url || null,
-      content,
+      ...(modelDialog.kind === "content"
+        ? { url: url || null, content }
+        : { name, orientation }),
     });
   }
   async function changeModel(method, body) {
@@ -595,10 +597,19 @@ export default function Models({ config, setConfig, notify }) {
                       <Menu.Dropdown>
                         <Menu.Item
                           leftSection={<IconPencil size={17} stroke={1.7} />}
-                          onClick={() => openModelDialog("edit", model)}
+                          onClick={() => openModelDialog("content", model)}
                           disabled={importDisabled}
                         >
                           Cambiar contenido
+                        </Menu.Item>
+                        <Menu.Item
+                          leftSection={
+                            <IconRotateClockwise size={17} stroke={1.7} />
+                          }
+                          onClick={() => openModelDialog("edit", model)}
+                          disabled={importDisabled}
+                        >
+                          Ajustar modelo
                         </Menu.Item>
                         <Menu.Divider />
                         <Menu.Item
@@ -727,121 +738,133 @@ export default function Models({ config, setConfig, notify }) {
         </Paper>
       )}
       <Modal
-        opened={modelDialog?.kind === "edit"}
+        opened={["edit", "content"].includes(modelDialog?.kind)}
         onClose={closeModelDialog}
         closeOnClickOutside={!busy}
         closeOnEscape={!busy}
         withCloseButton={!busy}
-        title="Cambiar contenido"
+        title={
+          modelDialog?.kind === "content"
+            ? "Cambiar contenido"
+            : "Ajustar modelo"
+        }
         centered
         size="md"
       >
         <form onSubmit={saveModel}>
           <Stack gap="lg">
-            <TextInput
-              label="Nombre"
-              value={modelName}
-              onChange={(event) => setModelName(event.currentTarget.value)}
-              maxLength={100}
-              required
-              disabled={busy || pending}
-              data-autofocus
-            />
-            <TextInput
-              label="Título"
-              value={content.title}
-              maxLength={160}
-              disabled={busy || pending}
-              onChange={(event) =>
-                setContent({ ...content, title: event.currentTarget.value })
-              }
-            />
-            <Textarea
-              label="Descripción"
-              value={content.description}
-              maxLength={1200}
-              autosize
-              minRows={3}
-              maxRows={8}
-              disabled={busy || pending}
-              onChange={(event) =>
-                setContent({
-                  ...content,
-                  description: event.currentTarget.value,
-                })
-              }
-            />
-            <Select
-              label="Posición del contenido"
-              data={[
-                { value: "top", label: "Superior" },
-                { value: "bottom", label: "Inferior" },
-              ]}
-              value={content.placement}
-              allowDeselect={false}
-              disabled={busy || pending}
-              onChange={(value) =>
-                value && setContent({ ...content, placement: value })
-              }
-            />
-            <TextInput
-              label="URL"
-              description="Opcional. Enlace del QR que acompaña al modelo."
-              placeholder="https://..."
-              type="url"
-              value={modelUrl}
-              onChange={(event) => setModelUrl(event.currentTarget.value)}
-              maxLength={2048}
-              disabled={busy || pending}
-              autoComplete="url"
-              spellCheck={false}
-            />
-            <div>
-              <Text fw={600} size="sm">
-                Orientación inicial
-              </Text>
-              <Text c="dimmed" size="sm" mt={4}>
-                Giros respecto al archivo original.
-              </Text>
-              <SimpleGrid cols={3} spacing="sm" mt="sm">
-                {["x", "y", "z"].map((axis) => (
-                  <Select
-                    key={axis}
-                    label={`Eje ${axis.toUpperCase()}`}
-                    data={[0, 90, 180, 270].map((degrees) => ({
-                      value: String(degrees),
-                      label: `${degrees}°`,
-                    }))}
-                    value={String(orientation[axis])}
-                    onChange={(value) =>
-                      value !== null &&
-                      setOrientation((current) => ({
-                        ...current,
-                        [axis]: Number(value),
-                      }))
-                    }
-                    allowDeselect={false}
-                    disabled={busy || pending}
-                    comboboxProps={{ withinPortal: false }}
-                  />
-                ))}
-              </SimpleGrid>
-              <Button
-                variant="subtle"
-                size="xs"
-                mt="xs"
-                px={0}
-                leftSection={<IconRotateClockwise size={15} stroke={1.7} />}
-                disabled={
-                  busy ||
-                  pending ||
-                  Object.values(orientation).every((value) => value === 0)
-                }
-                onClick={() => setOrientation({ x: 0, y: 0, z: 0 })}
-              >
-                Restablecer orientación
-              </Button>
-            </div>
+            {modelDialog?.kind === "edit" && (
+              <TextInput
+                label="Nombre"
+                value={modelName}
+                onChange={(event) => setModelName(event.currentTarget.value)}
+                maxLength={100}
+                required
+                disabled={busy || pending}
+                data-autofocus
+              />
+            )}
+            {modelDialog?.kind === "content" && (
+              <>
+                <TextInput
+                  label="Título"
+                  value={content.title}
+                  maxLength={160}
+                  disabled={busy || pending}
+                  onChange={(event) =>
+                    setContent({ ...content, title: event.currentTarget.value })
+                  }
+                />
+                <Textarea
+                  label="Descripción"
+                  value={content.description}
+                  maxLength={1200}
+                  autosize
+                  minRows={3}
+                  maxRows={8}
+                  disabled={busy || pending}
+                  onChange={(event) =>
+                    setContent({
+                      ...content,
+                      description: event.currentTarget.value,
+                    })
+                  }
+                />
+                <Select
+                  label="Posición del contenido"
+                  data={[
+                    { value: "top", label: "Superior" },
+                    { value: "bottom", label: "Inferior" },
+                  ]}
+                  value={content.placement}
+                  allowDeselect={false}
+                  disabled={busy || pending}
+                  onChange={(value) =>
+                    value && setContent({ ...content, placement: value })
+                  }
+                />
+                <TextInput
+                  label="URL"
+                  description="Opcional. Enlace del QR que acompaña al modelo."
+                  placeholder="https://..."
+                  type="url"
+                  value={modelUrl}
+                  onChange={(event) => setModelUrl(event.currentTarget.value)}
+                  maxLength={2048}
+                  disabled={busy || pending}
+                  autoComplete="url"
+                  spellCheck={false}
+                />
+              </>
+            )}
+            {modelDialog?.kind === "edit" && (
+              <div>
+                <Text fw={600} size="sm">
+                  Orientación inicial
+                </Text>
+                <Text c="dimmed" size="sm" mt={4}>
+                  Giros respecto al archivo original.
+                </Text>
+                <SimpleGrid cols={3} spacing="sm" mt="sm">
+                  {["x", "y", "z"].map((axis) => (
+                    <Select
+                      key={axis}
+                      label={`Eje ${axis.toUpperCase()}`}
+                      data={[0, 90, 180, 270].map((degrees) => ({
+                        value: String(degrees),
+                        label: `${degrees}°`,
+                      }))}
+                      value={String(orientation[axis])}
+                      onChange={(value) =>
+                        value !== null &&
+                        setOrientation((current) => ({
+                          ...current,
+                          [axis]: Number(value),
+                        }))
+                      }
+                      allowDeselect={false}
+                      disabled={busy || pending}
+                      comboboxProps={{ withinPortal: false }}
+                    />
+                  ))}
+                </SimpleGrid>
+                <Button
+                  variant="subtle"
+                  size="xs"
+                  mt="xs"
+                  px={0}
+                  leftSection={<IconRotateClockwise size={15} stroke={1.7} />}
+                  disabled={
+                    busy ||
+                    pending ||
+                    Object.values(orientation).every((value) => value === 0)
+                  }
+                  onClick={() => setOrientation({ x: 0, y: 0, z: 0 })}
+                >
+                  Restablecer orientación
+                </Button>
+              </div>
+            )}
             {pending && (
               <Text c="dimmed" size="sm">
                 Espera a que termine la importación para guardar.
@@ -859,7 +882,10 @@ export default function Models({ config, setConfig, notify }) {
               <Button
                 type="submit"
                 loading={busy}
-                disabled={importDisabled || !modelName.trim()}
+                disabled={
+                  importDisabled ||
+                  (modelDialog?.kind === "edit" && !modelName.trim())
+                }
               >
                 Guardar
               </Button>

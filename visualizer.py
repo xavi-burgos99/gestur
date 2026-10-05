@@ -265,6 +265,7 @@ class ControlledObjViewer(ShowBase):
         hide_cursor=True,
         show_fps=False,
         window_type=None,
+        window_size=(1920, 1080),
         model_orientation=None,
         ambient_light="none",
         exposure=50,
@@ -299,7 +300,7 @@ class ControlledObjViewer(ShowBase):
             "\n".join(
                 (
                     "load-file-type p3assimp",
-                    "win-size 1920 1080",
+                    f"win-size {window_size[0]} {window_size[1]}",
                     f"fullscreen {'true' if fullscreen and sys.platform != 'darwin' else 'false'}",
                     f"fullscreen-windowed {'true' if fullscreen and sys.platform == 'darwin' else 'false'}",
                     f"framebuffer-multisample {'true' if antialias_samples else 'false'}",

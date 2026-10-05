@@ -576,6 +576,23 @@ export default function Models({ config, setConfig, notify }) {
                 >
                   <div className="model-preview">
                     <ModelArt />
+                    <img
+                      key={JSON.stringify(model.orientation)}
+                      src={`/api/models/preview?id=${encodeURIComponent(model.id)}&orientation=${encodeURIComponent(JSON.stringify(model.orientation))}`}
+                      alt={`Vista frontal de ${model.content?.title || model.name}`}
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                        background: "black",
+                      }}
+                    />
                     <Menu position="bottom-end" shadow="md" width={190}>
                       <Menu.Target>
                         <ActionIcon

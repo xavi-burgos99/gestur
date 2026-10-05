@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { createPreviews } from "./previews.mjs";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import staticFiles from "@fastify/static";
@@ -420,6 +421,14 @@ export async function createApp(options) {
     }
   });
   app.get("/api/models", async () => store.catalog());
+  const preview = createPreviews({ store, modelsDir });
+  app.get("/api/models/preview", async (request, reply) => {
+    const image = await preview(request.query.id);
+    return reply
+      .type("image/png")
+      .header("cache-control", "private, no-store")
+      .send(image);
+  });
   async function mutateModel(action, body) {
     if (modelBusy())
       throw new ApiError(

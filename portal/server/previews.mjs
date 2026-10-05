@@ -23,7 +23,7 @@ export function createPreviews({ store, modelsDir }) {
     const key = createHash("sha256")
       .update(
         JSON.stringify([
-          "v2",
+          "v3-square-alpha",
           model.id,
           model.orientation,
           info.size,

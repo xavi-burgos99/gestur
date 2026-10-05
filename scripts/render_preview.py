@@ -25,21 +25,22 @@ def main():
     engine = "p3headlessgl" if sys.platform == "linux" else "p3tinydisplay"
     loadPrcFileData(
         "preview",
-        f"load-display {engine}\nwin-size 640 360\naudio-library-name null",
+        f"load-display {engine}\nwin-size 640 640\nframebuffer-alpha true\nalpha-bits 8\naudio-library-name null",
     )
     from visualizer import ControlledObjViewer
 
     viewer = ControlledObjViewer(
         args.model,
         window_type="offscreen",
-        window_size=(640, 360),
+        window_size=(640, 640),
         fullscreen=False,
         antialias_samples=0,
         model_orientation=json.loads(args.orientation),
     )
     try:
         viewer.author_credit.hide()
-        viewer.adjustWindowAspectRatio(16 / 9)
+        viewer.adjustWindowAspectRatio(1)
+        viewer.setBackgroundColor(0, 0, 0, 0)
         for _ in range(3):
             viewer.graphicsEngine.render_frame()
         if not viewer.win.save_screenshot(Filename.from_os_specific(args.output)):

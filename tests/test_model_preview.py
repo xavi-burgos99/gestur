@@ -27,7 +27,8 @@ def test_preview_is_small_and_changes_with_orientation(tmp_path):
             timeout=30,
         )
         with Image.open(output) as image:
-            assert image.size == (640, 360)
+            assert image.size == (640, 640)
+            assert image.convert("RGBA").getpixel((0, 0))[3] == 0
             images.append(image.convert("RGB").tobytes())
     assert images[0] != images[1]
     assert any(images[1])

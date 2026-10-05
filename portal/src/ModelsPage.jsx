@@ -92,6 +92,29 @@ function ImportWarnings({ warnings = [] }) {
     </details>
   );
 }
+function ModelPreview({ model }) {
+  const [ready, setReady] = useState(false);
+  return (
+    <>
+      {!ready && <ModelArt />}
+      <img
+        src={`/api/models/preview?id=${encodeURIComponent(model.id)}&orientation=${encodeURIComponent(JSON.stringify(model.orientation))}`}
+        alt={`Vista frontal de ${model.content?.title || model.name}`}
+        loading="lazy"
+        onLoad={() => setReady(true)}
+        onError={() => setReady(false)}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+          visibility: ready ? "visible" : "hidden",
+        }}
+      />
+    </>
+  );
+}
 export default function Models({ config, setConfig, notify }) {
   const [runtime, setRuntime] = useState({ online: false });
   useEffect(() => {
@@ -575,23 +598,9 @@ export default function Models({ config, setConfig, notify }) {
                   withBorder
                 >
                   <div className="model-preview">
-                    <ModelArt />
-                    <img
-                      key={JSON.stringify(model.orientation)}
-                      src={`/api/models/preview?id=${encodeURIComponent(model.id)}&orientation=${encodeURIComponent(JSON.stringify(model.orientation))}`}
-                      alt={`Vista frontal de ${model.content?.title || model.name}`}
-                      loading="lazy"
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none";
-                      }}
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                        background: "black",
-                      }}
+                    <ModelPreview
+                      key={JSON.stringify([model.id, model.orientation])}
+                      model={model}
                     />
                     <Menu position="bottom-end" shadow="md" width={190}>
                       <Menu.Target>

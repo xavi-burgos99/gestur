@@ -40,6 +40,25 @@ def pixels(viewer):
     )[::-1]
 
 
+def without_author_credit(viewer, frame):
+    """Exclude the persistent credit when checking model and QR pixels."""
+    import math
+
+    import numpy as np
+
+    height, width = frame.shape[:2]
+    low, high = viewer.author_credit.get_tight_bounds(viewer.render2d)
+    assert -1 < low.x < high.x < 0 and -1 < low.z < high.z < 0
+    left = max(0, math.floor((low.x + 1) * width / 2) - 2)
+    right = min(width, math.ceil((high.x + 1) * width / 2) + 2)
+    top = max(0, math.floor((1 - high.z) * height / 2) - 2)
+    bottom = min(height, math.ceil((1 - low.z) * height / 2) + 2)
+    assert np.any(frame[top:bottom, left:right]), "author credit remains visible"
+    result = frame.copy()
+    result[top:bottom, left:right] = 0
+    return result
+
+
 def test_zero_exposure_keeps_qr_fully_white_and_actual_frame_decodes(rendered_viewer):
     import cv2
     import numpy as np
@@ -49,7 +68,8 @@ def test_zero_exposure_keeps_qr_fully_white_and_actual_frame_decodes(rendered_vi
     viewer.apply_settings(ambient_light="sunset", exposure=0)
     frame = pixels(viewer)
     assert np.array_equal(
-        np.unique(frame.reshape(-1, 3), axis=0), [[0, 0, 0], [255, 255, 255]]
+        np.unique(without_author_credit(viewer, frame).reshape(-1, 3), axis=0),
+        [[0, 0, 0], [255, 255, 255]],
     )
     # OpenCV expects dark modules; invert the framebuffer rather than decoding
     # the original texture, so geometry size/filtering/placement are exercised.
@@ -100,4 +120,4 @@ def test_no_url_after_welcome_leaves_neither_qr_nor_welcome_geometry(rendered_vi
     viewer.apply_settings(exposure=0)
     assert viewer.model_url is None and viewer.model_qr is None
     assert viewer.welcome is None and viewer.welcome_overlay is None
-    assert not np.any(pixels(viewer))
+    assert not np.any(without_author_credit(viewer, pixels(viewer)))

@@ -54,6 +54,8 @@ def test_exposure_is_monotonic_reversible_and_preserves_alpha(tmp_path, kind, sc
         fullscreen=False,
         ambient_light=scenario,
     )
+    # Measure model exposure independently of the permanent screen attribution.
+    viewer.author_credit.hide()
     clock = p.ClockObject.get_global_clock()
     clock.set_mode(p.ClockObject.M_non_real_time)
     clock.set_dt(1 / 60)

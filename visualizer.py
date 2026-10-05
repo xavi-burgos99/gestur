@@ -338,6 +338,7 @@ class ControlledObjViewer(ShowBase):
         self.welcome_overlay = None
         self.welcome_url = None
         self.model_error_overlay = None
+        self._show_author_credit()
         self._last_url_check = 0.0
         # Leave ShowBase's input/event/igLoop tasks in place. GraphicsOutput's
         # active flag skips cull/draw only, keeping control and events responsive.
@@ -757,6 +758,27 @@ class ControlledObjViewer(ShowBase):
         item.set_scale(size)
         item.set_pos(0, 0, z)
         return item
+
+    def _show_author_credit(self):
+        """Keep attribution anchored to the viewport across all scene states."""
+        self.author_credit = self.a2dBottomLeft.attach_new_node("gestur-author-credit")
+        self.author_credit.set_pos(0.06, 0, 0.045)
+        self._configure_screen_overlay(self.author_credit)
+        # A separate glyph atlas keeps static credits unchanged when welcome
+        # labels add characters and regenerate their font texture.
+        font = TextNode.get_default_font()
+        if isinstance(font, DynamicTextFont):
+            font = DynamicTextFont(font)
+            font.set_pixels_per_unit(96)
+            font.set_minfilter(Texture.FT_linear_mipmap_linear)
+            font.set_magfilter(Texture.FT_linear)
+        for name, text, height, size in (
+            ("author-brand", "GESTUR", 0.034, 0.04),
+            ("author-name", "Desarrollado por Xavier Burgos", 0, 0.027),
+        ):
+            label = self._overlay_label(self.author_credit, name, text, height, size)
+            label.node().set_font(font)
+            label.node().set_align(TextNode.A_left)
 
     def show_welcome(self):
         self.invalidate(frames=2)

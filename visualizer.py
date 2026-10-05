@@ -565,7 +565,7 @@ class ControlledObjViewer(ShowBase):
             previous.remove_node()
         self._remove_welcome()
         self._remove_model_error()
-        self.author_credit.set_color_scale(1, 1, 1, 0.65)
+        self.author_credit.set_color_scale(1, 1, 1, 0.35)
         self.set_model_url(model_url)
         self.set_model_content(None)
         self._set_model_camera()

@@ -1,0 +1,73 @@
+{
+  "status": "completed",
+  "error": null,
+  "platform": {
+    "system": "Linux",
+    "machine": "aarch64",
+    "python": "3.12.14"
+  },
+  "startup_seconds": 1.0692496930000743,
+  "elapsed_seconds": 60.00012766400005,
+  "counts": {
+    "captured_frames": 1152,
+    "pose_frames": 1107,
+    "hand_frames": 0,
+    "capture_failures": 0
+  },
+  "fps": {
+    "capture": 19.199959147606908,
+    "pose": 18.449960743403512,
+    "hands": 0.0
+  },
+  "cpu_seconds": 36.663920693,
+  "cpu_percent_one_core": 61.106404470199614,
+  "process_peak_rss_mb": 222.6875,
+  "validity_samples": 1198,
+  "validity_sample_fraction": {
+    "head": 0.9891485809682805,
+    "torso": 0.4340567612687813,
+    "left_hand": 0.0,
+    "right_hand": 0.0
+  },
+  "sampled_inference_ms": {
+    "samples": 1107,
+    "median": 30.831734999992477,
+    "p95": 37.96417499995641,
+    "maximum": 67.33124499999121
+  },
+  "sampled_frame_age_ms": {
+    "samples": 1107,
+    "median": 51.39937399997052,
+    "p95": 77.5005450000208,
+    "maximum": 102.06436500004656
+  },
+  "scheduling": {
+    "inference_duty_limit": 0.6,
+    "inference_wall_seconds": 34.8648135529977,
+    "budget_pauses": 1107,
+    "budget_pause_seconds": 11.957332306031844,
+    "pose_scheduled_fps": 24.0,
+    "hand_scheduled_fps": 0,
+    "pose_idle": false,
+    "hand_idle": false
+  },
+  "notes": [
+    "FPS uses completed model/capture counters, never callback counts.",
+    "Validity is a 20 Hz observation of detected flags, not recognition accuracy.",
+    "Latency statistics sample the latest completed inference at 20 Hz; they are not every frame.",
+    "Timing excludes model/camera startup and resource shutdown. Peak RSS includes startup.",
+    "This command measures tracking only, without the 3D renderer.",
+    "The duty limit budgets combined inference wall time, not CPU usage or recognition accuracy.",
+    "Scheduled FPS is the requested cadence after idle probing; the shared duty limit can lower observed FPS."
+  ],
+  "configuration": {
+    "seconds": 60.0,
+    "hands": false,
+    "camera": 0,
+    "inference_fps": 24,
+    "hand_fps": 15,
+    "width": 640,
+    "height": 480,
+    "mirror": true
+  }
+}

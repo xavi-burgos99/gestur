@@ -1,0 +1,87 @@
+{
+  "date": "2026-09-27",
+  "hardware": "Same Raspberry Pi 5 4 GB as the parent manifest; HTTP port 80.",
+  "deployment_reported_by_operator": {
+    "native_import_fix_commit": "549ca43fac099bea980d11c00a182237019f64e7",
+    "reboot_icon_commit": "9786282b5cafc547df032e9ec6cf5445f41a58b4",
+    "api_and_import_scope": "Both API and import tests used 549ca43; the subsequent icon revision listed here belongs to reboot validation."
+  },
+  "redacted_files": {
+    "import-smoke.redacted.json": {
+      "bytes": 1105,
+      "sha256": "31ab0cc1616264b5b2945befda6a84e71378b6eada0f110335ed5cae2d1ddacc",
+      "original_file": "artifacts/pi5/import-smoke-80-final.json",
+      "original": {
+        "bytes": 1091,
+        "sha256": "ec0639c992796ba4ef6447f1f1fd5b86cfa4a281706627ba51d1d6f4658927a2"
+      },
+      "redacted_fields": [
+        "base_url"
+      ],
+      "redaction": "Only the loopback base_url is omitted; all import, GLB, texture, repair, cleanup and configuration results are preserved. Not byte-identical to original."
+    },
+    "api-smoke.redacted.json": {
+      "bytes": 1326,
+      "sha256": "b76f40bcea91a10798eb02da031192f0f2b364397467b31801078bdb22da8c68",
+      "original_file": "artifacts/pi5/api-smoke-80-final.json",
+      "original": {
+        "bytes": 1311,
+        "sha256": "e2d9f54a58ceab1564a0001e18e100df7ab397c7947737a6325037d10a1ec9d2"
+      },
+      "redacted_fields": [
+        "checks[4].ssid",
+        "checks[5].ssid",
+        "checks[6].ssid",
+        "checks[7].ssid",
+        "checks[8].ssid"
+      ],
+      "redaction": "Only SSID values are omitted; all checks, status flags and timings are preserved. Not byte-identical to original."
+    }
+  },
+  "import_scope": "Real OBJ+MTL+PNG ZIP upload through the installed HTTP portal and native conversion. Two triangles, UVs and a 2x2 texture verified in the GLB; repaired synthetic Windows/case texture path. The test package was removed and its terminal job record retained. No active model or configuration changes; library empty afterwards.",
+  "api_scope": "Eleven checks passed in 30.2 seconds, including add/change/remove Wi-Fi password and restoration of the initially open AP. Runtime FPS is one API observation, not a measured sustained render benchmark.",
+  "source_reference": {
+    "path": "scripts/check-portal-import.py",
+    "commit": "549ca43fac099bea980d11c00a182237019f64e7",
+    "bytes": 15708,
+    "sha256": "67893edf8f1c2638f9a87e4da1cfddbea862b29c80fa76c071562d2e9b3acb8d",
+    "provenance": "Git source reference for the import test; neither result JSON records its executable hash. This is not a byte-level attestation of the script executed on the Pi. Later hardening of the check script is independent of these results."
+  },
+  "reboot_operator_observation": {
+    "evidence_kind": "Deployment operator observation supplied in the task; not a captured raw report.",
+    "reboot_confirmed": true,
+    "boot_identifier_changed": true,
+    "uptime_seconds_at_observation": 21.56,
+    "uptime_scope": "Time since boot when inspected, not a measured portal/controller startup latency.",
+    "controller_started_automatically": true,
+    "portal_service_active": true,
+    "portal_exec_start_pre_exit_status": 0,
+    "graphics": {
+      "renderer": "V3D 7.1.7.0",
+      "mesa": "26.2.2",
+      "accelerated": true
+    },
+    "http_status": {
+      "mdns": 200,
+      "ipv4": 200
+    },
+    "runtime": {
+      "state": "welcome",
+      "selected_model": null,
+      "rendered_model": null,
+      "tracking": "stopped",
+      "error": null
+    },
+    "omissions": "Boot identifiers, process IDs and network addresses are deliberately not published.",
+    "scope": "Confirms automatic graphic/controller/portal startup after manual installation and this reboot. Does not validate the entire prepared-image first-boot installation process, later capitel trials, recognition accuracy or indefinite stability.",
+    "portal_url_function_check": {
+      "installed_function_executed": true,
+      "scheme": "http",
+      "explicit_port": null,
+      "address_source": "access_point",
+      "loopback": false,
+      "physical_qr_scan_performed": false,
+      "scope": "Operator executed installed portal_url() and inspected the returned destination. No address is published; this does not verify physical QR scanning."
+    }
+  }
+}

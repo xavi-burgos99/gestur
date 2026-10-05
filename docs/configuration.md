@@ -1,0 +1,126 @@
+# Configuración de GESTUR
+
+El visor y el portal comparten `/var/lib/gestur/config.json`. Se puede cambiar la ruta con `GESTUR_CONFIG` o con la opción de configuración del visor. Una instalación sin archivo utiliza `config/default.json`. El contrato versionado está en `config/schema.json` (JSON Schema Draft 7); `schema_version` debe ser `1`. El portal valida antes de guardar y sustituye el archivo de forma atómica. No se guardan contraseñas Wi-Fi en este archivo: las gestiona el servicio de red.
+
+La configuración completa contiene `active_model`, `tracking`, `render` y `controls`. `active_model: null` corresponde a una biblioteca vacía: muestra la bienvenida con figura procedural y QR, sin abrir la cámara. Al importar el primer modelo se selecciona automáticamente. Se guarda un GLB autocontenido y la selección usa `<uuid>/model.glb`; también se conservan los paquetes OBJ/glTF/GLB de instalaciones anteriores. El último modelo elegido se mantiene al reiniciar. Si la selección falta o apunta a un archivo desaparecido, se escoge un modelo disponible; la API rechaza dejarla vacía cuando hay modelos. La referencia antigua `capitell.obj` se reconcilia con la biblioteca actual; no se borran modelos del usuario.
+
+`GESTUR_PORTAL_URL` permite indicar una URL alternativa con una IP válida. Sin esa variable se detecta la IP de la LAN, o la del punto de acceso si no hay ruta de red, y se usa HTTP en el puerto 80. Si todavía no hay IP disponible, la bienvenida espera y reintenta. Nunca se añade la clave de administración al QR.
+
+El nombre y la orientación de cada modelo se guardan en su `.gestur-model.json`,
+dentro de la biblioteca. `orientation` contiene `x`, `y` y `z` en grados
+(0, 90, 180 o 270); si no existe, se conserva la orientación original. Esta
+corrección es independiente de las rotaciones asignadas a gestos.
+
+## Valores iniciales para Raspberry Pi 5
+
+- Cámara: 640 × 480, inferencia de cabeza a un máximo de 24 Hz y manos a 15 Hz cuando están activadas.
+- Manos desactivadas de inicio para reducir el trabajo. Activarlas permite usar posición, orientación de la palma, apertura y pinza.
+- Renderizado: 60 FPS como objetivo, antialiasing MSAA de 2 muestras, pantalla completa y cursor oculto. Son objetivos configurables; el rendimiento real depende del modelo, la cámara y la Raspberry Pi.
+- Suavizado del seguimiento: 60 ms. Suavizado de los controles: 90 ms; el zoom usa un tercio para conservar su respuesta más rápida.
+- Luz ambiente: **Ninguna**, exposición **50 %**. Modo de espera: **Volver a origen**.
+
+Los cambios de controles se aplican al recargar la configuración. Los ajustes de cámara y seguimiento reemplazan el tracker en segundo plano, manteniendo el visor disponible. Pantalla completa y MSAA recrean la ventana mediante reinicio. Un archivo inválido se rechaza y el proceso en marcha conserva la última configuración válida.
+
+## Luz ambiente y modo de espera
+
+`render.ambient_light` elige un escenario de iluminación del modelo:
+
+- `none` — **Ninguna**: conserva el aspecto original sin luces añadidas.
+- `studio` — **Estudio**: luz principal elevada y relleno desde el lado opuesto.
+- `gallery` — **Galería**: iluminación desde arriba para destacar el relieve.
+- `sunset` — **Atardecer**: luz cálida lateral con relleno frío.
+- `rim` — **Contraluz**: luz trasera que destaca la silueta, con relleno frontal.
+
+Cada escenario cambia la disposición de las luces. `render.exposure` controla
+la exposición de forma independiente, del **0 % al 100 %** en pasos de **5 %** en
+el portal. Los valores enteros guardados antes se conservan hasta que se ajuste
+el control, aunque no sean múltiplos de cinco.
+El **50 %** conserva la exposición original y también se puede ajustar con
+Ninguna seleccionado. Ambos ajustes se aplican al guardar sin recargar el modelo
+ni modificar sus texturas. La bienvenida y el QR mantienen su propia iluminación.
+Los escenarios usan como máximo una luz ambiente y dos luces dirigidas, sin
+mapas de sombras ni pasadas adicionales de renderizado. La exposición se aplica
+al color del modelo: del 10 % al 100 %, cada 25 puntos duplican la intensidad,
+con ganancia 1 al 50 %. Del 0 % al 10 % aumenta de forma lineal desde negro hasta
+la intensidad del 10 %, conservando el aspecto de los ajustes anteriores. El
+0 % oscurece por completo el color del modelo sin cambiar su transparencia.
+
+`controls.idle_mode` define qué ocurre cuando faltan los gestos activos:
+
+- `hold` — **Mantener posición**: conserva posición, rotación y tamaño.
+- `return` — **Volver a origen**: mantiene el comportamiento de retorno anterior.
+- `float` — **Flotante**: tras el tiempo de espera, gira y oscila suavemente;
+  al detectar de nuevo un gesto, recupera el control con una transición.
+
+`reset_timeout_seconds` controla el tiempo de espera; `reset_duration_seconds`
+conserva la duración del regreso a origen. La orientación fija guardada para el
+modelo se mantiene en todos los modos. Los archivos de configuración anteriores
+reciben Ninguna, exposición al 50 % y Volver a origen sin alterar el resto de sus
+ajustes. Los presets antiguos se actualizan al escenario equivalente:
+Suave → Estudio, Cálida → Atardecer, Fría → Galería y Contraste → Contraluz.
+
+## Asignaciones de movimientos
+
+`controls.mappings` es una lista ordenada. Cada elemento tiene `id`, `input`, `output`, `mode`, `enabled`, `scale`, `invert` y `center`. Cada salida admite una sola asignación activa; los duplicados se rechazan. El campo `id` es único y admite letras, números, guiones y guiones bajos. Se permiten hasta 32 asignaciones.
+
+| Entrada | Valor |
+| --- | --- |
+| `head_x`, `head_y` | Posición normalizada de la cabeza, normalmente de 0 a 1 |
+| `head_scale` | Tamaño aparente de la cabeza, entre 0 y 1; aproxima el acercamiento y alejamiento, no mide profundidad. Mantiene la calibración del zoom de Capitell |
+| `head_pitch`, `head_yaw`, `head_roll` | Giro vertical, giro horizontal e inclinación lateral de la cabeza, calculados con los puntos de seguimiento existentes. Los grados se normalizan a 0–1 con 0° en 0,5 y se suavizan por el ángulo más corto |
+| `torso_x`, `torso_y` | Centro de las caderas en la imagen, entre 0 y 1. Utiliza el modelo Pose existente; no necesita detectar la cabeza |
+| `torso_scale` | Proximidad relativa del cuerpo, entre 0 y 1: aumenta al acercarse. Usa el ancho aparente de hombros con corrección de giro; no mide metros |
+| `torso_pitch`, `torso_yaw`, `torso_roll` | Giro vertical, horizontal e inclinación del torso, calculados con hombros y caderas. Normalizados como los ángulos de cabeza: 0° equivale a 0,5 |
+| `hands_center_x`, `hands_center_y` | Centro de las manos visibles |
+| `hands_distance`, `hands_separation_x` | Distancia entre ambas manos o separación horizontal |
+| `left_hand_x`, `left_hand_y`, `right_hand_x`, `right_hand_y` | Posición normalizada de la muñeca de cada mano, normalmente de 0 a 1 |
+| `left_hand_rotation`, `right_hand_rotation` | Orientación de la palma en la imagen; 0° hacia arriba, +90° hacia la derecha. Se normaliza internamente a 0–1 y se suaviza por el ángulo más corto |
+| `left_hand_pitch`, `right_hand_pitch` | Inclinación de la mano calculada con las coordenadas 3D del modelo; grados normalizados a 0–1, con suavizado angular |
+| `left_hand_yaw`, `right_hand_yaw` | Giro lateral de la mano calculado con las coordenadas 3D del modelo; grados normalizados a 0–1, con suavizado angular |
+| `left_hand_roll`, `right_hand_roll` | Tercer giro del marco 3D de la palma, separado del giro de imagen `rotation`; grados normalizados a 0–1 |
+| `left_hand_scale`, `right_hand_scale` | Proximidad relativa de cada mano, entre 0 y 1. Aumenta al acercarse y usa la palma, sin depender de abrir los dedos o hacer pinza |
+| `left_hand_pinch`, `right_hand_pinch` | Distancia pulgar–índice dividida por el ancho de la palma: 0 es contacto, 1 es una apertura de al menos un ancho de palma |
+| `left_hand_openness`, `right_hand_openness` | Proporción de dedos extendidos, sin contar el pulgar: 0 es puño y 1 son los cuatro dedos extendidos. El seguimiento suaviza los pasos intermedios |
+
+Las entradas nuevas reutilizan el seguimiento actual; no cargan modelos adicionales. La posición y los giros de cabeza son señales distintas y pueden asignarse por separado. Una parte no detectada produce una entrada ausente, nunca un cero fabricado.
+
+Las inclinaciones `head_roll` y `torso_roll` se miden con las líneas de ojos y hombros, sin distinguir sus extremos: tienen periodo de 180° y se informan entre −90° y +90°. Sus dos filtros respetan ese periodo para evitar saltos al cruzar el límite. Conservan la misma escala numérica que los demás ángulos (45° equivale a 0,625). Cuando controlan una rotación absoluta, el retorno tras perder el seguimiento toma como referencia una vuelta completa del objeto y tiene en cuenta la sensibilidad; recuperar la parte conserva esa orientación sin saltos. Los canales `pitch` y `yaw` mantienen el periodo de filtrado de 360°.
+
+Las entradas de cuerpo requieren `tracking.use_pose`; las de manos requieren `tracking.use_hands`. Se cargan los modelos sólo si una asignación activa los utiliza. La cadencia de Pose se mantiene mientras esté visible alguna parte solicitada: ocultar la cabeza no ralentiza los controles de torso.
+
+La profundidad de cuerpo y manos es una aproximación monocular de tamaño aparente, no una coordenada Z medida. Se compara la proyección XY de los puntos métricos con sus posiciones en imagen para reducir el efecto de los giros. El ancho corregido, expresado como fracción del ancho de imagen, se normaliza desde 0,12–0,80 para hombros y 0,025–0,25 para palma, limitado a 0–1. El centro inicial recomendado es 0,5; debe ajustarse con la posición de la persona y la cámara. La perspectiva fuerte, la flexión del torso, la anatomía, las oclusiones y los errores del modelo pueden alterar esta estimación. Si resulta indeterminada, sólo `scale` queda sin dato; posición, giros y pinza siguen disponibles cuando son válidos. La escala de cabeza conserva su calibración anterior.
+
+Si una entrada angular controla un desplazamiento o el zoom, perder el seguimiento devuelve la entrada al centro numérico configurado, aunque antes hubiera cruzado su límite angular. Así, en modo absoluto el objeto recupera la posición cero o la escala uno.
+
+Las salidas de rotación conservan los identificadores históricos del visor.
+Con su cámara actual, `rotation_roll` corresponde al **giro horizontal** del
+objeto, `rotation_pitch` al **giro vertical** y `rotation_yaw` a la **inclinación
+lateral** en pantalla. Estos nombres de presentación no cambian las asignaciones
+guardadas ni los giros de entrada de cabeza, cuerpo o manos. Los desplazamientos
+`position_x`, `position_y` y `position_z` son horizontal, vertical y profundidad,
+respectivamente; `scale_uniform` cambia el tamaño del modelo.
+
+- `absolute`: las rotaciones usan `(entrada - center) × 2 × scale` grados; los desplazamientos usan `(entrada - center) × scale`. El zoom usa `1 + (entrada - center) × scale`, limitado a 0,1–5. `invert` invierte el movimiento alrededor de `center`. Las entradas angulares de cabeza y manos pueden cruzar su límite angular sin saltar al ángulo opuesto.
+- `hybrid`: sólo admite salidas de rotación. En la zona central conserva el giro proporcional. Más allá de `left_threshold` o `right_threshold` añade giro continuo hasta `continuous_speed` grados por segundo. Debe cumplirse `left_threshold < center < right_threshold`.
+- `stepped`: sólo admite `scale_uniform`. Alterna entre `small_scale` y `large_scale` con `threshold`, un margen `hysteresis` que evita alternancias por ruido, y una transición de `transition_ms`. `scale` modifica la sensibilidad alrededor del centro; `invert` cambia su dirección. El tamaño pequeño debe ser menor o igual al grande y `threshold ± hysteresis` debe permanecer entre 0 y 1.
+
+La configuración inicial conserva cuatro controles: cabeza horizontal → giro continuo roll (umbrales 25 % y 75 %, máximo 100°/s, invertido); cabeza horizontal → yaw de hasta 10°; cabeza vertical → pitch de hasta 30°; tamaño de cabeza → zoom 1×/1,75× con umbral 0,4 y transición de 750 ms. El margen del zoom es 0,02.
+
+El tiempo transcurrido, y no la cantidad de fotogramas, determina el suavizado y la velocidad. Si se pierde el seguimiento, el giro continuo se detiene inmediatamente. Tras `reset_timeout_seconds` (3 s), vuelve a la orientación neutra por el recorrido angular más corto durante `reset_duration_seconds` (1 s). Si la persona reaparece durante ese retorno, se continúa desde el ángulo que se ve en pantalla.
+
+Ejemplo de una asignación adicional para girar con la palma derecha:
+
+```json
+{
+  "id": "right_palm_roll",
+  "input": "right_hand_rotation",
+  "output": "rotation_roll",
+  "mode": "absolute",
+  "enabled": true,
+  "scale": 180,
+  "invert": false,
+  "center": 0.5
+}
+```
+
+Hay que activar `tracking.use_hands` y desactivar la asignación anterior que controle `rotation_roll`, antes de guardar. Para ampliar al cerrar la pinza, usar `right_hand_pinch`, salida `scale_uniform`, modo `absolute`, `scale: 2`, `center: 0.5` e `invert: true`.

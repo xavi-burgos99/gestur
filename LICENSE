@@ -1,0 +1,109 @@
+# Gestur Noncommercial Attribution License
+
+Version 1.0 — 2026-09-27
+
+Copyright (c) 2024–2026 Xavier Burgos.
+
+This license applies prospectively from the Git revision that first introduces
+version 1.0 of this license and to later revisions distributed with it. It does
+not retroactively replace valid licenses for earlier copies. This is a
+source-available license with a noncommercial restriction, not an OSI-approved
+open-source license.
+
+## 1. Scope
+
+“Licensor” means Xavier Burgos, but only to the extent that he owns or is
+expressly authorized to license the rights concerned. “Software” means the
+original Gestur source code and its accompanying original documentation and
+configuration in revisions distributed with this license. It does not include
+third-party dependencies, operating-system packages, third-party models or
+weights, vendored research source, or assets separately identified in
+`THIRD_PARTY_NOTICES.md` or accompanied by other terms.
+
+Third-party components retain their own licenses. Nothing in these terms
+restricts the exercise of rights separately granted by their copyright holders,
+or valid rights already obtained under an earlier license of any material.
+
+## 2. Noncommercial permission
+
+Subject to these conditions, the Licensor grants a worldwide, non-exclusive,
+royalty-free permission to use, reproduce, study, modify, display, and distribute
+the Software for noncommercial purposes. The grant covers only copyright rights
+the Licensor is entitled to grant. No patent or trademark license is implied.
+
+A noncommercial purpose is one that is not directed toward commercial advantage
+or monetary compensation. Personal study, hobby projects, and genuinely
+noncommercial teaching, research, and public demonstrations may qualify. The
+operator's legal form alone does not determine whether a use is noncommercial.
+
+Commercial purposes require the separate written permission described below.
+They include selling or commercially licensing the Software; paid hosting,
+deployment, installation, or services based on it; using it in business
+operations, advertising, or sales promotion; and using it as part of a paid or
+commercially sponsored exhibition, event, product, or service. A nonprofit or
+educational operator has no automatic exception for these activities.
+
+A voluntary donation that is unrelated to access, services, promotion, or other
+consideration does not by itself make an otherwise noncommercial activity
+commercial. A donation or sponsorship given in exchange for such benefits is
+not covered by that exception. If the purpose falls outside this grant, obtain
+permission before proceeding.
+
+## 3. Attribution
+
+Every distributed copy or substantial portion of the Software, including
+modified versions, must retain this license, its copyright notices, the project
+URL, and the following attribution:
+
+**Gestur — developed by Xavier Burgos**
+
+Project: https://github.com/xavi-burgos99/gestur
+
+Public-facing installations and demonstrations using the Software must also
+provide this credit in a legible form available to their audience. It may appear
+on the display or on a clearly visible adjacent physical sign. A buried source
+comment or private administration page alone is insufficient for a public
+installation. A distributed web interface must retain an accessible, clearly
+labelled developer credit. Documentation describing the installation must credit
+Gestur and its developer when it identifies the software used.
+
+Private, nonpublic use does not require a public announcement, but existing
+notices must be retained. Attribution must not imply that the Licensor endorses
+a modified version, an operator, or an installation. Modifiers must identify
+their modifications and must not represent themselves as the original developer.
+
+## 4. Redistribution and modifications
+
+Recipients may redistribute the Software only for permitted noncommercial
+purposes, with these terms and the required notices. Conditions on modifications
+must not purport to grant commercial rights in the original Software or remove
+its attribution requirements. Each recipient obtains rights from the Licensor
+under these terms, not from an unauthorized commercial sublicense.
+
+This clause governs only the Software within this license's scope. It does not
+add restrictions to the use, modification, reverse engineering, relinking, or
+redistribution of separately licensed dependencies where their licenses grant
+those rights. Required upstream notices and obligations must be preserved.
+
+## 5. Separate commercial permission
+
+Commercial permission must be explicit, in writing, and issued by the Licensor
+or an authorized representative. Silence, source availability, attribution,
+donations, or prior noncommercial use do not constitute commercial permission.
+Contact **xavi@dzin.es** with the proposed use. A separate agreement may permit
+commercial activities and specify their scope and conditions.
+
+## 6. Breach and statutory rights
+
+Use outside the permission granted here requires a separate license. A material
+breach of these conditions terminates the permissions provided by this license
+unless the Licensor expressly reinstates them. The terms do not limit rights or
+exceptions that applicable law does not permit the Licensor to restrict.
+
+## 7. No warranty; limitation of liability
+
+To the extent permitted by applicable law, the Software is provided “as is”,
+without warranties of merchantability, fitness for a particular purpose, title,
+or noninfringement. To that same extent, the Licensor is not liable for losses or
+damages arising from the Software or its use. These limitations do not exclude
+liability that cannot lawfully be excluded.

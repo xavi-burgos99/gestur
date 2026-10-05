@@ -1,0 +1,38 @@
+[Unit]
+Description=GESTUR local administration portal
+After=network.target NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+User=gestur-portal
+Group=gestur
+SupplementaryGroups=gestur-portal
+WorkingDirectory=/opt/gestur/portal
+Environment=NODE_ENV=production
+Environment=PORT=80
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Environment=GESTUR_CONFIG=/var/lib/gestur/config.json
+Environment=GESTUR_MODELS_DIR=/var/lib/gestur/models
+Environment=GESTUR_TOKEN_FILE=/etc/gestur/portal-token
+Environment=GESTUR_DEVICE_STATE=/etc/gestur/device.json
+ExecStartPre=/usr/bin/node /opt/gestur/scripts/check-importer.mjs
+ExecStart=/usr/bin/node /opt/gestur/portal/server/index.mjs
+Restart=on-failure
+RestartSec=3
+UMask=0007
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# The /etc paths remain root-owned and non-writable by gestur-portal. Only the
+# exact sudo helper can update device state and the hostname's hosts entry.
+ReadWritePaths=/var/lib/gestur /etc/gestur /etc/hosts
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+# Bind HTTP as gestur-portal. Keep sudo's setuid/setgid path available for the
+# exact Wi-Fi/device helpers; NoNewPrivileges or a bind-only bounding set block them.
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,1587 @@
+{
+  "source_telemetry": {
+    "path": "artifacts/pi5/capitel-endurance/telemetry.jsonl",
+    "bytes": 4071285,
+    "sha256": "3217ddd15b3210fb010d1e7f2124c514f1fd4c44ca56c2fd6cf08bb3b68cc204",
+    "committed": false
+  },
+  "source_manifest": {
+    "bytes": 2286,
+    "sha256": "083fcd132a02110bc1270f1d1542fc26ef9da7283ae709dda94149230758825e"
+  },
+  "source_summary": {
+    "bytes": 2539,
+    "sha256": "4aa5a0c2fef35830d50f4e70971cc8694d7751bd63720cd9dbf1adc26781757a"
+  },
+  "aggregation_script": {
+    "filename": "aggregate_gestur_pi_trial.py",
+    "bytes": 13632,
+    "sha256": "ea8139fe5d6570ca3ade2fb0d7b7dccd2f4f491ca1645fb014c9e0cb4193fae7"
+  },
+  "method": {
+    "cpu": "Arithmetic mean of non-null outer hardware samples at elapsed_seconds >= 5; approximately 1 Hz, not a time-weighted integral.",
+    "cpu_process_unit": "Percent of one logical core; 100 means one core.",
+    "cpu_system_unit": "Percent of total system capacity across all logical cores; independently measured, not process CPU divided by cores.",
+    "temperature_rss_throttling": "All telemetry rows including startup and sampled cleanup. RSS is current resident memory in MiB, not model size or ru_maxrss.",
+    "fps_windows": "Fixed [n*60,(n+1)*60) second windows; unique runtime.updated_at stamps and render.frames counters. FPS=(last counter-first counter)/(last runtime timestamp-first runtime timestamp). Actual endpoints reported; no interpolation or invented counter at zero. Windows with <2 states or counter reset have null FPS.",
+    "runtime_time_origin": "Median of outer timestamp-elapsed_seconds; used only to align runtime timestamps with telemetry windows.",
+    "tail": "Last 300 seconds of observed telemetry (or from second 5 for shorter trials); includes sampled shutdown and is not labelled steady state.",
+    "null": "Missing/nonfinite values excluded, never interpreted as zero.",
+    "errors": "Counts are telemetry rows containing errors, not counts of independent incidents.",
+    "final_frame_percentiles": "Final controller percentiles use at most the last 18000 draw/control intervals, not necessarily the whole endurance trial."
+  },
+  "outcome": "completed",
+  "exit_code": 0,
+  "total_samples": 1800,
+  "malformed_rows": 0,
+  "observed_window": {
+    "first_seconds": 0.001,
+    "last_seconds": 1799.453
+  },
+  "sample_spacing_seconds": {
+    "median": 1.0,
+    "maximum": 1.0119999999999436,
+    "gaps_over_2_5_seconds": 0
+  },
+  "cpu_window": {
+    "start_at_or_after_seconds": 5,
+    "first_sample_seconds": 5.003,
+    "last_sample_seconds": 1799.453,
+    "samples": 1795
+  },
+  "process_cpu_percent_one_core": {
+    "samples": 1795,
+    "mean": 73.63881894150418,
+    "minimum": 66.81,
+    "maximum": 79.92,
+    "first": 70.32,
+    "last": 76.28
+  },
+  "system_cpu_percent": {
+    "samples": 1795,
+    "mean": 20.52632311977716,
+    "minimum": 18.41,
+    "maximum": 27.32,
+    "first": 19.65,
+    "last": 21.75
+  },
+  "temperature_c": {
+    "samples": 1800,
+    "mean": 57.51083333333333,
+    "minimum": 54.55,
+    "maximum": 60.6,
+    "first": 56.2,
+    "last": 57.3
+  },
+  "rss_mib": {
+    "samples": 1800,
+    "mean": 428.85225555555553,
+    "minimum": 234.047,
+    "maximum": 458.734,
+    "first": 234.047,
+    "last": 426.5
+  },
+  "process_peak_rss_mib": {
+    "samples": 1800,
+    "mean": 456.7915916666667,
+    "minimum": 232.906,
+    "maximum": 457.047,
+    "first": 232.906,
+    "last": 457.047
+  },
+  "cpu_frequency_mhz": {
+    "samples": 1800,
+    "mean": 2375.777777777778,
+    "minimum": 1600.0,
+    "maximum": 2400.0,
+    "first": 2400.0,
+    "last": 2400.0
+  },
+  "throttling": {
+    "samples": 1800,
+    "missing_samples": 0,
+    "raw_values": [
+      "0x0"
+    ],
+    "now_true_samples": {
+      "undervoltage": 0,
+      "frequency_capped": 0,
+      "throttled": 0,
+      "soft_temperature_limit": 0
+    },
+    "since_boot_first": {
+      "undervoltage": false,
+      "frequency_capped": false,
+      "throttled": false,
+      "soft_temperature_limit": false
+    },
+    "since_boot_last": {
+      "undervoltage": false,
+      "frequency_capped": false,
+      "throttled": false,
+      "soft_temperature_limit": false
+    }
+  },
+  "sampler_errors": 0,
+  "runtime_errors": 0,
+  "tracking_error_samples": 0,
+  "abort_reason_samples": 0,
+  "capture_failure_counters": {
+    "maximum_during_telemetry": 0,
+    "after_cleanup": 1
+  },
+  "runtime_snapshots": {
+    "unique_valid": 1769,
+    "repeated": 30,
+    "conflicting_timestamps_omitted": 0
+  },
+  "final_300_seconds": {
+    "requested_start_seconds": 1499.453,
+    "first_sample_seconds": 1500.364,
+    "last_sample_seconds": 1799.453,
+    "system_cpu_percent": {
+      "samples": 300,
+      "mean": 20.6534,
+      "minimum": 18.78,
+      "maximum": 27.32,
+      "first": 21.86,
+      "last": 21.75
+    },
+    "temperature_c": {
+      "samples": 300,
+      "mean": 57.752833333333335,
+      "minimum": 55.1,
+      "maximum": 60.6,
+      "first": 59.5,
+      "last": 57.3
+    },
+    "rss_mib": {
+      "samples": 300,
+      "mean": 428.5725933333333,
+      "minimum": 426.078,
+      "maximum": 428.625,
+      "first": 428.609,
+      "last": 426.5
+    },
+    "draw": {
+      "samples": 294,
+      "fps": 39.13113572456359,
+      "first_runtime_seconds": 1500.1061553955078,
+      "last_runtime_seconds": 1799.4074606895447,
+      "duration_seconds": 299.30130529403687,
+      "drawn_frames": 11712
+    }
+  },
+  "windows_60_seconds": [
+    {
+      "start_seconds": 0,
+      "end_seconds_exclusive": 60,
+      "first_telemetry_seconds": 0.001,
+      "last_telemetry_seconds": 59.011,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.34421677711297,
+        "first_runtime_seconds": 0.999882698059082,
+        "last_runtime_seconds": 59.966617584228516,
+        "duration_seconds": 58.966734886169434,
+        "drawn_frames": 2320
+      },
+      "system_cpu_percent": {
+        "samples": 55,
+        "mean": 20.227636363636364,
+        "minimum": 18.67,
+        "maximum": 21.7,
+        "first": 19.65,
+        "last": 20.0
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 55,
+        "mean": 72.528,
+        "minimum": 66.81,
+        "maximum": 77.07,
+        "first": 70.32,
+        "last": 71.85
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.96,
+        "minimum": 54.55,
+        "maximum": 59.5,
+        "first": 56.2,
+        "last": 56.75
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 443.80628333333334,
+        "minimum": 234.047,
+        "maximum": 458.734,
+        "first": 234.047,
+        "last": 426.016
+      }
+    },
+    {
+      "start_seconds": 60,
+      "end_seconds_exclusive": 120,
+      "first_telemetry_seconds": 60.011,
+      "last_telemetry_seconds": 119.021,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.411208102335834,
+        "first_runtime_seconds": 60.982325315475464,
+        "last_runtime_seconds": 119.84882831573486,
+        "duration_seconds": 58.8665030002594,
+        "drawn_frames": 2320
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.051,
+        "minimum": 18.67,
+        "maximum": 22.77,
+        "first": 19.7,
+        "last": 20.36
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 72.78816666666667,
+        "minimum": 69.6,
+        "maximum": 76.54,
+        "first": 70.95,
+        "last": 75.42
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.483333333333334,
+        "minimum": 56.2,
+        "maximum": 58.95,
+        "first": 57.3,
+        "last": 57.3
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 426.53858333333335,
+        "minimum": 425.828,
+        "maximum": 426.922,
+        "first": 426.016,
+        "last": 426.922
+      }
+    },
+    {
+      "start_seconds": 120,
+      "end_seconds_exclusive": 180,
+      "first_telemetry_seconds": 120.021,
+      "last_telemetry_seconds": 179.03,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.422564298918275,
+        "first_runtime_seconds": 120.86607217788696,
+        "last_runtime_seconds": 179.71561789512634,
+        "duration_seconds": 58.84954571723938,
+        "drawn_frames": 2320
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.265333333333334,
+        "minimum": 18.58,
+        "maximum": 21.98,
+        "first": 20.91,
+        "last": 19.8
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 72.868,
+        "minimum": 68.55,
+        "maximum": 77.17,
+        "first": 74.5,
+        "last": 72.31
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.41,
+        "minimum": 56.2,
+        "maximum": 59.5,
+        "first": 57.85,
+        "last": 57.85
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 427.09586666666667,
+        "minimum": 425.828,
+        "maximum": 427.5,
+        "first": 426.922,
+        "last": 427.219
+      }
+    },
+    {
+      "start_seconds": 180,
+      "end_seconds_exclusive": 240,
+      "first_telemetry_seconds": 180.03,
+      "last_telemetry_seconds": 239.039,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.35836765121281,
+        "first_runtime_seconds": 180.71527218818665,
+        "last_runtime_seconds": 239.43213820457458,
+        "duration_seconds": 58.71686601638794,
+        "drawn_frames": 2311
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.569,
+        "minimum": 19.24,
+        "maximum": 24.12,
+        "first": 19.65,
+        "last": 21.11
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.10666666666667,
+        "minimum": 68.91,
+        "maximum": 77.59,
+        "first": 71.11,
+        "last": 75.69
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.34583333333333,
+        "minimum": 55.65,
+        "maximum": 58.95,
+        "first": 57.85,
+        "last": 57.3
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 427.48705,
+        "minimum": 425.688,
+        "maximum": 427.766,
+        "first": 427.219,
+        "last": 427.766
+      }
+    },
+    {
+      "start_seconds": 240,
+      "end_seconds_exclusive": 300,
+      "first_telemetry_seconds": 240.04,
+      "last_telemetry_seconds": 299.051,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.3305522579007,
+        "first_runtime_seconds": 240.46623349189758,
+        "last_runtime_seconds": 299.300901889801,
+        "duration_seconds": 58.83466839790344,
+        "drawn_frames": 2314
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.568666666666665,
+        "minimum": 18.93,
+        "maximum": 22.19,
+        "first": 19.65,
+        "last": 21.25
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.118,
+        "minimum": 68.65,
+        "maximum": 77.6,
+        "first": 71.27,
+        "last": 75.23
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.2175,
+        "minimum": 55.65,
+        "maximum": 60.05,
+        "first": 56.2,
+        "last": 56.2
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 427.86468333333335,
+        "minimum": 427.0,
+        "maximum": 427.953,
+        "first": 427.766,
+        "last": 427.953
+      }
+    },
+    {
+      "start_seconds": 300,
+      "end_seconds_exclusive": 360,
+      "first_telemetry_seconds": 300.051,
+      "last_telemetry_seconds": 359.072,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.3194009324019,
+        "first_runtime_seconds": 300.3329997062683,
+        "last_runtime_seconds": 359.13348865509033,
+        "duration_seconds": 58.80048894882202,
+        "drawn_frames": 2312
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.223166666666668,
+        "minimum": 18.93,
+        "maximum": 22.06,
+        "first": 22.06,
+        "last": 19.49
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.42066666666666,
+        "minimum": 69.27,
+        "maximum": 78.51,
+        "first": 78.51,
+        "last": 71.67
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.30916666666667,
+        "minimum": 55.65,
+        "maximum": 58.95,
+        "first": 57.85,
+        "last": 56.2
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.06143333333335,
+        "minimum": 427.0,
+        "maximum": 428.172,
+        "first": 427.953,
+        "last": 428.172
+      }
+    },
+    {
+      "start_seconds": 360,
+      "end_seconds_exclusive": 420,
+      "first_telemetry_seconds": 360.072,
+      "last_telemetry_seconds": 419.079,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.1900032561338,
+        "first_runtime_seconds": 360.1489562988281,
+        "last_runtime_seconds": 419.0160093307495,
+        "duration_seconds": 58.86705303192139,
+        "drawn_frames": 2307
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.291833333333333,
+        "minimum": 18.93,
+        "maximum": 22.14,
+        "first": 22.14,
+        "last": 20.15
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.54666666666667,
+        "minimum": 69.49,
+        "maximum": 77.62,
+        "first": 72.77,
+        "last": 71.91
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.263333333333335,
+        "minimum": 55.65,
+        "maximum": 59.5,
+        "first": 57.3,
+        "last": 56.2
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.2133,
+        "minimum": 425.547,
+        "maximum": 428.391,
+        "first": 428.188,
+        "last": 428.391
+      }
+    },
+    {
+      "start_seconds": 420,
+      "end_seconds_exclusive": 480,
+      "first_telemetry_seconds": 420.08,
+      "last_telemetry_seconds": 479.09,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 60,
+        "fps": 39.09996945879306,
+        "first_runtime_seconds": 420.01750016212463,
+        "last_runtime_seconds": 479.96639609336853,
+        "duration_seconds": 59.9488959312439,
+        "drawn_frames": 2344
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.5015,
+        "minimum": 18.67,
+        "maximum": 24.3,
+        "first": 20.81,
+        "last": 19.8
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.8805,
+        "minimum": 69.67,
+        "maximum": 79.58,
+        "first": 76.2,
+        "last": 73.0
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.2725,
+        "minimum": 55.65,
+        "maximum": 59.5,
+        "first": 57.85,
+        "last": 56.75
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.4708,
+        "minimum": 426.641,
+        "maximum": 428.609,
+        "first": 428.391,
+        "last": 428.594
+      }
+    },
+    {
+      "start_seconds": 480,
+      "end_seconds_exclusive": 540,
+      "first_telemetry_seconds": 480.09,
+      "last_telemetry_seconds": 539.108,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.10968434775418,
+        "first_runtime_seconds": 480.98375177383423,
+        "last_runtime_seconds": 539.7160079479218,
+        "duration_seconds": 58.732256174087524,
+        "drawn_frames": 2297
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.753166666666665,
+        "minimum": 19.29,
+        "maximum": 23.54,
+        "first": 19.8,
+        "last": 20.55
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.90766666666667,
+        "minimum": 69.58,
+        "maximum": 78.75,
+        "first": 72.97,
+        "last": 73.36
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.3825,
+        "minimum": 55.1,
+        "maximum": 59.5,
+        "first": 56.75,
+        "last": 56.75
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.55705,
+        "minimum": 426.656,
+        "maximum": 428.625,
+        "first": 428.594,
+        "last": 428.625
+      }
+    },
+    {
+      "start_seconds": 540,
+      "end_seconds_exclusive": 600,
+      "first_telemetry_seconds": 540.108,
+      "last_telemetry_seconds": 599.122,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.10531281851052,
+        "first_runtime_seconds": 540.7179281711578,
+        "last_runtime_seconds": 599.5334658622742,
+        "duration_seconds": 58.81553769111633,
+        "drawn_frames": 2300
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.6905,
+        "minimum": 19.29,
+        "maximum": 22.22,
+        "first": 20.55,
+        "last": 20.15
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.58116666666666,
+        "minimum": 69.9,
+        "maximum": 78.48,
+        "first": 72.5,
+        "last": 72.59
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.36416666666667,
+        "minimum": 56.2,
+        "maximum": 59.5,
+        "first": 56.2,
+        "last": 56.75
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.4796,
+        "minimum": 425.328,
+        "maximum": 428.625,
+        "first": 428.625,
+        "last": 428.609
+      }
+    },
+    {
+      "start_seconds": 600,
+      "end_seconds_exclusive": 660,
+      "first_telemetry_seconds": 600.122,
+      "last_telemetry_seconds": 659.133,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 58,
+        "fps": 39.15407591115664,
+        "first_runtime_seconds": 600.5343933105469,
+        "last_runtime_seconds": 659.2000608444214,
+        "duration_seconds": 58.66566753387451,
+        "drawn_frames": 2297
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.383,
+        "minimum": 19.02,
+        "maximum": 21.91,
+        "first": 21.21,
+        "last": 20.1
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.91316666666667,
+        "minimum": 69.83,
+        "maximum": 78.47,
+        "first": 77.53,
+        "last": 75.33
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.52,
+        "minimum": 55.65,
+        "maximum": 60.05,
+        "first": 57.85,
+        "last": 56.75
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.43991666666665,
+        "minimum": 422.438,
+        "maximum": 428.609,
+        "first": 426.109,
+        "last": 428.594
+      }
+    },
+    {
+      "start_seconds": 660,
+      "end_seconds_exclusive": 720,
+      "first_telemetry_seconds": 660.133,
+      "last_telemetry_seconds": 719.143,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 60,
+        "fps": 39.07796670034465,
+        "first_runtime_seconds": 660.217426776886,
+        "last_runtime_seconds": 719.8674085140228,
+        "duration_seconds": 59.64998173713684,
+        "drawn_frames": 2331
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.417333333333332,
+        "minimum": 18.67,
+        "maximum": 24.23,
+        "first": 20.96,
+        "last": 20.4
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.851,
+        "minimum": 70.0,
+        "maximum": 77.5,
+        "first": 76.0,
+        "last": 72.32
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.281666666666666,
+        "minimum": 55.65,
+        "maximum": 58.95,
+        "first": 57.85,
+        "last": 58.95
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.59816666666666,
+        "minimum": 427.953,
+        "maximum": 428.625,
+        "first": 428.594,
+        "last": 428.609
+      }
+    },
+    {
+      "start_seconds": 720,
+      "end_seconds_exclusive": 780,
+      "first_telemetry_seconds": 720.143,
+      "last_telemetry_seconds": 779.158,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.10978384971529,
+        "first_runtime_seconds": 720.8673460483551,
+        "last_runtime_seconds": 779.6505908966064,
+        "duration_seconds": 58.78324484825134,
+        "drawn_frames": 2299
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.575833333333332,
+        "minimum": 19.04,
+        "maximum": 22.58,
+        "first": 19.24,
+        "last": 21.86
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.7925,
+        "minimum": 69.1,
+        "maximum": 77.69,
+        "first": 70.4,
+        "last": 77.69
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.19916666666667,
+        "minimum": 56.2,
+        "maximum": 58.95,
+        "first": 58.4,
+        "last": 56.2
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.5719833333333,
+        "minimum": 427.438,
+        "maximum": 428.625,
+        "first": 428.609,
+        "last": 428.594
+      }
+    },
+    {
+      "start_seconds": 780,
+      "end_seconds_exclusive": 840,
+      "first_telemetry_seconds": 780.158,
+      "last_telemetry_seconds": 839.167,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.11746084463643,
+        "first_runtime_seconds": 780.6675713062286,
+        "last_runtime_seconds": 839.5670998096466,
+        "duration_seconds": 58.89952850341797,
+        "drawn_frames": 2304
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.745833333333334,
+        "minimum": 19.19,
+        "maximum": 23.68,
+        "first": 20.6,
+        "last": 20.1
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.69316666666667,
+        "minimum": 68.61,
+        "maximum": 78.85,
+        "first": 71.96,
+        "last": 71.78
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.336666666666666,
+        "minimum": 56.2,
+        "maximum": 59.5,
+        "first": 57.3,
+        "last": 58.95
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.55,
+        "minimum": 427.125,
+        "maximum": 428.609,
+        "first": 428.594,
+        "last": 428.531
+      }
+    },
+    {
+      "start_seconds": 840,
+      "end_seconds_exclusive": 900,
+      "first_telemetry_seconds": 840.167,
+      "last_telemetry_seconds": 899.189,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.104147311889704,
+        "first_runtime_seconds": 840.5846121311188,
+        "last_runtime_seconds": 899.3507573604584,
+        "duration_seconds": 58.7661452293396,
+        "drawn_frames": 2298
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.802500000000002,
+        "minimum": 19.65,
+        "maximum": 22.69,
+        "first": 20.6,
+        "last": 21.3
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.86116666666666,
+        "minimum": 68.99,
+        "maximum": 78.83,
+        "first": 73.44,
+        "last": 76.23
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.51083333333333,
+        "minimum": 56.2,
+        "maximum": 58.95,
+        "first": 56.75,
+        "last": 57.85
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.54301666666663,
+        "minimum": 426.766,
+        "maximum": 428.609,
+        "first": 428.531,
+        "last": 428.578
+      }
+    },
+    {
+      "start_seconds": 900,
+      "end_seconds_exclusive": 960,
+      "first_telemetry_seconds": 900.19,
+      "last_telemetry_seconds": 959.2,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.08424906540462,
+        "first_runtime_seconds": 900.3509423732758,
+        "last_runtime_seconds": 959.300520658493,
+        "duration_seconds": 58.949578285217285,
+        "drawn_frames": 2304
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.169666666666668,
+        "minimum": 18.67,
+        "maximum": 22.25,
+        "first": 18.93,
+        "last": 20.0
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.7315,
+        "minimum": 69.6,
+        "maximum": 78.7,
+        "first": 73.4,
+        "last": 71.21
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.4375,
+        "minimum": 55.65,
+        "maximum": 58.95,
+        "first": 56.2,
+        "last": 57.85
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.55406666666664,
+        "minimum": 427.922,
+        "maximum": 428.609,
+        "first": 428.578,
+        "last": 428.609
+      }
+    },
+    {
+      "start_seconds": 960,
+      "end_seconds_exclusive": 1020,
+      "first_telemetry_seconds": 960.2,
+      "last_telemetry_seconds": 1019.209,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.065753459143764,
+        "first_runtime_seconds": 960.3178155422211,
+        "last_runtime_seconds": 1019.1673140525818,
+        "duration_seconds": 58.84949851036072,
+        "drawn_frames": 2299
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.4705,
+        "minimum": 19.04,
+        "maximum": 24.43,
+        "first": 20.2,
+        "last": 20.91
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.88983333333333,
+        "minimum": 69.92,
+        "maximum": 78.23,
+        "first": 73.57,
+        "last": 75.3
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.6575,
+        "minimum": 55.65,
+        "maximum": 59.5,
+        "first": 56.75,
+        "last": 58.4
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.5053833333333,
+        "minimum": 425.703,
+        "maximum": 428.625,
+        "first": 428.609,
+        "last": 428.609
+      }
+    },
+    {
+      "start_seconds": 1020,
+      "end_seconds_exclusive": 1080,
+      "first_telemetry_seconds": 1020.21,
+      "last_telemetry_seconds": 1079.232,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 60,
+        "fps": 39.063327920357985,
+        "first_runtime_seconds": 1020.1679792404175,
+        "last_runtime_seconds": 1079.9683117866516,
+        "duration_seconds": 59.80033254623413,
+        "drawn_frames": 2336
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.617333333333335,
+        "minimum": 18.46,
+        "maximum": 25.51,
+        "first": 21.57,
+        "last": 20.15
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.81933333333333,
+        "minimum": 69.92,
+        "maximum": 78.66,
+        "first": 78.27,
+        "last": 71.13
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.685,
+        "minimum": 56.2,
+        "maximum": 59.5,
+        "first": 58.4,
+        "last": 57.85
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.5724666666667,
+        "minimum": 426.062,
+        "maximum": 428.625,
+        "first": 428.609,
+        "last": 428.609
+      }
+    },
+    {
+      "start_seconds": 1080,
+      "end_seconds_exclusive": 1140,
+      "first_telemetry_seconds": 1080.232,
+      "last_telemetry_seconds": 1139.254,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.09279249469178,
+        "first_runtime_seconds": 1081.002529144287,
+        "last_runtime_seconds": 1139.7857434749603,
+        "duration_seconds": 58.78321433067322,
+        "drawn_frames": 2298
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.504666666666665,
+        "minimum": 19.29,
+        "maximum": 22.25,
+        "first": 21.16,
+        "last": 20.65
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.9145,
+        "minimum": 69.61,
+        "maximum": 78.0,
+        "first": 75.84,
+        "last": 75.16
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.75833333333333,
+        "minimum": 56.2,
+        "maximum": 60.05,
+        "first": 56.75,
+        "last": 58.4
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.51456666666667,
+        "minimum": 423.547,
+        "maximum": 428.625,
+        "first": 428.609,
+        "last": 428.625
+      }
+    },
+    {
+      "start_seconds": 1140,
+      "end_seconds_exclusive": 1200,
+      "first_telemetry_seconds": 1140.254,
+      "last_telemetry_seconds": 1199.291,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 58,
+        "fps": 39.16712609723048,
+        "first_runtime_seconds": 1140.8026292324066,
+        "last_runtime_seconds": 1199.6530027389526,
+        "duration_seconds": 58.85037350654602,
+        "drawn_frames": 2305
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.5355,
+        "minimum": 18.46,
+        "maximum": 24.94,
+        "first": 20.1,
+        "last": 20.75
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.71516666666666,
+        "minimum": 70.4,
+        "maximum": 79.11,
+        "first": 75.25,
+        "last": 73.5
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.840833333333336,
+        "minimum": 56.2,
+        "maximum": 60.05,
+        "first": 58.4,
+        "last": 57.85
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.61946666666665,
+        "minimum": 428.547,
+        "maximum": 428.625,
+        "first": 428.625,
+        "last": 428.625
+      }
+    },
+    {
+      "start_seconds": 1200,
+      "end_seconds_exclusive": 1260,
+      "first_telemetry_seconds": 1200.291,
+      "last_telemetry_seconds": 1259.321,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 58,
+        "fps": 39.02910965237275,
+        "first_runtime_seconds": 1200.6527709960938,
+        "last_runtime_seconds": 1259.4037909507751,
+        "duration_seconds": 58.7510199546814,
+        "drawn_frames": 2293
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.558,
+        "minimum": 18.41,
+        "maximum": 24.5,
+        "first": 21.27,
+        "last": 20.5
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.8275,
+        "minimum": 69.5,
+        "maximum": 79.11,
+        "first": 79.11,
+        "last": 72.75
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.776666666666664,
+        "minimum": 56.2,
+        "maximum": 60.05,
+        "first": 57.3,
+        "last": 57.3
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.5173833333333,
+        "minimum": 426.641,
+        "maximum": 428.625,
+        "first": 426.703,
+        "last": 428.609
+      }
+    },
+    {
+      "start_seconds": 1260,
+      "end_seconds_exclusive": 1320,
+      "first_telemetry_seconds": 1260.321,
+      "last_telemetry_seconds": 1319.332,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.093878951167476,
+        "first_runtime_seconds": 1260.420288324356,
+        "last_runtime_seconds": 1319.304186820984,
+        "duration_seconds": 58.88389849662781,
+        "drawn_frames": 2302
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.702333333333332,
+        "minimum": 18.67,
+        "maximum": 24.81,
+        "first": 19.95,
+        "last": 21.52
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.941,
+        "minimum": 69.52,
+        "maximum": 79.65,
+        "first": 72.95,
+        "last": 79.65
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.70333333333333,
+        "minimum": 56.2,
+        "maximum": 59.5,
+        "first": 57.85,
+        "last": 58.4
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.54228333333333,
+        "minimum": 427.156,
+        "maximum": 428.625,
+        "first": 428.609,
+        "last": 428.609
+      }
+    },
+    {
+      "start_seconds": 1320,
+      "end_seconds_exclusive": 1380,
+      "first_telemetry_seconds": 1320.337,
+      "last_telemetry_seconds": 1379.347,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.06170866873337,
+        "first_runtime_seconds": 1320.3219294548035,
+        "last_runtime_seconds": 1379.3055243492126,
+        "duration_seconds": 58.98359489440918,
+        "drawn_frames": 2304
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.791,
+        "minimum": 19.24,
+        "maximum": 26.95,
+        "first": 20.15,
+        "last": 20.51
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.82166666666667,
+        "minimum": 69.9,
+        "maximum": 79.92,
+        "first": 72.05,
+        "last": 74.48
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.86833333333333,
+        "minimum": 56.2,
+        "maximum": 60.05,
+        "first": 58.4,
+        "last": 56.75
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.58425,
+        "minimum": 427.875,
+        "maximum": 428.609,
+        "first": 428.609,
+        "last": 428.609
+      }
+    },
+    {
+      "start_seconds": 1380,
+      "end_seconds_exclusive": 1440,
+      "first_telemetry_seconds": 1380.347,
+      "last_telemetry_seconds": 1439.354,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.099781542063674,
+        "first_runtime_seconds": 1380.3220551013947,
+        "last_runtime_seconds": 1439.1714887619019,
+        "duration_seconds": 58.8494336605072,
+        "drawn_frames": 2301
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.594166666666666,
+        "minimum": 19.08,
+        "maximum": 24.37,
+        "first": 19.54,
+        "last": 21.61
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.772,
+        "minimum": 70.27,
+        "maximum": 78.02,
+        "first": 72.75,
+        "last": 76.23
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 56.759166666666665,
+        "minimum": 55.1,
+        "maximum": 59.5,
+        "first": 58.4,
+        "last": 57.85
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.53251666666665,
+        "minimum": 426.141,
+        "maximum": 428.609,
+        "first": 428.609,
+        "last": 428.594
+      }
+    },
+    {
+      "start_seconds": 1440,
+      "end_seconds_exclusive": 1500,
+      "first_telemetry_seconds": 1440.355,
+      "last_telemetry_seconds": 1499.364,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.110528497649156,
+        "first_runtime_seconds": 1440.205229997635,
+        "last_runtime_seconds": 1499.0896298885345,
+        "duration_seconds": 58.88439989089966,
+        "drawn_frames": 2303
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.488333333333333,
+        "minimum": 18.83,
+        "maximum": 22.19,
+        "first": 20.96,
+        "last": 20.71
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.80333333333333,
+        "minimum": 69.51,
+        "maximum": 79.68,
+        "first": 71.25,
+        "last": 75.46
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.2175,
+        "minimum": 55.65,
+        "maximum": 59.5,
+        "first": 58.4,
+        "last": 57.3
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.4845833333333,
+        "minimum": 421.812,
+        "maximum": 428.609,
+        "first": 428.594,
+        "last": 428.609
+      }
+    },
+    {
+      "start_seconds": 1500,
+      "end_seconds_exclusive": 1560,
+      "first_telemetry_seconds": 1500.364,
+      "last_telemetry_seconds": 1559.383,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.10009562584439,
+        "first_runtime_seconds": 1500.1061553955078,
+        "last_runtime_seconds": 1559.0574178695679,
+        "duration_seconds": 58.95126247406006,
+        "drawn_frames": 2305
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.839666666666666,
+        "minimum": 19.44,
+        "maximum": 27.32,
+        "first": 21.86,
+        "last": 20.45
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.76266666666666,
+        "minimum": 69.89,
+        "maximum": 78.49,
+        "first": 77.98,
+        "last": 75.21
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 58.2075,
+        "minimum": 56.75,
+        "maximum": 60.6,
+        "first": 59.5,
+        "last": 57.3
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.59956666666665,
+        "minimum": 428.453,
+        "maximum": 428.625,
+        "first": 428.609,
+        "last": 428.625
+      }
+    },
+    {
+      "start_seconds": 1560,
+      "end_seconds_exclusive": 1620,
+      "first_telemetry_seconds": 1560.383,
+      "last_telemetry_seconds": 1619.395,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 60,
+        "fps": 39.13732602212147,
+        "first_runtime_seconds": 1560.0570349693298,
+        "last_runtime_seconds": 1619.9231586456299,
+        "duration_seconds": 59.86612367630005,
+        "drawn_frames": 2343
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.466666666666665,
+        "minimum": 19.08,
+        "maximum": 23.27,
+        "first": 20.0,
+        "last": 19.29
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.8545,
+        "minimum": 69.74,
+        "maximum": 78.74,
+        "first": 74.33,
+        "last": 70.8
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.85916666666667,
+        "minimum": 56.2,
+        "maximum": 60.05,
+        "first": 57.3,
+        "last": 57.85
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.57736666666665,
+        "minimum": 427.922,
+        "maximum": 428.625,
+        "first": 428.625,
+        "last": 428.625
+      }
+    },
+    {
+      "start_seconds": 1620,
+      "end_seconds_exclusive": 1680,
+      "first_telemetry_seconds": 1620.395,
+      "last_telemetry_seconds": 1679.431,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 58,
+        "fps": 39.09937491761196,
+        "first_runtime_seconds": 1620.9233891963959,
+        "last_runtime_seconds": 1679.7734348773956,
+        "duration_seconds": 58.850045680999756,
+        "drawn_frames": 2301
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.69333333333333,
+        "minimum": 18.78,
+        "maximum": 26.45,
+        "first": 21.5,
+        "last": 21.46
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 74.07383333333334,
+        "minimum": 69.79,
+        "maximum": 79.02,
+        "first": 76.27,
+        "last": 76.66
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.91416666666667,
+        "minimum": 56.75,
+        "maximum": 60.05,
+        "first": 58.4,
+        "last": 57.3
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.5659,
+        "minimum": 426.891,
+        "maximum": 428.625,
+        "first": 428.625,
+        "last": 428.625
+      }
+    },
+    {
+      "start_seconds": 1680,
+      "end_seconds_exclusive": 1740,
+      "first_telemetry_seconds": 1680.431,
+      "last_telemetry_seconds": 1739.445,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 58,
+        "fps": 39.12049477081768,
+        "first_runtime_seconds": 1680.8069944381714,
+        "last_runtime_seconds": 1739.5741448402405,
+        "duration_seconds": 58.76715040206909,
+        "drawn_frames": 2299
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.751833333333334,
+        "minimum": 18.97,
+        "maximum": 26.04,
+        "first": 20.0,
+        "last": 22.06
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.62766666666667,
+        "minimum": 69.66,
+        "maximum": 78.67,
+        "first": 72.14,
+        "last": 77.63
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.465,
+        "minimum": 55.65,
+        "maximum": 58.95,
+        "first": 57.85,
+        "last": 57.3
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.60973333333334,
+        "minimum": 428.5,
+        "maximum": 428.625,
+        "first": 428.625,
+        "last": 428.609
+      }
+    },
+    {
+      "start_seconds": 1740,
+      "end_seconds_exclusive": 1800,
+      "first_telemetry_seconds": 1740.446,
+      "last_telemetry_seconds": 1799.453,
+      "telemetry_samples": 60,
+      "draw": {
+        "samples": 59,
+        "fps": 39.10525020325051,
+        "first_runtime_seconds": 1740.5918288230896,
+        "last_runtime_seconds": 1799.4074606895447,
+        "duration_seconds": 58.81563186645508,
+        "drawn_frames": 2300
+      },
+      "system_cpu_percent": {
+        "samples": 60,
+        "mean": 20.5155,
+        "minimum": 19.08,
+        "maximum": 25.81,
+        "first": 22.03,
+        "last": 21.75
+      },
+      "process_cpu_percent_one_core": {
+        "samples": 60,
+        "mean": 73.661,
+        "minimum": 68.68,
+        "maximum": 79.68,
+        "first": 73.96,
+        "last": 76.28
+      },
+      "temperature_c": {
+        "samples": 60,
+        "mean": 57.318333333333335,
+        "minimum": 55.1,
+        "maximum": 60.05,
+        "first": 57.85,
+        "last": 57.3
+      },
+      "rss_mib": {
+        "samples": 60,
+        "mean": 428.5104,
+        "minimum": 426.078,
+        "maximum": 428.625,
+        "first": 428.609,
+        "last": 426.5
+      }
+    }
+  ]
+}

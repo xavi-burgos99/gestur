@@ -1,0 +1,38 @@
+{
+  "mode": "mediapipe",
+  "host": "macOS-27.0-arm64-arm-64bit",
+  "machine": "arm64",
+  "python": "3.12.14",
+  "threads_requested": "default",
+  "frames": 180,
+  "warmup": 20,
+  "memory_peak_MB": {
+    "startup": 23.101,
+    "numpy_import": 39.551,
+    "opencv_import": 64.979,
+    "runtime_import": 114.491,
+    "model_created": 171.016,
+    "after_inference": 178.242
+  },
+  "scope": "mediapipe_full_image_VIDEO",
+  "runtime_version": "0.10.18",
+  "import_ms": 864.717,
+  "benchmarks": {
+    "pipeline": {
+      "wall_ms": {
+        "median": 10.7248,
+        "p95": 11.1219,
+        "mean": 10.7599
+      },
+      "cpu_ms": {
+        "median": 11.6745,
+        "p95": 12.062,
+        "mean": 11.6954
+      }
+    }
+  },
+  "hands_count_set": [
+    2
+  ],
+  "pipeline_warning": "Static test image with two hands; no ground truth, no real 3D motion, no Raspberry Pi measurements."
+}

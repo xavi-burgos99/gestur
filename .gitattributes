@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+# Preserve original evidence, notices, and third-party source byte for byte.
+docs/licenses/texts/** -text -whitespace
+docs/licenses/upstream/** -text -whitespace
+scripts/research/mobrecon/source/** -text
+
+*.png binary
+*.jpg binary

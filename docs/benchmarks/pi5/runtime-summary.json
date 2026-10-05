@@ -1,0 +1,124 @@
+[
+  {
+    "mode": "lite",
+    "threads": "1",
+    "exit": 0,
+    "elapsed": 8.36,
+    "before": {
+      "temperature": "temp=49.4'C",
+      "throttled": "throttled=0x0",
+      "frequency": "frequency(0)=1900029440"
+    },
+    "after": {
+      "temperature": "temp=54.3'C",
+      "throttled": "throttled=0x0",
+      "frequency": "frequency(0)=2400020480"
+    },
+    "benchmarks": {
+      "palm_detection_lite": {
+        "wall_ms": {
+          "median": 26.2472,
+          "p95": 26.3364,
+          "mean": 26.2611
+        },
+        "cpu_ms": {
+          "median": 26.2486,
+          "p95": 26.3286,
+          "mean": 26.2574
+        }
+      },
+      "hand_landmark_lite": {
+        "wall_ms": {
+          "median": 12.4107,
+          "p95": 12.4446,
+          "mean": 12.4134
+        },
+        "cpu_ms": {
+          "median": 12.4147,
+          "p95": 12.4348,
+          "mean": 12.4153
+        }
+      }
+    },
+    "rss": 133.104,
+    "hands": null
+  },
+  {
+    "mode": "lite",
+    "threads": "2",
+    "exit": 0,
+    "elapsed": 4.7,
+    "before": {
+      "temperature": "temp=53.8'C",
+      "throttled": "throttled=0x0",
+      "frequency": "frequency(0)=2400030464"
+    },
+    "after": {
+      "temperature": "temp=56.0'C",
+      "throttled": "throttled=0x0",
+      "frequency": "frequency(0)=2400033792"
+    },
+    "benchmarks": {
+      "palm_detection_lite": {
+        "wall_ms": {
+          "median": 14.8997,
+          "p95": 15.0744,
+          "mean": 14.9415
+        },
+        "cpu_ms": {
+          "median": 29.6604,
+          "p95": 29.9673,
+          "mean": 29.7189
+        }
+      },
+      "hand_landmark_lite": {
+        "wall_ms": {
+          "median": 7.1562,
+          "p95": 7.1902,
+          "mean": 7.1556
+        },
+        "cpu_ms": {
+          "median": 14.2427,
+          "p95": 14.2976,
+          "mean": 14.2389
+        }
+      }
+    },
+    "rss": 130.925,
+    "hands": null
+  },
+  {
+    "mode": "mediapipe",
+    "threads": "default",
+    "exit": 0,
+    "elapsed": 7.65,
+    "before": {
+      "temperature": "temp=56.5'C",
+      "throttled": "throttled=0x0",
+      "frequency": "frequency(0)=2400033792"
+    },
+    "after": {
+      "temperature": "temp=53.8'C",
+      "throttled": "throttled=0x0",
+      "frequency": "frequency(0)=2400033792"
+    },
+    "benchmarks": {
+      "pipeline": {
+        "wall_ms": {
+          "median": 28.9428,
+          "p95": 30.7196,
+          "mean": 29.1574
+        },
+        "cpu_ms": {
+          "median": 31.7334,
+          "p95": 31.9723,
+          "mean": 31.8596
+        }
+      }
+    },
+    "rss": 191.005,
+    "hands": [
+      2
+    ]
+  }
+]

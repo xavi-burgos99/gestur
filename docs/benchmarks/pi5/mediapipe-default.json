@@ -1,0 +1,59 @@
+{
+  "mode": "mediapipe",
+  "host": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.41",
+  "machine": "aarch64",
+  "python": "3.12.14",
+  "threads_requested": "default",
+  "frames": 180,
+  "warmup": 20,
+  "memory_peak_MB": {
+    "startup": 25.952,
+    "numpy_import": 40.272,
+    "opencv_import": 68.911,
+    "runtime_import": 117.998,
+    "model_created": 181.043,
+    "after_inference": 191.005
+  },
+  "memory_method": "resource.getrusage(RUSAGE_SELF).ru_maxrss; decimal MB",
+  "opencv_threads": 1,
+  "numpy_version": "1.26.4",
+  "opencv_version": "4.11.0",
+  "runtime_version": "0.10.18",
+  "scope": "mediapipe_tasks_prepared_image_video",
+  "import_ms": 1466.471,
+  "models": [
+    {
+      "file": "hand_landmarker_lite.task",
+      "bytes": 4055094,
+      "sha256": "28984ffd6aaf10e44a054356a7e768806178bf1db084efe0aec9d636a7ed2c87"
+    }
+  ],
+  "image": {
+    "file": "woman_hands.jpg",
+    "bytes": 67719,
+    "sha256": "70cbeb38e198c9862202e0979c21a99b40ca980d3e7b250176c85b1636a40f12",
+    "prepared_size": [
+      640,
+      480
+    ]
+  },
+  "benchmarks": {
+    "pipeline": {
+      "wall_ms": {
+        "median": 28.9428,
+        "p95": 30.7196,
+        "mean": 29.1574
+      },
+      "cpu_ms": {
+        "median": 31.7334,
+        "p95": 31.9723,
+        "mean": 31.8596
+      }
+    }
+  },
+  "hands_count_set": [
+    2
+  ],
+  "frames_with_two_hands": 180,
+  "pipeline_warning": "Static prepared 640x480 image; decode, resizing, RGB conversion and mp.Image construction happen outside timing. Tasks includes ROI tracking, detector scheduling and landmark inference. Not comparable directly to LiteRT tensors; no ground truth, real 3D motion, camera/render overhead or accuracy measurement."
+}

@@ -1,0 +1,130 @@
+{
+  "commit": "3c87e958d4855f890e3884ec94bcfc0f99422c3d",
+  "files": [
+    {
+      "path": "source/LICENSE",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/LICENSE",
+      "bytes": 1067,
+      "sha256": "786984123cb3fd24d941efdfb2f96f24ba100c211078b3760e90b5124ab64e35"
+    },
+    {
+      "path": "source/cmr/models/mobrecon_densestack.py",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/cmr/models/mobrecon_densestack.py",
+      "bytes": 3039,
+      "sha256": "5b861466a73c2310e440318021e1089a36b203a6287adc963d95cf0ace751741"
+    },
+    {
+      "path": "source/conv/dsconv.py",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/conv/dsconv.py",
+      "bytes": 1839,
+      "sha256": "d9a4c2ae0c01736d03f484424512e72eeab558a319014226551b6065c1b4a4c1"
+    },
+    {
+      "path": "source/conv/spiralconv.py",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/conv/spiralconv.py",
+      "bytes": 1489,
+      "sha256": "a09073f760ee65874093ba58e54aa8fd1994a8f485892a9e6a44603121a028e4"
+    },
+    {
+      "path": "source/mobrecon/models/modules.py",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/mobrecon/models/modules.py",
+      "bytes": 8014,
+      "sha256": "0dff5773e5880c7fba44804a85c10016386cdd3795aecde085240c7e9fe8925d"
+    },
+    {
+      "path": "source/mobrecon/models/densestack.py",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/mobrecon/models/densestack.py",
+      "bytes": 10410,
+      "sha256": "fb4147f4d01188298cbd70f51007b9ba3d2bb80e09e77da9fc4811d11ff143e1"
+    },
+    {
+      "path": "source/template/j_reg.npy",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/template/j_reg.npy",
+      "bytes": 130832,
+      "sha256": "8de28f843240f88c836cd45104ae3203b0e8660180202ec8c44f926da42624bf"
+    },
+    {
+      "path": "source/template/transform.pkl",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/template/transform.pkl",
+      "bytes": 201534,
+      "sha256": "78877f06e9858bedd5fbca13692ccee25cfe09b6314e7ee3b3d0827c39979f3c"
+    },
+    {
+      "path": "source/utils/utils.py",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/utils/utils.py",
+      "bytes": 1049,
+      "sha256": "a255064b6b945d9dd8e30beaaefd324547fac6f28fafa3b7c65fd0ba62817073"
+    },
+    {
+      "path": "source/utils/generate_spiral_seq.py",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/utils/generate_spiral_seq.py",
+      "bytes": 2011,
+      "sha256": "76bd7b2b2ef0c6bf8d045e6eaf39eccaa709701ceaf1f8b206bc7e3e3a8b5803"
+    },
+    {
+      "path": "mobrecon_densestack_dsconv.pt",
+      "url": "https://drive.google.com/uc?export=download&id=1qqEstFnV3GClpGWNEAZmR0jnxrcZH-9y",
+      "bytes": 45656319,
+      "sha256": "b3c18c68acca9e41fe8ac06a3ffdb0ea5526b024f5f5cc3ede906c93cf3598d7"
+    },
+    {
+      "path": "hand-crop.jpg",
+      "url": "https://raw.githubusercontent.com/SeanChenxy/HandMesh/3c87e958d4855f890e3884ec94bcfc0f99422c3d/cmr/images/2299_img.jpg",
+      "bytes": 16294,
+      "sha256": "ac9431b96aabf37f857b7725356857007f0aac8bb59349ba81f9840f2fe4710d"
+    }
+  ],
+  "export": {
+    "opset": 17,
+    "file": "mobrecon_dsconv.onnx",
+    "bytes": 33629637,
+    "sha256": "3c9af55cdb80b69decda8b29d77c405bbb90e3481ab5a9cd0045e0d96ab3f1b1",
+    "input": [
+      "float32",
+      1,
+      3,
+      128,
+      128
+    ],
+    "input_preprocessing": "RGB crop; (pixel/255 - 0.5)/0.5; NCHW",
+    "outputs": {
+      "mesh_meters": [
+        1,
+        778,
+        3
+      ],
+      "uv_normalized": [
+        1,
+        21,
+        2
+      ]
+    },
+    "initializer_elements": 8149989,
+    "pytorch_module_parameters_including_unused_layers": 11251741
+  },
+  "prepared_reference": {
+    "file": "pytorch-reference.npz",
+    "bytes": 207410,
+    "sha256": "5f09f20f3e8d05f1e2bff96aff93b509617fdf73e6e457b78814b59fbfd12e33"
+  },
+  "preparation": {
+    "torch": "2.14.0",
+    "onnx": "1.23.0",
+    "openmesh": "1.2.1",
+    "checkpoint_loading": "torch.load(weights_only=True), load_state_dict(strict=True)",
+    "geometry": "Public transform.pkl loaded with constructor allowlist; original OpenMesh spiral algorithm; no MANO_RIGHT.pkl."
+  },
+  "runtime": {
+    "onnxruntime": "1.30.0",
+    "provider": "CPUExecutionProvider",
+    "execution": "ORT_SEQUENTIAL",
+    "inter_op_num_threads": 1,
+    "session.intra_op.allow_spinning": "0",
+    "session.inter_op.allow_spinning": "0"
+  },
+  "limitations": [
+    "Inference on a prepared single-hand crop; no detector, association, camera-space registration or render.",
+    "Export parity is not 3D accuracy.",
+    "Public source is MIT; redistribution conditions for template/regressor remain to be checked."
+  ]
+}

@@ -1,0 +1,541 @@
+{
+  "date": "2026-09-27",
+  "hardware": {
+    "board": "Raspberry Pi 5",
+    "ram_GB": 4,
+    "os": "Raspberry Pi OS Lite 64-bit / Debian 13 trixie",
+    "kernel": "6.18.50+rpt-rpi-2712",
+    "architecture": "aarch64",
+    "camera": "UGREEN USB",
+    "display": "HDMI 1920x1080",
+    "cooling": "pwm-fan"
+  },
+  "hardware_metadata_source": "Recorded by deployment operator; kernel, architecture and Python also recorded in benchmark JSON.",
+  "repository_commit_at_documentation": "dcb57f672a77c2ea25fe9a2703feff5a86722e98",
+  "raw_files_unchanged": {
+    "runtime-summary.json": {
+      "bytes": 2612,
+      "sha256": "83db63410019402fcebd800ae8fad1a1985a3d5f006fb1707dc521a3f52209c6"
+    },
+    "camera-pose.json": {
+      "bytes": 2148,
+      "sha256": "7f7bcd96861fb9bd1ea5396ab2fb3dc41210951b3575dfcb1fd7ed41e7952e0d"
+    },
+    "camera-pose-hands.json": {
+      "bytes": 2200,
+      "sha256": "ffef8ce3f96366bc185a368009d7cbcc37b3b68170c1c707a57c5bc56dcd6a6f"
+    },
+    "mobrecon-summary.json": {
+      "bytes": 2980,
+      "sha256": "cf9b4c9d111f5844c61913de426876a54affd732c0becf4c717ec433e0a9bd01"
+    },
+    "mobrecon-1.json": {
+      "bytes": 1089,
+      "sha256": "ddb89a73c95f334ead095ce6101e6cffb673d8e9c42a8377a95dc1996db65f9e"
+    },
+    "mobrecon-2.json": {
+      "bytes": 1090,
+      "sha256": "c2db2709a06fe4446cf1122b696960774336ec01514695f832b1c7310bb05059"
+    },
+    "lite-1.json": {
+      "bytes": 4181,
+      "sha256": "b6fec5d35767f8cc4f5a9fa145de10b57bb02bfd437bb51422d1b21b51d6c1af"
+    },
+    "lite-2.json": {
+      "bytes": 4178,
+      "sha256": "4febd6f2e097e2725127a0ab8f72404136913bbae3616ac5a6957ec769fb84b7"
+    },
+    "mediapipe-default.json": {
+      "bytes": 1702,
+      "sha256": "b2c143ecea69755fc7de17e6d0fe306cf4177e6d86e5982c3c41b77ee1cf4f55"
+    },
+    "face-camera.json": {
+      "bytes": 3500,
+      "sha256": "59e61a5d3c71a53d81fff13602b6f31a02487fe91eb9df5ee520334f8327807c"
+    },
+    "capitel-camera/manifest.json": {
+      "bytes": 2076,
+      "sha256": "c0aa07f29c43873a317386f63a9b574a68b8f8f7816d69cdcb7eb12211f5cdef"
+    },
+    "capitel-camera/summary.json": {
+      "bytes": 2515,
+      "sha256": "178570b6d0730d0656ec90ea564f9be96b6b10a628b0080ea5fb32920bcd6e67"
+    },
+    "clock-limited60/manifest.json": {
+      "bytes": 2782,
+      "sha256": "9cfc7fad9715f3f387118737bc0102a39e9e041bf79fc7ddc50ce51746942e97"
+    },
+    "clock-limited60/summary.json": {
+      "bytes": 2505,
+      "sha256": "8798805767f961b125b4269c93e50c36bb5ceb6e43b1ab02eacf1a2e48750343"
+    },
+    "clock-limited61/manifest.json": {
+      "bytes": 2782,
+      "sha256": "26971ea24d614c094ba28ad720029f9482dec575c23cb6af72829d74ff06eb87"
+    },
+    "clock-limited61/summary.json": {
+      "bytes": 2511,
+      "sha256": "bc009cde97ef6b8dad3bd525b61663840ac80cd42b7a6a569ec638636f3b66df"
+    },
+    "clock-limited120/manifest.json": {
+      "bytes": 2784,
+      "sha256": "589df9ceeb8ba6c639ea99bc26a8a0066ebb54c512b96d5a54066d8413d36d43"
+    },
+    "clock-limited120/summary.json": {
+      "bytes": 2510,
+      "sha256": "96d66a56c5a36e638b1330a59fe7f4a9e83dcfed5a7b032f3048ba5beede9b6b"
+    },
+    "clock-normal/manifest.json": {
+      "bytes": 2778,
+      "sha256": "011f6f09f2b225f80b9301130727dd94e01e1c45a9d905594bfba7204a9a1353"
+    },
+    "clock-normal/summary.json": {
+      "bytes": 2509,
+      "sha256": "561d8251b4c563aaf706a1ecaa3157563bbfa3f29a925e0409cda58e583ec1c6"
+    },
+    "capitel-render-only.json": {
+      "bytes": 1713,
+      "sha256": "7f95576fe904dc04b74033faa29e86a0276ff5f56d346e5ca652a8d99a5ed8fc"
+    },
+    "capitel-no-callback/summary.json": {
+      "bytes": 2503,
+      "sha256": "80cb02d0e5a95467ccddef10b54e4cb68be41ef199a2f544b6fc9097b4fff2e1"
+    },
+    "capitel-no-callback/manifest.json": {
+      "bytes": 3254,
+      "sha256": "5a84b1959456d0f57ab49a7499007ebac1d9ac0fc11d985de40f8af5e083877d"
+    },
+    "capitel-endurance/manifest.json": {
+      "bytes": 2286,
+      "sha256": "083fcd132a02110bc1270f1d1542fc26ef9da7283ae709dda94149230758825e"
+    },
+    "capitel-endurance/summary.json": {
+      "bytes": 2539,
+      "sha256": "4aa5a0c2fef35830d50f4e70971cc8694d7751bd63720cd9dbf1adc26781757a"
+    },
+    "capitel-endurance/trial-config.json": {
+      "bytes": 1687,
+      "sha256": "1d9a6c4544cad99a56c23e76ac5f98e84400a3cd15f7a4e7daf1daea1b563cca"
+    },
+    "new-inputs/summary.json": {
+      "bytes": 5206,
+      "sha256": "0ab0a2375539d5b92c6674a61ed83dc0dddcec358e2f67afd335898765ec16de"
+    },
+    "capitel-camera-final/manifest.json": {
+      "bytes": 2076,
+      "sha256": "c0aa07f29c43873a317386f63a9b574a68b8f8f7816d69cdcb7eb12211f5cdef"
+    },
+    "capitel-camera-final/summary.json": {
+      "bytes": 2568,
+      "sha256": "473cd8c7f38d7f17f55c7f5d0864162594b96e159049668fa5ddfea2b68e23a4"
+    }
+  },
+  "measurement_scripts": {
+    "pose_hand_tracker.py": {
+      "sha256": "db26dfffdee01ee51e232b281060af9908ed2962d0583e6ad8b339620a77dd61"
+    },
+    "pose_detector.py": {
+      "sha256": "9008877adc473669fb4e876d31ad482a0da0504799446705fc567ddb0e6dd97b"
+    },
+    "scripts/benchmark_hand_runtime.py": {
+      "sha256": "067525cd057ccda9a945b945bcd111cacfbd8265a651eb695dd870cb291d4c3c"
+    },
+    "tracking_models/manifest.json": {
+      "sha256": "b51f8bd2a4d39d6ee937f5d1a57540a5c5f7dc93ca1f75d212728c91dae34bb4"
+    },
+    "scripts/benchmark_pi_system.py": {
+      "bytes": 19528,
+      "sha256": "6d0ec6716273e38d46f8079ebc264bdafc3511624df383421c00df01288c6364"
+    }
+  },
+  "external_preparation_package": {
+    "name": "mobrecon-reproducibility.tar.gz",
+    "bytes": 243068,
+    "sha256": "95e1df135e4087335d7932eb880e33774befc27225b20461e67fa19a34a7c00e",
+    "contents": "Historical temporary preparation package, including generated data. Executable code now preserved in scripts/research; this archive is not required and is not committed."
+  },
+  "experimental_measurement_scripts": {
+    "scripts/research/benchmark_face_camera.py": {
+      "original_filename": "benchmark_face_camera.py",
+      "bytes": 11912,
+      "sha256": "8aac1abf6c40869a64ff7fcea5850b83b8eedb165305f94500e5ac374b785dd6",
+      "availability": "Preserved byte-for-byte in repository; experimental, not imported by application runtime."
+    },
+    "scripts/research/benchmark_mobrecon.py": {
+      "original_filename": "benchmark_onnx.py",
+      "bytes": 3924,
+      "sha256": "284ea97fe7af92021272ab543f149eb286393b1ad8d1e413466b87d32cb96eda",
+      "availability": "Preserved byte-for-byte in repository; experimental, not imported by application runtime."
+    },
+    "scripts/research/mobrecon/export_mobrecon.py": {
+      "original_filename": "benchmark_mobrecon.py",
+      "bytes": 5648,
+      "sha256": "663d5892c7185dee80667f70b51b3138971fc193d924b51f4fd5514c4da1b906",
+      "availability": "Preserved byte-for-byte in repository; experimental, not imported by application runtime."
+    },
+    "scripts/research/mobrecon/prepare_geometry.py": {
+      "original_filename": "prepare_geometry.py",
+      "bytes": 1897,
+      "sha256": "32ea8f6733e705356665b6e44a56423af267f34aff40343f57bc9573767be446",
+      "availability": "Preserved byte-for-byte in repository; experimental, not imported by application runtime."
+    },
+    "scripts/research/gestur_clock_probe.py": {
+      "bytes": 4124,
+      "sha256": "418aef5c7f7da031f828d15898bc4692df870610fbe4ab46164520294c947bdd",
+      "availability": "Preserved version used by operator for Pi renderer diagnostics; experimental, not imported by application runtime."
+    },
+    "scripts/research/gestur_render_only_probe.py": {
+      "bytes": 4800,
+      "sha256": "ef9c34d531838c52e6890eba65e416830c14085f4b06d737e5e5149b67d8638a",
+      "availability": "Preserved version used by operator for Pi renderer diagnostics; experimental, not imported by application runtime."
+    },
+    "scripts/research/gestur_no_draw_callback_probe.py": {
+      "bytes": 4598,
+      "sha256": "b0cb1deb8c2e106dff3a6fef84845da76b4e57aa77ad264407b1654e300bfb35",
+      "availability": "Preserved version used by operator for Pi renderer diagnostics; experimental, not imported by application runtime."
+    },
+    "scripts/research/aggregate_pi_trial.py": {
+      "original_filename": "aggregate_gestur_pi_trial.py",
+      "bytes": 13632,
+      "sha256": "ea8139fe5d6570ca3ade2fb0d7b7dccd2f4f491ca1645fb014c9e0cb4193fae7",
+      "availability": "Preserved byte-for-byte from the local analysis script; reads completed trial files only, not imported by application runtime."
+    },
+    "scripts/research/plot_pi_system.py": {
+      "original_filename": "plot_gestur_pi_trial.py",
+      "bytes": 10352,
+      "sha256": "e6e99a974f81ec54a0ffba9b3ffeca39b317eea6a88b882a5bd172c761dc1849",
+      "availability": "Preserved byte-for-byte from the local analysis script; reads completed trial files only, not imported by application runtime."
+    },
+    "scripts/research/benchmark_new_inputs.py": {
+      "original_filename": "gestur_new_inputs_probe.py",
+      "bytes": 14201,
+      "sha256": "dd7a8ea6b782af220c6b1d81fe623037defed69de4401e9bae6b503436afa1fe",
+      "availability": "Preserved byte-for-byte from the 60-second native new-input contract probe; not imported by the application runtime."
+    }
+  },
+  "experimental_preparation_sources": {
+    "directory": "scripts/research/mobrecon",
+    "source_manifest": "scripts/research/mobrecon/manifest.json",
+    "license": "scripts/research/mobrecon/source/LICENSE",
+    "omitted_assets": "No checkpoint, ONNX, reference NPZ, templates, regressor or images are committed. Official URLs and hashes remain in the source manifest."
+  },
+  "render_validation_commit": "7a4070621bf69edd12407f763ff6c94dc8fe1fa2",
+  "unpublished_telemetry": {
+    "capitel-camera/telemetry.jsonl": {
+      "bytes": 135630,
+      "sha256": "9a8fde3a8f62fad7309b0196b7e85f81222e70b2a23d8b6ad601a7a90f08444f",
+      "reason": "Full JSONL retained under artifacts/pi5, not committed; compact aggregates published."
+    },
+    "clock-limited60/telemetry.jsonl": {
+      "bytes": 45668,
+      "sha256": "9539fbf00c3a7b432ef871fbcda3cf15e241a6af328fb0b83de9b3120c1a5ba1",
+      "reason": "Full JSONL retained under artifacts/pi5, not committed; compact aggregates published."
+    },
+    "clock-limited61/telemetry.jsonl": {
+      "bytes": 45619,
+      "sha256": "335de8a05987ce66d659be7c7b9f69215875dcbb3d1d2b324ef4ec63ca9607d3",
+      "reason": "Full JSONL retained under artifacts/pi5, not committed; compact aggregates published."
+    },
+    "clock-limited120/telemetry.jsonl": {
+      "bytes": 45922,
+      "sha256": "7d49aaf38d22c9a18192e82c00552bbd44d0629174d80dfd09b49d254b3939c7",
+      "reason": "Full JSONL retained under artifacts/pi5, not committed; compact aggregates published."
+    },
+    "clock-normal/telemetry.jsonl": {
+      "bytes": 45616,
+      "sha256": "9400375836182d7ea5638b12fa35e8a062d4e7aec74bd54a53036f02ebe44b5c",
+      "reason": "Full JSONL retained under artifacts/pi5, not committed; compact aggregates published."
+    },
+    "capitel-no-callback/telemetry.jsonl": {
+      "bytes": 46345,
+      "sha256": "a583276791d3f2fe7f7415772053ad1ab47ea6c79f49b6bb7da8b67f934b896f",
+      "reason": "Full JSONL retained under artifacts/pi5, not committed; compact aggregates published."
+    },
+    "capitel-endurance/telemetry.jsonl": {
+      "bytes": 4071285,
+      "sha256": "3217ddd15b3210fb010d1e7f2124c514f1fd4c44ca56c2fd6cf08bb3b68cc204",
+      "reason": "Full JSONL retained under artifacts/pi5, not committed; compact aggregates and 60-second tables published."
+    },
+    "capitel-camera-final/telemetry.jsonl": {
+      "bytes": 136655,
+      "sha256": "fe3b53679a01ddb0b83ad54b6777a712c2cd6b9456e7e2fbdddb5904448e892d",
+      "reason": "Full JSONL retained under artifacts/pi5, not committed; compact aggregate and 60-second tables published."
+    }
+  },
+  "derived_files": {
+    "capitel-camera/telemetry-summary.json": {
+      "bytes": 1511,
+      "sha256": "f160d75e8fa4b9b37d069bd6c6c6ffc984e90121a538c518ed7ce86555495d15",
+      "derived_from": "capitel-camera/telemetry.jsonl"
+    },
+    "clock-limited60/telemetry-summary.json": {
+      "bytes": 1495,
+      "sha256": "d45346389e917f0b8f1f7a82923c206be3f8ab5ab43573a20c60df6f95203a21",
+      "derived_from": "clock-limited60/telemetry.jsonl"
+    },
+    "clock-limited61/telemetry-summary.json": {
+      "bytes": 1493,
+      "sha256": "c527cbbecd84611c4e45fcdc748f4082062389e0e3b374134b8f068a41e95eeb",
+      "derived_from": "clock-limited61/telemetry.jsonl"
+    },
+    "clock-limited120/telemetry-summary.json": {
+      "bytes": 1496,
+      "sha256": "c10673fa117852001a2f50f6efed7ecc52ea230800d987db983f43fdac7cde71",
+      "derived_from": "clock-limited120/telemetry.jsonl"
+    },
+    "clock-normal/telemetry-summary.json": {
+      "bytes": 1494,
+      "sha256": "c7e9d4cd9af7082d8652f59e2b164c3960e66d00f3ab437e72cf60f963a45e89",
+      "derived_from": "clock-normal/telemetry.jsonl"
+    },
+    "capitel-no-callback/telemetry-summary.json": {
+      "bytes": 1715,
+      "sha256": "6ad5354d94ad4c5dcf536aa867a545bb2eaaa4f34e48ba5bc1e0acde3162dcda",
+      "derived_from": "capitel-no-callback/telemetry.jsonl"
+    },
+    "capitel-endurance/telemetry-summary.json": {
+      "bytes": 41965,
+      "sha256": "944c326ddd89435c35607661c5b391aff5ba0fb9f48ed0070afaef1bfbdf89f6",
+      "derived_from": "capitel-endurance/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
+    },
+    "capitel-endurance/windows-60s.csv": {
+      "bytes": 4524,
+      "sha256": "38abd70f614a9c930181f351e178d7e30e590e460d75993af360265f206193ca",
+      "derived_from": "capitel-endurance/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
+    },
+    "capitel-endurance/windows-60s.md": {
+      "bytes": 3062,
+      "sha256": "9051e35952735d61c428bd43b72b36ee9b1e67ead21d4524fbc132a2b4df065f",
+      "derived_from": "capitel-endurance/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
+    },
+    "capitel-endurance/telemetry.png": {
+      "bytes": 276790,
+      "sha256": "d25d800119b337d6ea84b57df2aae7fa3cdc0d329b4d1fef90c5501b59dcd5c1",
+      "derived_from": "capitel-endurance/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
+    },
+    "capitel-camera-final/telemetry-summary.json": {
+      "bytes": 7573,
+      "sha256": "56bc9d33d326e8f7711f5d04aad9920d488bcc1e6919026e5f23510b9874ef58",
+      "derived_from": "capitel-camera-final/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
+    },
+    "capitel-camera-final/windows-60s.csv": {
+      "bytes": 433,
+      "sha256": "e8f155feeff4d19c1bef708ba8b282598984d681e0d36eb2b2607c268e6a0776",
+      "derived_from": "capitel-camera-final/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
+    },
+    "capitel-camera-final/windows-60s.md": {
+      "bytes": 959,
+      "sha256": "ff2acfd29a5052d7db20293b2d4f328122c0723cbded5f44c22dce3f18ee2e29",
+      "derived_from": "capitel-camera-final/telemetry.jsonl; manifest.json and summary.json provide trial metadata."
+    }
+  },
+  "redacted_files": {
+    "api-smoke.redacted.json": {
+      "bytes": 1328,
+      "sha256": "486887239fde198b661c3c1d06273e98f8c1912eeb49d0b8069af6d9bf800d43",
+      "original_file": "artifacts/pi5/api-smoke.json",
+      "original": {
+        "bytes": 1313,
+        "sha256": "5c9a2d5321e734099de99d569ca84bd94a902c9f2458c6e4ba38775cc9a750c2"
+      },
+      "redacted_fields": [
+        "checks[4].ssid",
+        "checks[5].ssid",
+        "checks[6].ssid",
+        "checks[7].ssid",
+        "checks[8].ssid"
+      ],
+      "redaction": "Only SSID values replaced with [SSID omitido]; all checks, status flags and timings preserved. Not byte-identical to original."
+    },
+    "portal-http80/import-smoke.redacted.json": {
+      "bytes": 1105,
+      "sha256": "31ab0cc1616264b5b2945befda6a84e71378b6eada0f110335ed5cae2d1ddacc",
+      "original_file": "artifacts/pi5/import-smoke-80-final.json",
+      "original": {
+        "bytes": 1091,
+        "sha256": "ec0639c992796ba4ef6447f1f1fd5b86cfa4a281706627ba51d1d6f4658927a2"
+      },
+      "redacted_fields": [
+        "base_url"
+      ],
+      "redaction": "Only the loopback base_url is omitted; all import, GLB, texture, repair, cleanup and configuration results are preserved. Not byte-identical to original."
+    },
+    "portal-http80/api-smoke.redacted.json": {
+      "bytes": 1326,
+      "sha256": "b76f40bcea91a10798eb02da031192f0f2b364397467b31801078bdb22da8c68",
+      "original_file": "artifacts/pi5/api-smoke-80-final.json",
+      "original": {
+        "bytes": 1311,
+        "sha256": "e2d9f54a58ceab1564a0001e18e100df7ab397c7947737a6325037d10a1ec9d2"
+      },
+      "redacted_fields": [
+        "checks[4].ssid",
+        "checks[5].ssid",
+        "checks[6].ssid",
+        "checks[7].ssid",
+        "checks[8].ssid"
+      ],
+      "redaction": "Only SSID values are omitted; all checks, status flags and timings are preserved. Not byte-identical to original."
+    }
+  },
+  "endurance_validation": {
+    "source_commit_reported_by_operator": "35f8383b5d0275c044998d83b99069d939972fb3",
+    "equivalent_runtime_commit": "7a4070621bf69edd12407f763ff6c94dc8fe1fa2",
+    "equivalence_scope": "The listed runtime, configuration, model manifest and benchmark files are byte-identical between both Git commits. This is Git-source verification, not a fresh remote filesystem attestation. The run predates subsequent controls and portal deployment changes.",
+    "code_files_at_measured_commit": {
+      "scripts/benchmark_pi_system.py": {
+        "bytes": 19528,
+        "sha256": "6d0ec6716273e38d46f8079ebc264bdafc3511624df383421c00df01288c6364"
+      },
+      "scripts/benchmark_render.py": {
+        "bytes": 5925,
+        "sha256": "b1aa44dc5f2358b1ce26d4066436f1b01dd862ddebe96a8ff108cefe2753f55f"
+      },
+      "controller.py": {
+        "bytes": 12913,
+        "sha256": "39cdb6b4097f38624dc93dfae924f64f3283304c2ed7268b26b2aee31ffbc49e"
+      },
+      "visualizer.py": {
+        "bytes": 18679,
+        "sha256": "d8012cf1a28dbcf2159ba25d169ac9f3116fc31c92bf8b4571ba15771ef67ac0"
+      },
+      "render_scheduler.py": {
+        "bytes": 2052,
+        "sha256": "403fedf34fc54820f01c141a3642a978f3b4ac37ed6827a9ef308c398fc997f8"
+      },
+      "runtime_state.py": {
+        "bytes": 1933,
+        "sha256": "cfeed0a2925c542709e39b4a2a759e51a2c6e2559042e985462a502cf0c740fb"
+      },
+      "device_metrics.py": {
+        "bytes": 2119,
+        "sha256": "bb0f0b51ab79279a7fc427e6ebf0222dba1ce5bd2080d28cab6735116978ffe7"
+      },
+      "tracking_session.py": {
+        "bytes": 9174,
+        "sha256": "24c12740c4349d8b2f46d8dbd3c3befa2dc24b709e228dfc88526b92557fbcb8"
+      },
+      "pose_detector.py": {
+        "bytes": 23339,
+        "sha256": "9008877adc473669fb4e876d31ad482a0da0504799446705fc567ddb0e6dd97b"
+      },
+      "pose_hand_tracker.py": {
+        "bytes": 8557,
+        "sha256": "db26dfffdee01ee51e232b281060af9908ed2962d0583e6ad8b339620a77dd61"
+      },
+      "tracking_geometry.py": {
+        "bytes": 10556,
+        "sha256": "dfbad72ee46d04f3ac88608f45b0ec905ab9896ae01c5ce4f4fa0436409f78b9"
+      },
+      "control_system.py": {
+        "bytes": 21150,
+        "sha256": "1a9fa7b8d20013aed8cd00d76dc23b10c1af36de37de1e14f0bb70f7c9be2bdd"
+      },
+      "runtime_config.py": {
+        "bytes": 8185,
+        "sha256": "bf5123dd55f3f8c2bd68a748d3905b7e7930faa88fa9d97c23a69707803e8d5b"
+      },
+      "config/default.json": {
+        "bytes": 1693,
+        "sha256": "4248cf62dca250161904ee878496fafa67748c0a4ff220283a59c09c6cd3bc66"
+      },
+      "config/schema.json": {
+        "bytes": 4920,
+        "sha256": "88c1762e2c9b59257942b9e274edbf224de04f206ff1571a2a424280ba2ef3c3"
+      },
+      "tracking_models/manifest.json": {
+        "bytes": 1376,
+        "sha256": "b51f8bd2a4d39d6ee937f5d1a57540a5c5f7dc93ca1f75d212728c91dae34bb4"
+      }
+    },
+    "published_data_directory": "capitel-endurance",
+    "source_telemetry": "artifacts/pi5/capitel-endurance/telemetry.jsonl",
+    "publication_base_commit": "003482be496f1c2b858fd0a86776d772bf8cada9",
+    "aggregation_script": "scripts/research/aggregate_pi_trial.py",
+    "plot_script": "scripts/research/plot_pi_system.py",
+    "scope": "1800-second replay with the original capitel, continuous imposed movement, real Lite pose and hand inference, 1920x1080 visible framebuffer and 4 actual MSAA samples. Not a live-camera accuracy test or a validation of later changes."
+  },
+  "new_inputs_validation": {
+    "source_commit_reported_by_operator": "003482be496f1c2b858fd0a86776d772bf8cada9",
+    "published_data_directory": "new-inputs",
+    "manifest": {
+      "path": "new-inputs/manifest.json",
+      "bytes": 5031,
+      "sha256": "58cf0f179dc7c8589c08f4fb7b9d890d9283b745b7ce379f2175366643fb17e7"
+    },
+    "source_summary": "artifacts/pi5/new-inputs-replay.json",
+    "runtime_hashes_verified_against_commit": true,
+    "scope": "60-second still-image replay with the installed 003482b tracker and two control mappers. Finite contracts for eight new torso and hand-proximity inputs; no renderer, webcam, accuracy claim, torso-without-head observation or CPU improvement comparison. Separate from the earlier 35f8383 30-minute capitel baseline."
+  },
+  "portal_http80_validation": {
+    "published_data_directory": "portal-http80",
+    "manifest": {
+      "path": "portal-http80/manifest.json",
+      "bytes": 4333,
+      "sha256": "20f7c8453f922e9551f02fbfe14bf322e07d4d9ede3557b53c19b60ec3508a48"
+    },
+    "deployment_reported_by_operator": {
+      "native_import_fix_commit": "549ca43fac099bea980d11c00a182237019f64e7",
+      "icon_commit": "9786282b5cafc547df032e9ec6cf5445f41a58b4"
+    },
+    "scope": "Final HTTP 80 API and native import checks, plus separately labelled operator confirmation of successful reboot and automatic accelerated welcome/controller/portal startup. No raw reboot capture is claimed. First-boot image installation remains untested."
+  },
+  "post_reboot_camera_validation": {
+    "published_data_directory": "capitel-camera-final",
+    "deployment_reported_by_operator": {
+      "native_import_fix_commit": "549ca43fac099bea980d11c00a182237019f64e7",
+      "icon_commit": "9786282b5cafc547df032e9ec6cf5445f41a58b4"
+    },
+    "code_verification": "Deployment operator compared SHA-256 for all 11 listed files in /opt/gestur with this checkout after the trial: every hash matched. These checkout files also match commit 9786282 byte-for-byte. This is an operator verification record, not an original remote hash-capture file.",
+    "code_files_confirmed_on_device": {
+      "controller.py": {
+        "bytes": 12913,
+        "sha256": "39cdb6b4097f38624dc93dfae924f64f3283304c2ed7268b26b2aee31ffbc49e"
+      },
+      "tracking_session.py": {
+        "bytes": 9318,
+        "sha256": "7fb71b09e4826e960c661b989f992aae6a91433ff31d14a535f1b26a1d61f678"
+      },
+      "pose_detector.py": {
+        "bytes": 23894,
+        "sha256": "4920999a442d2af262e561c087e49ec3e81b0e01f0e220d3553a2739013fd463"
+      },
+      "pose_hand_tracker.py": {
+        "bytes": 8557,
+        "sha256": "db26dfffdee01ee51e232b281060af9908ed2962d0583e6ad8b339620a77dd61"
+      },
+      "tracking_geometry.py": {
+        "bytes": 12569,
+        "sha256": "f5b382cd26434718955221933cc32d0029deb4f0e029c9877679629e3f060b1c"
+      },
+      "control_system.py": {
+        "bytes": 21254,
+        "sha256": "d48eca12fb9d65c8134ebdce19fc1e3ae08e19034f193c7013661112ee1b355a"
+      },
+      "runtime_config.py": {
+        "bytes": 8185,
+        "sha256": "bf5123dd55f3f8c2bd68a748d3905b7e7930faa88fa9d97c23a69707803e8d5b"
+      },
+      "visualizer.py": {
+        "bytes": 18664,
+        "sha256": "f184aecbdc98fd16274cf4cc1ea0d1d62df48419cc7ab5ea2e358aac7d7a778a"
+      },
+      "render_scheduler.py": {
+        "bytes": 2052,
+        "sha256": "403fedf34fc54820f01c141a3642a978f3b4ac37ed6827a9ef308c398fc997f8"
+      },
+      "config/schema.json": {
+        "bytes": 5038,
+        "sha256": "b5bb85c1c573d07f17968823327c4e0b6a06ae3d104692f92902a14121093527"
+      },
+      "scripts/benchmark_pi_system.py": {
+        "bytes": 19528,
+        "sha256": "6d0ec6716273e38d46f8079ebc264bdafc3511624df383421c00df01288c6364"
+      }
+    },
+    "source_telemetry": "artifacts/pi5/capitel-camera-final/telemetry.jsonl",
+    "aggregation_script": "scripts/research/aggregate_pi_trial.py",
+    "scope": "Completed 60.031-second live-camera trial after the verified reboot, with original 491038-triangle capitel, 2048x2048 texture, visible 1920x1080 V3D framebuffer and 4 actual MSAA samples. Final hand tracker was in idle presence-probe mode at 3 fps. Not proof of persistent two-hand recognition, accuracy, 60 fps rendering, a performance improvement, or 30-minute stability of this newer deployment.",
+    "post_trial_operator_observation": "The normal welcome runtime resumed with no model selected or rendered, tracking stopped and no error. Cumulative welcome FPS after the test are deliberately not reported."
+  }
+}

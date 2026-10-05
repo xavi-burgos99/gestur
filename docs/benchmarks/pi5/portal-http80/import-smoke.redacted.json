@@ -1,0 +1,34 @@
+{
+  "ok": true,
+  "fixture_name": "gestur-import-smoke-0b1d86264a924d6b97d9c977a40fb8de",
+  "base_url": "[portal HTTP local, puerto 80]",
+  "scope": "POST real OBJ+MTL+PNG ZIP; no activación ni cambios de configuración",
+  "upload_sha256": "79e5194022e3bb7c40813e618a124b99c82d478fe72f43314bd9b4698bbe9075",
+  "job_id": "da5b76b7-05a4-49fc-8f9b-59ccc80a81bf",
+  "import_state": "completed",
+  "glb": {
+    "triangles": 2,
+    "uv_present": true,
+    "material_textures": [
+      {
+        "width": 2,
+        "height": 2,
+        "sha256": "e50a3b04ad1d7096bf49d2dc54f09420b73122d215a1834a1b931410fd731a88"
+      }
+    ],
+    "bytes": 2068,
+    "sha256": "2c18af51ab6db9c6c0abf6a554e1369252ccca0de3be494e86a6eb8095307209"
+  },
+  "repair_warnings": [
+    "Ruta reparada: C:\\export\\textures\\GRID.PNG → textures/grid.png"
+  ],
+  "conversion_verified": true,
+  "cleanup": {
+    "removed_own_package": true,
+    "job_id": "da5b76b7-05a4-49fc-8f9b-59ccc80a81bf",
+    "terminal_import_record_retained": true
+  },
+  "library_empty": true,
+  "selection_unchanged": true,
+  "configuration_unchanged": true
+}

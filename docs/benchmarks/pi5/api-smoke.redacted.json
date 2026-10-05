@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "check": "login_cookie_session",
+      "ok": true
+    },
+    {
+      "check": "models_empty",
+      "ok": true,
+      "count": 0,
+      "active": null
+    },
+    {
+      "check": "runtime_online",
+      "ok": true,
+      "online": true,
+      "render_fps": 24.52
+    },
+    {
+      "check": "configuration_read",
+      "ok": true,
+      "current_equals_defaults": true
+    },
+    {
+      "check": "wifi_initial",
+      "ok": true,
+      "ssid": "[SSID omitido]",
+      "secured": false,
+      "active": true
+    },
+    {
+      "check": "wifi_add_password",
+      "ok": true,
+      "ssid": "[SSID omitido]",
+      "secured": true,
+      "active": true
+    },
+    {
+      "check": "wifi_change_password",
+      "ok": true,
+      "ssid": "[SSID omitido]",
+      "secured": true,
+      "active": true
+    },
+    {
+      "check": "wifi_remove_password",
+      "ok": true,
+      "ssid": "[SSID omitido]",
+      "secured": false,
+      "active": true
+    },
+    {
+      "check": "wifi_final",
+      "ok": true,
+      "ssid": "[SSID omitido]",
+      "secured": false,
+      "active": true
+    },
+    {
+      "check": "configuration_unchanged",
+      "ok": true
+    },
+    {
+      "check": "session_logout",
+      "ok": true
+    }
+  ],
+  "wifi_restored_open": true,
+  "elapsed_seconds": 30.14
+}

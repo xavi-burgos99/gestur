@@ -486,3 +486,40 @@ test("explicit invalid exposure stays on disk and is reported instead of resetti
     assert.equal(await readFile(configPath, "utf8"), bytes);
   }
 });
+
+test("public model content persists without touching geometry and validates before writing", async (t) => {
+  const { store, configPath, modelsDir } = await fixture(t);
+  const id = await addModel(modelsDir);
+  const before = await readFile(path.join(modelsDir, id));
+  const content = {
+    title: "  Mi pieza  ",
+    description: "Una descripción\ncon dos líneas.",
+    placement: "top",
+  };
+  const result = await store.updateModel({
+    id,
+    content,
+    url: "https://example.org",
+  });
+  assert.equal(result.model.content.title, "Mi pieza");
+  assert.deepEqual(await readFile(path.join(modelsDir, id)), before);
+  const restarted = await createStore({ configPath, modelsDir });
+  assert.deepEqual(
+    (await restarted.catalog()).models[0].content,
+    result.model.content,
+  );
+  for (const invalid of [
+    { ...content, placement: "left" },
+    { ...content, title: "x".repeat(161) },
+    { ...content, description: "bad\u0001text" },
+  ])
+    await assert.rejects(restarted.updateModel({ id, content: invalid }));
+  await restarted.updateModel({
+    id,
+    content: { title: "", description: "", placement: "bottom" },
+  });
+  assert.equal(
+    (await restarted.catalog()).models[0].url,
+    "https://example.org",
+  );
+});

@@ -10,6 +10,7 @@ import {
   SimpleGrid,
   Select,
   TextInput,
+  Textarea,
   Modal,
   Menu,
   Alert,
@@ -121,6 +122,11 @@ export default function Models({ config, setConfig, notify }) {
   const [modelDialog, setModelDialog] = useState(null);
   const [modelName, setModelName] = useState("");
   const [modelUrl, setModelUrl] = useState("");
+  const [content, setContent] = useState({
+    title: "",
+    description: "",
+    placement: "bottom",
+  });
   const [orientation, setOrientation] = useState({ x: 0, y: 0, z: 0 });
   const [modelError, setModelError] = useState("");
   const importRevision = useRef(0);
@@ -266,6 +272,12 @@ export default function Models({ config, setConfig, notify }) {
     setModelDialog({ kind, model });
     setModelName(model.name);
     setModelUrl(model.url || "");
+    setContent({
+      title: "",
+      description: "",
+      placement: "bottom",
+      ...model.content,
+    });
     setOrientation({ x: 0, y: 0, z: 0, ...model.orientation });
     setModelError("");
   }
@@ -309,6 +321,7 @@ export default function Models({ config, setConfig, notify }) {
       name,
       orientation,
       url: url || null,
+      content,
     });
   }
   async function changeModel(method, body) {
@@ -585,7 +598,7 @@ export default function Models({ config, setConfig, notify }) {
                           onClick={() => openModelDialog("edit", model)}
                           disabled={importDisabled}
                         >
-                          Ajustar modelo
+                          Cambiar contenido
                         </Menu.Item>
                         <Menu.Divider />
                         <Menu.Item
@@ -719,7 +732,7 @@ export default function Models({ config, setConfig, notify }) {
         closeOnClickOutside={!busy}
         closeOnEscape={!busy}
         withCloseButton={!busy}
-        title="Ajustar modelo"
+        title="Cambiar contenido"
         centered
         size="md"
       >
@@ -733,6 +746,43 @@ export default function Models({ config, setConfig, notify }) {
               required
               disabled={busy || pending}
               data-autofocus
+            />
+            <TextInput
+              label="Título"
+              value={content.title}
+              maxLength={160}
+              disabled={busy || pending}
+              onChange={(event) =>
+                setContent({ ...content, title: event.currentTarget.value })
+              }
+            />
+            <Textarea
+              label="Descripción"
+              value={content.description}
+              maxLength={1200}
+              autosize
+              minRows={3}
+              maxRows={8}
+              disabled={busy || pending}
+              onChange={(event) =>
+                setContent({
+                  ...content,
+                  description: event.currentTarget.value,
+                })
+              }
+            />
+            <Select
+              label="Posición del contenido"
+              data={[
+                { value: "top", label: "Superior" },
+                { value: "bottom", label: "Inferior" },
+              ]}
+              value={content.placement}
+              allowDeselect={false}
+              disabled={busy || pending}
+              onChange={(value) =>
+                value && setContent({ ...content, placement: value })
+              }
             />
             <TextInput
               label="URL"

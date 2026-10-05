@@ -25,6 +25,7 @@ from panda3d.core import (
     GeomVertexFormat,
     GeomVertexWriter,
     PerspectiveLens,
+    PNMImage,
     PythonCallbackObject,
     Spotlight,
     TextNode,
@@ -267,6 +268,7 @@ class ControlledObjViewer(ShowBase):
         ambient_light="none",
         exposure=50,
         model_url=None,
+        model_content=None,
     ):
         # Configure before creating the context. Preserve geometry and textures.
         if antialias_samples not in (0, 2, 4):
@@ -334,6 +336,8 @@ class ControlledObjViewer(ShowBase):
         self.model_basis = None
         self.model_url = None
         self.model_qr = None
+        self.model_content = None
+        self.content_overlay = None
         self.welcome = None
         self.welcome_overlay = None
         self.welcome_url = None
@@ -365,6 +369,7 @@ class ControlledObjViewer(ShowBase):
             self.load_model(
                 obj_path, orientation=model_orientation, model_url=model_url
             )
+            self.set_model_content(model_content)
         except Exception:
             self.destroy()
             raise
@@ -431,6 +436,7 @@ class ControlledObjViewer(ShowBase):
                 self._last_draw_size = size
                 self._layout_welcome()
                 self._layout_model_qr()
+                self._layout_model_content()
                 self.invalidate(frames=2)
             draw = self._render_cadence.due(
                 now, welcome=self.welcome is not None or self._idle_animation
@@ -528,11 +534,94 @@ class ControlledObjViewer(ShowBase):
         self._remove_model_error()
         self.author_credit.set_color_scale(1, 1, 1, 0.65)
         self.set_model_url(model_url)
+        self.set_model_content(None)
         self._set_model_camera()
         self.setBackgroundColor(0, 0, 0, 1)
         # The scene owns its assets; avoid retaining previously selected models.
         self.loader.unloadModel(Filename.from_os_specific(str(path)))
         self.invalidate(frames=2)
+
+    def set_model_content(self, content=None):
+        from runtime_config import validate_model_content
+
+        content = validate_model_content(content)
+        if self.model is None:
+            content = validate_model_content()
+        if content == self.model_content:
+            return
+        self.model_content = content
+        if self.content_overlay is not None:
+            self.content_overlay.remove_node()
+            self.content_overlay = None
+        if content["title"] or content["description"]:
+            anchor = (
+                self.a2dTopCenter
+                if content["placement"] == "top"
+                else self.a2dBottomCenter
+            )
+            self.content_overlay = anchor.attach_new_node("gestur-model-content")
+            self._configure_screen_overlay(self.content_overlay)
+            image = PNMImage(1, 64, 4)
+            for row in range(64):
+                alpha = 0.8 * (1 - row / 63) ** 1.5
+                if content["placement"] == "bottom":
+                    alpha = 0.8 * (row / 63) ** 1.5
+                image.set_xel_a(0, row, 0, 0, 0, alpha)
+            texture = Texture("content-gradient")
+            texture.load(image)
+            card = CardMaker("content-gradient")
+            card.set_frame(-1, 1, -1, 0)
+            self.content_gradient = self.content_overlay.attach_new_node(
+                card.generate()
+            )
+            self.content_gradient.set_texture(texture)
+            self.content_gradient.set_transparency(TransparencyAttrib.M_alpha)
+            self.content_gradient.set_bin("fixed", 39)
+            self.content_title = self._overlay_label(
+                self.content_overlay, "content-title", content["title"], 0, 0.07
+            )
+            self.content_description = self._overlay_label(
+                self.content_overlay,
+                "content-description",
+                content["description"],
+                0,
+                0.04,
+            )
+            self._layout_model_content()
+        self.invalidate(frames=2)
+
+    def _layout_model_content(self):
+        if self.content_overlay is None:
+            return
+        width = abs(self.content_overlay.get_relative_point(self.render2d, (1, 0, 0)).x)
+        self.content_title.set_scale(0.07)
+        self.content_description.set_scale(0.04)
+        for label in (self.content_title, self.content_description):
+            label.node().set_wordwrap(width * 1.35 / label.get_sx())
+        title_height = (
+            self.content_title.node().get_height() * self.content_title.get_sz()
+        )
+        description_height = (
+            self.content_description.node().get_height()
+            * self.content_description.get_sz()
+        )
+        height = title_height + description_height + 0.18
+        # Long text must stay within the viewport, including portrait displays.
+        factor = min(1, 0.75 / max(height, 0.01))
+        self.content_title.set_scale(0.07 * factor)
+        self.content_description.set_scale(0.04 * factor)
+        title_height *= factor
+        description_height *= factor
+        height = title_height + description_height + 0.18
+        if self.model_content["placement"] == "top":
+            self.content_title.set_z(-0.09)
+            self.content_description.set_z(-0.09 - title_height - 0.04)
+            self.content_gradient.set_pos(0, 0, 0)
+        else:
+            self.content_title.set_z(height - 0.06)
+            self.content_description.set_z(height - 0.1 - title_height)
+            self.content_gradient.set_pos(0, 0, height + 0.08)
+        self.content_gradient.set_scale(width, 1, height + 0.08)
 
     def set_model_url(self, url):
         """Update a static screen overlay without reloading geometry or textures."""
@@ -783,6 +872,7 @@ class ControlledObjViewer(ShowBase):
             label.node().set_align(TextNode.A_left)
 
     def show_welcome(self):
+        self.set_model_content(None)
         self.author_credit.set_color_scale(1, 1, 1, 1)
         self.invalidate(frames=2)
         self._idle_animation = False

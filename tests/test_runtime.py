@@ -220,6 +220,9 @@ def viewer_stub(monkeypatch, fail=None):
                 raise ValueError("Geometría no válida")
             loaded.append(path)
 
+        def set_model_content(self, content):
+            self.model_content = content
+
         def show_model_error(self, error):
             errors.append(error)
 

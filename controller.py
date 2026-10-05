@@ -14,6 +14,7 @@ from device_metrics import DeviceMetrics
 from runtime_config import (
     default_config,
     load_config,
+    load_model_content,
     load_model_orientation,
     load_model_url,
     reconcile_model_selection,
@@ -84,6 +85,7 @@ class PoseController:
         self.rendered_model = None
         self.rendered_orientation = validate_model_orientation()
         self.rendered_url = None
+        self.rendered_content = None
         self.exit_code = 0
         self.tracking_session = TrackingSession(self._on_pose_update)
         self.visualizer = None
@@ -113,6 +115,9 @@ class PoseController:
                 **self.config["render"],
                 model_orientation=orientation,
                 model_url=url,
+                model_content=None
+                if self.obj_override
+                else load_model_content(self.requested_model, self.models_dir),
                 show_fps=show_fps,
             )
             self.rendered_model = (
@@ -120,6 +125,11 @@ class PoseController:
             )
             self.rendered_orientation = orientation
             self.rendered_url = url
+            self.rendered_content = (
+                None
+                if self.obj_override
+                else load_model_content(self.requested_model, self.models_dir)
+            )
         except (ValueError, OSError, RuntimeError) as exc:
             if self.obj_override:
                 raise
@@ -204,6 +214,11 @@ class PoseController:
                         self.visualizer.set_model_orientation(orientation)
                     if url != self.rendered_url:
                         self.visualizer.set_model_url(url)
+                    content = load_model_content(
+                        candidate["active_model"], self.models_dir
+                    )
+                    self.visualizer.set_model_content(content)
+                    self.rendered_content = content
                     self.rendered_orientation = orientation
                     self.rendered_url = url
                     self.model_error = None

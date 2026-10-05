@@ -319,6 +319,39 @@ def load_model_url(model_id, models_dir):
         return None
 
 
+def validate_model_content(value=None):
+    """Validate optional public text independently of mesh resources."""
+    default = {"title": "", "description": "", "placement": "bottom"}
+    if value is None:
+        return default
+    if not isinstance(value, dict) or set(value) != set(default):
+        raise ConfigurationError("El contenido requiere título, descripción y posición")
+    for key, limit in (("title", 160), ("description", 1200)):
+        text = value[key]
+        if (
+            not isinstance(text, str)
+            or len(text) > limit
+            or re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff]", text)
+        ):
+            raise ConfigurationError("Texto del modelo no válido")
+    if value["placement"] not in ("top", "bottom"):
+        raise ConfigurationError("Posición del contenido no válida")
+    return {
+        **value,
+        "title": value["title"].strip(),
+        "description": value["description"].strip(),
+    }
+
+
+def load_model_content(model_id, models_dir):
+    try:
+        return validate_model_content(
+            _load_model_metadata(model_id, models_dir).get("content")
+        )
+    except ConfigurationError:
+        return validate_model_content()
+
+
 def reconcile_model_selection(config, models_dir, *, preferred_model=None):
     """Resolve an existing selection without writing shared portal state.
 

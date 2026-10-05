@@ -91,6 +91,43 @@ function validateModelUrl(value) {
     throw invalid();
   return url;
 }
+function modelContent(value = null) {
+  const empty = { title: "", description: "", placement: "bottom" };
+  if (value === null || value === undefined) return empty;
+  if (
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 3 ||
+    !["top", "bottom"].includes(value.placement) ||
+    ![
+      ["title", 160],
+      ["description", 1200],
+    ].every(
+      ([key, limit]) =>
+        typeof value[key] === "string" &&
+        value[key].length <= limit &&
+        !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\ud800-\udfff]/u.test(
+          value[key],
+        ),
+    )
+  )
+    throw new ApiError(
+      400,
+      "El contenido requiere un título de hasta 160 caracteres, una descripción de hasta 1200 y una posición válida.",
+    );
+  return {
+    title: value.title.trim(),
+    description: value.description.trim(),
+    placement: value.placement,
+  };
+}
+function storedContent(value) {
+  try {
+    return modelContent(value);
+  } catch {
+    return modelContent();
+  }
+}
 function modelUrl(value) {
   try {
     return validateModelUrl(value ?? null);
@@ -208,6 +245,7 @@ export async function createStore({
           name: metadata.name,
           orientation: modelOrientation(metadata.orientation),
           url: modelUrl(metadata.url),
+          content: storedContent(metadata.content),
           builtin: false,
           format: path.extname(metadata.entrypoint).slice(1).toUpperCase(),
           sourceFormat: metadata.sourceFormat,
@@ -328,7 +366,9 @@ export async function createStore({
     return { packagePath, packageName, metadataPath, metadata };
   }
   function validateMutation(body, editing) {
-    const allowed = editing ? ["id", "name", "orientation", "url"] : ["id"];
+    const allowed = editing
+      ? ["id", "name", "orientation", "url", "content"]
+      : ["id"];
     if (
       !body ||
       typeof body !== "object" ||
@@ -339,7 +379,8 @@ export async function createStore({
       (editing &&
         !Object.hasOwn(body, "name") &&
         !Object.hasOwn(body, "orientation") &&
-        !Object.hasOwn(body, "url"))
+        !Object.hasOwn(body, "url") &&
+        !Object.hasOwn(body, "content"))
     )
       throw new ApiError(
         400,
@@ -365,6 +406,7 @@ export async function createStore({
         "La orientación debe indicar X, Y y Z con giros de 0, 90, 180 o 270 grados.",
       );
     if (Object.hasOwn(body, "url")) validateModelUrl(body.url);
+    if (Object.hasOwn(body, "content")) modelContent(body.content);
   }
   function updateModel(body) {
     validateMutation(body, true);
@@ -377,6 +419,8 @@ export async function createStore({
       if (Object.hasOwn(body, "orientation"))
         metadata.orientation = modelOrientation(body.orientation);
       if (Object.hasOwn(body, "url")) metadata.url = validateModelUrl(body.url);
+      if (Object.hasOwn(body, "content"))
+        metadata.content = modelContent(body.content);
       await atomicJson(located.metadataPath, metadata);
       // The renderer stats this directory once a second instead of reading all
       // metadata every frame. A rename within a package does not change it.
@@ -393,6 +437,7 @@ export async function createStore({
         name: metadata.name,
         orientation: modelOrientation(metadata.orientation),
         url: modelUrl(metadata.url),
+        content: storedContent(metadata.content),
       };
       return { model, config };
     });

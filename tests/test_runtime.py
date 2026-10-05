@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from runtime_state import FrameMetrics, LatestPose
+from gestur.runtime_state import FrameMetrics, LatestPose
 
 
 def test_mailbox_discards_backlog_and_never_exposes_mutable_worker_data():
@@ -33,7 +33,7 @@ def test_frame_metrics_reports_measured_intervals_with_bounded_memory():
 
 
 def test_callback_cannot_touch_renderer_and_stale_input_reaches_controls(monkeypatch):
-    import controller
+    from gestur import controller
 
     app = controller.PoseController.__new__(controller.PoseController)
     app.mailbox = LatestPose()
@@ -43,7 +43,7 @@ def test_callback_cannot_touch_renderer_and_stale_input_reaches_controls(monkeyp
 
 
 def test_model_resolution_rejects_escape_and_symlinks(tmp_path):
-    from controller import resolve_model
+    from gestur.controller import resolve_model
 
     assert resolve_model(None, tmp_path) is None
     models = tmp_path / "models"
@@ -61,8 +61,8 @@ def test_model_resolution_rejects_escape_and_symlinks(tmp_path):
 
 
 def test_config_reload_preserves_scene_after_invalid_update(tmp_path, monkeypatch):
-    import controller
-    from runtime_config import default_config, save_config
+    from gestur import controller
+    from gestur.runtime_config import default_config, save_config
 
     config = default_config()
     config_path = tmp_path / "config.json"
@@ -105,7 +105,7 @@ def test_real_viewer_empty_model_empty_transitions_preserve_imported_texture(
     tmp_path, monkeypatch
 ):
     pytest.importorskip("panda3d.core")
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     monkeypatch.setenv("GESTUR_PORTAL_URL", "http://10.42.0.1:3000")
     path = write_obj_fixture(tmp_path)
@@ -152,9 +152,9 @@ def test_real_viewer_empty_model_empty_transitions_preserve_imported_texture(
 
 
 def tracking_controller():
-    from controller import PoseController
-    from runtime_config import default_config
-    from tracking_session import TrackingSession
+    from gestur.controller import PoseController
+    from gestur.runtime_config import default_config
+    from gestur.tracking_session import TrackingSession
 
     app = PoseController.__new__(PoseController)
     app.config = default_config()
@@ -233,14 +233,14 @@ def viewer_stub(monkeypatch, fail=None):
             pass
 
     monkeypatch.setitem(
-        sys.modules, "visualizer", SimpleNamespace(ControlledObjViewer=Viewer)
+        sys.modules, "gestur.visualizer", SimpleNamespace(ControlledObjViewer=Viewer)
     )
     return loaded, errors
 
 
 def test_missing_selection_with_empty_library_shows_welcome(tmp_path, monkeypatch):
-    import controller
-    from runtime_config import default_config, save_config
+    from gestur import controller
+    from gestur.runtime_config import default_config, save_config
 
     config = default_config()
     config["active_model"] = "package/missing.obj"
@@ -256,8 +256,8 @@ def test_missing_selection_with_empty_library_shows_welcome(tmp_path, monkeypatc
 
 
 def test_bad_geometry_at_start_reports_error_instead_of_qr(tmp_path, monkeypatch):
-    import controller
-    from runtime_config import default_config, save_config
+    from gestur import controller
+    from gestur.runtime_config import default_config, save_config
 
     config_path = tmp_path / "config.json"
     save_config(default_config(), config_path)
@@ -279,9 +279,8 @@ def test_real_panda_failed_initial_model_releases_showbase_and_boots_error_scree
     pytest.importorskip("panda3d.core")
     import builtins
 
-    import controller
-    import visualizer
-    from runtime_config import default_config, save_config
+    from gestur import controller, visualizer
+    from gestur.runtime_config import default_config, save_config
 
     config_path = tmp_path / "config.json"
     models = tmp_path / "models"
@@ -320,8 +319,8 @@ def test_real_panda_failed_initial_model_releases_showbase_and_boots_error_scree
 def test_live_selection_failure_keeps_model_and_empty_library_alone_shows_qr(
     tmp_path, monkeypatch
 ):
-    import controller
-    from runtime_config import default_config, save_config
+    from gestur import controller
+    from gestur.runtime_config import default_config, save_config
 
     config_path = tmp_path / "config.json"
     config = default_config()
@@ -365,8 +364,8 @@ def test_live_selection_failure_keeps_model_and_empty_library_alone_shows_qr(
 def test_restart_loads_last_selection_and_never_overwrites_shared_config(
     tmp_path, monkeypatch
 ):
-    import controller
-    from runtime_config import default_config, save_config
+    from gestur import controller
+    from gestur.runtime_config import default_config, save_config
 
     config_path = tmp_path / "config.json"
     models = tmp_path / "models"
@@ -424,8 +423,8 @@ def test_empty_scene_stops_camera_and_preserves_invalid_config_error():
 
 
 def test_config_restart_exits_without_starting_camera_during_shutdown():
-    from control_system import create_default_control_system
-    from controller import RESTART_REQUESTED, PoseController
+    from gestur.control_system import create_default_control_system
+    from gestur.controller import RESTART_REQUESTED, PoseController
 
     app = PoseController.__new__(PoseController)
     app.metrics = FrameMetrics()
@@ -449,8 +448,8 @@ def test_config_restart_exits_without_starting_camera_during_shutdown():
 
 
 def test_cleanup_does_not_recreate_window_in_process_with_unreleased_camera():
-    from controller import RESTART_REQUESTED, PoseController
-    from runtime_config import default_config
+    from gestur.controller import RESTART_REQUESTED, PoseController
+    from gestur.runtime_config import default_config
 
     app = PoseController.__new__(PoseController)
     app._cleaned = False
@@ -477,7 +476,7 @@ def test_cleanup_does_not_recreate_window_in_process_with_unreleased_camera():
 def test_portal_url_uses_access_point_then_lan_when_route_is_unavailable(monkeypatch):
     from unittest.mock import MagicMock
 
-    import visualizer
+    from gestur import visualizer
 
     route = MagicMock()
     route.__enter__.return_value = route
@@ -502,7 +501,7 @@ def test_portal_url_uses_access_point_then_lan_when_route_is_unavailable(monkeyp
 def test_portal_url_honors_valid_override_and_ignores_loopback_or_tokens(monkeypatch):
     from unittest.mock import MagicMock
 
-    import visualizer
+    from gestur import visualizer
 
     route = MagicMock()
     route.__enter__.return_value = route
@@ -533,7 +532,7 @@ def test_portal_url_uses_route_and_waits_for_network_without_fabricating_url(
 ):
     from unittest.mock import MagicMock
 
-    import visualizer
+    from gestur import visualizer
 
     monkeypatch.delenv("GESTUR_PORTAL_URL", raising=False)
     monkeypatch.setattr(visualizer.socket, "if_nameindex", lambda: [])
@@ -554,8 +553,8 @@ def test_qr_contains_reachable_url_without_admin_token(tmp_path, monkeypatch):
     import cv2
     import numpy as np
 
-    import visualizer
-    from visualizer import ControlledObjViewer
+    from gestur import visualizer
+    from gestur.visualizer import ControlledObjViewer
 
     monkeypatch.setenv("GESTUR_PORTAL_URL", "http://10.42.0.1")
     monkeypatch.setattr(visualizer.socket, "if_nameindex", lambda: [(1, "wlan0")])

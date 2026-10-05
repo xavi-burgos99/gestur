@@ -42,7 +42,7 @@ def source(tmp_path):
     # Real entrypoints/units, minimal other source. All work occurs in a temp repo.
     files = [
         "gestur.sh",
-        "requirements.txt",
+        "requirements/runtime.txt",
         "scripts/first-boot.py",
         "scripts/install-portal.sh",
         "scripts/gestur-device.py",

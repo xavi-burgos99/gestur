@@ -1,7 +1,7 @@
 import pytest
 
-import pose_hand_tracker as benchmark_module
-from tracking_geometry import empty_data
+from gestur.tracking_geometry import empty_data
+from scripts import benchmark_tracking as benchmark_module
 
 
 def test_summary_uses_model_counters_not_number_of_validity_samples():

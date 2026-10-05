@@ -82,7 +82,7 @@ def collect(path, output):
 
 def python_inventory(output):
     direct = {}
-    for line in (ROOT / "requirements.txt").read_text().splitlines():
+    for line in (ROOT / "requirements/runtime.txt").read_text().splitlines():
         if line.strip() and not line.lstrip().startswith("#"):
             req = Requirement(line)
             direct[canonical(req.name)] = str(req.specifier)
@@ -297,7 +297,10 @@ def main():
         },
         "inputs": {
             str(p): sha256((ROOT / p).read_bytes())
-            for p in (Path("requirements.txt"), Path("portal/package-lock.json"))
+            for p in (
+                Path("requirements/runtime.txt"),
+                Path("portal/package-lock.json"),
+            )
         },
         "limitations": [
             "Installed host wheels are not a Raspberry Pi image SBOM.",

@@ -140,7 +140,7 @@ class TrialGuard:
 class TelemetrySampler(threading.Thread):
     def __init__(self, output, status_path, started):
         super().__init__(name="gestur-trial-telemetry", daemon=True)
-        from device_metrics import DeviceMetrics
+        from gestur.device_metrics import DeviceMetrics
 
         self.device = DeviceMetrics()
         self.output, self.status_path, self.started = output, status_path, started
@@ -211,7 +211,7 @@ class TelemetrySampler(threading.Thread):
 
 
 def trial_config(windowed, camera_index):
-    from runtime_config import default_config, validate_config
+    from gestur.runtime_config import default_config, validate_config
 
     config = default_config()
     config["tracking"].update(
@@ -382,7 +382,7 @@ def arguments(argv=None):
 def run_trial(args):
     from panda3d.core import loadPrcFileData
 
-    from controller import PoseController
+    from gestur.controller import PoseController
     from scripts.benchmark_render import make_fixture
 
     frames, images = load_replay(args.image) if args.source == "replay" else ([], [])
@@ -438,7 +438,7 @@ def run_trial(args):
             config_path = temp / "config.json"
             config_path.write_text(json.dumps(config) + "\n")
             if frames:
-                from pose_detector import PoseHandTracker
+                from gestur.pose_detector import PoseHandTracker
 
                 stack.enter_context(
                     patch.object(

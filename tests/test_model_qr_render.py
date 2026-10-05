@@ -6,7 +6,7 @@ import pytest
 @pytest.fixture
 def rendered_viewer(tmp_path, monkeypatch):
     p = pytest.importorskip("panda3d.core")
-    import visualizer
+    from gestur import visualizer
 
     monkeypatch.setattr(visualizer, "portal_url", lambda: "http://192.168.1.93")
     asset = tmp_path / "triangle.obj"

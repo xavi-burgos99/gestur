@@ -9,9 +9,9 @@ import sys
 import time
 from pathlib import Path
 
-from control_system import create_control_system
-from device_metrics import DeviceMetrics
-from runtime_config import (
+from gestur.control_system import create_control_system
+from gestur.device_metrics import DeviceMetrics
+from gestur.runtime_config import (
     default_config,
     load_config,
     load_model_content,
@@ -21,11 +21,11 @@ from runtime_config import (
     validate_config,
     validate_model_orientation,
 )
-from runtime_state import FrameMetrics, LatestPose
-from tracking_session import TrackingSession, tracking_request
+from gestur.runtime_state import FrameMetrics, LatestPose
+from gestur.tracking_session import TrackingSession, tracking_request
 
 LOG = logging.getLogger("gestur")
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 RESTART_REQUESTED = 42
 
 
@@ -94,7 +94,7 @@ class PoseController:
         self._last_log = 0.0
         self._running = False
         self._start = None
-        from visualizer import ControlledObjViewer
+        from gestur.visualizer import ControlledObjViewer
 
         try:
             model_path = self.obj_override or resolve_model(

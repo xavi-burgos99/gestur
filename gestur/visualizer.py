@@ -36,10 +36,10 @@ from panda3d.core import (
     loadPrcFileData,
 )
 
-from render_scheduler import RenderCadence
-from runtime_config import validate_model_orientation, validate_model_url
-from runtime_state import FrameMetrics
-from screen_settings import DEFAULT_SCREEN, SIZE_FACTORS, rotate_display
+from gestur.render_scheduler import RenderCadence
+from gestur.runtime_config import validate_model_orientation, validate_model_url
+from gestur.runtime_state import FrameMetrics
+from gestur.screen_settings import DEFAULT_SCREEN, SIZE_FACTORS, rotate_display
 
 # Positions are in the fixed exhibition camera's frame: X right, Y away
 # from the viewer, Z up. These are distinct light rigs, not exposure filters.
@@ -576,7 +576,7 @@ class ControlledObjViewer(ShowBase):
         self.invalidate(frames=2)
 
     def set_model_content(self, content=None):
-        from runtime_config import validate_model_content
+        from gestur.runtime_config import validate_model_content
 
         content = validate_model_content(content)
         if self.model is None:

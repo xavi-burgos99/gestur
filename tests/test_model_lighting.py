@@ -20,7 +20,7 @@ def test_presets_preserve_assets_and_transforms_without_leaking_lights(
     tmp_path, monkeypatch
 ):
     core = pytest.importorskip("panda3d.core")
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     asset = write_model(tmp_path)
     viewer = ControlledObjViewer(asset, window_type="none", fullscreen=False)
@@ -88,7 +88,7 @@ def test_welcome_is_unaffected_and_next_model_inherits_selected_lighting(
     tmp_path, monkeypatch
 ):
     core = pytest.importorskip("panda3d.core")
-    import visualizer
+    from gestur import visualizer
 
     monkeypatch.setattr(visualizer, "portal_url", lambda: "http://10.42.0.1")
     viewer = visualizer.ControlledObjViewer(None, window_type="none", fullscreen=False)
@@ -130,9 +130,8 @@ def test_controller_updates_lighting_without_reload_and_preserves_pose_on_contro
     import json
     from types import SimpleNamespace
 
-    import controller
-    import visualizer
-    from runtime_config import default_config, save_config
+    from gestur import controller, visualizer
+    from gestur.runtime_config import default_config, save_config
 
     models = tmp_path / "models"
     package = models / "11111111-1111-1111-1111-111111111111"

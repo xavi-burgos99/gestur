@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from pose_detector import PoseHandTracker
-from tracking_geometry import empty_part
+from gestur.pose_detector import PoseHandTracker
+from gestur.tracking_geometry import empty_part
 
 
 class Camera:
@@ -237,7 +237,7 @@ def test_waiting_for_cadence_does_not_publish_duplicate_frames(monkeypatch):
 def test_stalled_camera_publishes_expiry_once_without_refreshing_stale_data(
     monkeypatch,
 ):
-    import pose_detector
+    from gestur import pose_detector
 
     release_read = threading.Event()
 
@@ -364,7 +364,7 @@ def test_idle_probe_is_bounded_and_empty_capture_keeps_no_phantom_detection(
 def test_pose_idle_cadence_uses_only_parts_requested_by_controls(
     monkeypatch, parts, head_present, torso_present, idle
 ):
-    import pose_detector
+    from gestur import pose_detector
 
     head, torso = empty_part(head=True), empty_part()
     head.update(detected=head_present, x=0.5, y=0.4, scale=0.3)

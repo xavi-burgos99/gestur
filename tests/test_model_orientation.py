@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from runtime_config import (
+from gestur.runtime_config import (
     ConfigurationError,
     default_config,
     load_model_orientation,
@@ -92,7 +92,7 @@ def test_real_panda_fixed_axes_refit_bounds_without_changing_gestures_or_geometr
     tmp_path, monkeypatch
 ):
     pytest.importorskip("panda3d.core")
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     viewer = ControlledObjViewer(
         box_model(tmp_path), window_type="none", fullscreen=False
@@ -141,8 +141,7 @@ def test_live_orientation_and_reboot_restore_without_reloading_on_rename(
     tmp_path, monkeypatch
 ):
     pytest.importorskip("panda3d.core")
-    import controller
-    import visualizer
+    from gestur import controller, visualizer
 
     models = tmp_path / "models"
     model_id, asset, info = model_package(models, {"x": 90, "y": 0, "z": 0})

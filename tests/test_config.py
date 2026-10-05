@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from control_system import create_control_system
-from runtime_config import (
+from gestur.control_system import create_control_system
+from gestur.runtime_config import (
     ConfigReloader,
     ConfigurationError,
     default_config,
@@ -302,7 +302,11 @@ if __name__ == "__main__":
 
 
 def test_duplicate_enabled_outputs_match_portal_validation():
-    from runtime_config import ConfigurationError, default_config, validate_config
+    from gestur.runtime_config import (
+        ConfigurationError,
+        default_config,
+        validate_config,
+    )
 
     config = default_config()
     config["controls"]["mappings"][1]["output"] = config["controls"]["mappings"][0][

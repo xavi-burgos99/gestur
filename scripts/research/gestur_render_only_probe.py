@@ -33,9 +33,9 @@ def main(argv=None):
 
     from panda3d.core import ConfigVariableBool, ConfigVariableString, PandaSystem
 
+    from gestur.visualizer import ControlledObjViewer
     from scripts import benchmark_render as benchmark
     from scripts.benchmark_pi_system import model_inventory
-    from visualizer import ControlledObjViewer
 
     observations = {}
 

@@ -24,7 +24,7 @@ tamaño de los originales y de los modelos procesados; el ZIP usa fechas y orden
 fijos. No se añade un clasificador neuronal de gestos.
 
 ```sh
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements/runtime.txt
 .venv/bin/python scripts/provision_models.py
 .venv/bin/python scripts/provision_models.py --check
 ```
@@ -200,8 +200,8 @@ tiempo limitado. Cuenta inferencias completadas del motor, porque un callback
 puede representar una actualización de estado sin una inferencia nueva.
 
 ```sh
-.venv/bin/python pose_hand_tracker.py --seconds 30 --camera 0 --output artifacts/pose-pi5.json
-.venv/bin/python pose_hand_tracker.py --seconds 30 --hands --output artifacts/pose-hands-pi5.json
+.venv/bin/python scripts/benchmark_tracking.py --seconds 30 --camera 0 --output artifacts/pose-pi5.json
+.venv/bin/python scripts/benchmark_tracking.py --seconds 30 --hands --output artifacts/pose-hands-pi5.json
 ```
 
 El informe incluye contadores, FPS observados, CPU (100% = un núcleo), memoria

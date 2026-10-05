@@ -29,7 +29,7 @@ def count_triangles(model):
 
 
 def inspect_model(path):
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     viewer = ControlledObjViewer(path, window_type="none", fullscreen=False)
     try:

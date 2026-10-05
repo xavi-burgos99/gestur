@@ -6,7 +6,7 @@ import pytest
 @pytest.fixture
 def welcome(monkeypatch):
     pytest.importorskip("panda3d.core")
-    import visualizer
+    from gestur import visualizer
 
     monkeypatch.setattr(visualizer, "portal_url", lambda: "http://192.168.1.93")
     viewer = visualizer.ControlledObjViewer(None, window_type="none", fullscreen=False)
@@ -70,7 +70,7 @@ def test_overlay_order_and_requested_copy(welcome):
 
 
 def test_no_network_waits_without_false_qr_and_recovers(welcome, monkeypatch):
-    import visualizer
+    from gestur import visualizer
 
     monkeypatch.setattr(visualizer, "portal_url", lambda: None)
     welcome._refresh_welcome_overlay()

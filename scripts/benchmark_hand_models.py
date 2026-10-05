@@ -20,7 +20,7 @@ from types import SimpleNamespace
 # Direct execution from scripts/ still needs the repository's geometry module.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tracking_geometry import hand_features, wrap_angle  # noqa: E402
+from gestur.tracking_geometry import hand_features, wrap_angle  # noqa: E402
 
 
 def summary(values):

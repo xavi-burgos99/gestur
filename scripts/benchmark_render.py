@@ -29,7 +29,7 @@ from panda3d.core import (  # noqa: E402
     Texture,
 )
 
-from visualizer import ControlledObjViewer  # noqa: E402
+from gestur.visualizer import ControlledObjViewer  # noqa: E402
 
 
 def make_fixture(destination):

@@ -46,7 +46,7 @@ def test_exposure_is_monotonic_reversible_and_preserves_alpha(tmp_path, kind, sc
     p = pytest.importorskip("panda3d.core")
     import numpy as np
 
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     viewer = ControlledObjViewer(
         model_asset(tmp_path, kind),
@@ -130,7 +130,7 @@ def test_exposure_is_monotonic_reversible_and_preserves_alpha(tmp_path, kind, sc
 
 def test_bad_exposure_does_not_partially_apply_a_light_change():
     pytest.importorskip("panda3d.core")
-    from visualizer import ControlledObjViewer
+    from gestur.visualizer import ControlledObjViewer
 
     viewer = ControlledObjViewer(None, window_type="none", fullscreen=False)
     try:

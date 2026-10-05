@@ -75,6 +75,17 @@ The first upload is selected automatically. The last selected model survives a
 restart; deleting it selects another available model. The welcome screen appears
 only when the library is empty. See the [portal guide](docs/portal.md) for details.
 
+## Repository layout
+
+- `gestur/`: viewer, gesture recognition, controls, and runtime settings.
+- `portal/`: web interface, API, and portal tests.
+- `config/`: defaults and configuration schema.
+- `deployment/`: system service and display configuration.
+- `scripts/`: installation helpers and diagnostic tools; experiments live in `scripts/research/`.
+- `requirements/`: runtime and development Python dependencies.
+- `tests/`: application and installation tests.
+- `docs/`: technical guides, benchmark evidence, and third-party license records.
+
 ## Data and operation
 
 | Path on the Pi | Purpose |
@@ -99,11 +110,11 @@ sudo tail -n 50 /var/log/gestur/viewer.log
 ## Development
 
 Use Python **3.11 or 3.12** and Node **22.12 or newer**. Runtime versions are pinned
-in `requirements.txt`; development tools are separate in `requirements-dev.txt`.
+in `requirements/runtime.txt`; development tools are separate in `requirements/development.txt`.
 
 ```bash
 python3.12 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt
+.venv/bin/python -m pip install -r requirements/runtime.txt -r requirements/development.txt
 .venv/bin/python scripts/provision_models.py
 npm --prefix portal ci
 make check
@@ -114,8 +125,8 @@ make build
 Run the viewer locally:
 
 ```bash
-.venv/bin/python controller.py --windowed
-.venv/bin/python controller.py --windowed --no-camera
+.venv/bin/python -m gestur --windowed
+.venv/bin/python -m gestur --windowed --no-camera
 ```
 
 `Esc` closes the viewer. Hand recognition is optional and requires an active hand

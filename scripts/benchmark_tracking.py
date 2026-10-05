@@ -15,7 +15,10 @@ import sys
 import time
 from pathlib import Path
 
-from pose_detector import PoseHandTracker
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from gestur.pose_detector import PoseHandTracker  # noqa: E402
 
 PARTS = ("head", "torso", "left_hand", "right_hand")
 

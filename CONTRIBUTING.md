@@ -4,7 +4,7 @@
 
 Create a Python 3.11 or 3.12 virtual environment and install both requirements
 files. Install portal dependencies with `npm --prefix portal ci`. The production
-installer uses only `requirements.txt`; formatters and test tools stay off the
+installer uses only `requirements/runtime.txt`; formatters and test tools stay off the
 appliance's runtime dependency list.
 
 Before submitting a change:

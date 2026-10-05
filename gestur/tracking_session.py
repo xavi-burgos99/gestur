@@ -43,7 +43,7 @@ def tracking_request(config, *, has_model=True, no_camera=False):
 
 def default_factory(settings):
     # Importing the inference runtime can be expensive, too.
-    from pose_detector import PoseHandTracker
+    from gestur.pose_detector import PoseHandTracker
 
     return PoseHandTracker(**settings)
 

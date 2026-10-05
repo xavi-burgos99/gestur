@@ -534,8 +534,8 @@ Los [modelos Lite fijados](../tracking_models/manifest.json) se preparan mediant
 ```sh
 cd /opt/gestur
 .venv/bin/python scripts/provision_models.py --check
-.venv/bin/python pose_hand_tracker.py --seconds 60 --camera 0 --output /tmp/camera-pose.json
-.venv/bin/python pose_hand_tracker.py --seconds 60 --camera 0 --hands --output /tmp/camera-pose-hands.json
+.venv/bin/python scripts/benchmark_tracking.py --seconds 60 --camera 0 --output /tmp/camera-pose.json
+.venv/bin/python scripts/benchmark_tracking.py --seconds 60 --camera 0 --hands --output /tmp/camera-pose-hands.json
 ```
 
 La cámara debe estar libre y la persona presente en los ensayos activos.

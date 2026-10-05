@@ -148,8 +148,8 @@ def test_arguments_require_local_replay_and_a_new_output_directory(tmp_path):
 
 
 def test_trial_config_is_independent_and_requests_both_detectors():
-    from runtime_config import default_config
-    from tracking_session import tracking_request
+    from gestur.runtime_config import default_config
+    from gestur.tracking_session import tracking_request
 
     before = default_config()
     config = trial_config(False, 2)

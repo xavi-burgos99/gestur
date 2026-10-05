@@ -152,16 +152,16 @@ def main():
     )
     control_samples = {"left": 0, "right": 0}
     try:
-        if not (args.project / "tracking_geometry.py").is_file():
+        if not (args.project / "gestur/tracking_geometry.py").is_file():
             raise FileNotFoundError("Project files missing")
         sys.path.insert(0, str(args.project))
         import cv2
         import numpy as np
 
-        from control_system import create_control_system, create_extractors
-        from pose_detector import PoseHandTracker
-        from runtime_config import default_config, validate_config
-        from tracking_session import tracking_request
+        from gestur.control_system import create_control_system, create_extractors
+        from gestur.pose_detector import PoseHandTracker
+        from gestur.runtime_config import default_config, validate_config
+        from gestur.tracking_session import tracking_request
 
         cv2.setNumThreads(1)
         report["versions"] = {
@@ -171,10 +171,10 @@ def main():
         report["code_sha256"] = {
             name: hashlib.sha256((args.project / name).read_bytes()).hexdigest()
             for name in (
-                "tracking_geometry.py",
-                "tracking_session.py",
-                "pose_detector.py",
-                "control_system.py",
+                "gestur/tracking_geometry.py",
+                "gestur/tracking_session.py",
+                "gestur/pose_detector.py",
+                "gestur/control_system.py",
                 "config/schema.json",
             )
         }

@@ -12,7 +12,7 @@ import re
 import tempfile
 from pathlib import Path
 
-CONFIG_DIR = Path(__file__).resolve().parent / "config"
+CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
 SYSTEM_CONFIG_PATH = Path("/var/lib/gestur/config.json")
 MAX_CONFIG_BYTES = 1024 * 1024
 
@@ -112,7 +112,7 @@ def validate_config(config):
     # Version 1 predates these optional behaviors. Fill absent fields and
     # recognized retired presets; reject explicitly invalid values as before.
     if isinstance(config, dict) and config.get("schema_version") == 1:
-        from screen_settings import DEFAULT_SCREEN
+        from gestur.screen_settings import DEFAULT_SCREEN
 
         config.setdefault("screen", dict(DEFAULT_SCREEN))
         for section, key, value in (
